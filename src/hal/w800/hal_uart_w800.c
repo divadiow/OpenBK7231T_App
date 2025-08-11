@@ -47,8 +47,8 @@ int HAL_UART_Init(int baud, int parity, bool hwflowc)
 	uart_opts.flow_ctrl = TLS_UART_FLOW_CTRL_NONE;
 	uart_opts.paritytype = parity;
 	uart_opts.stopbits = TLS_UART_ONE_STOPBITS;
-	wm_uart1_rx_config(WM_IO_PB_07);
-	wm_uart1_tx_config(WM_IO_PB_06);
+	wm_uart1_rx_config(WM_IO_PA_05);
+	wm_uart1_tx_config(WM_IO_PA_04);
 
 	if (WM_SUCCESS != tls_uart_port_init(TLS_UART_1, &uart_opts, 1))
             return;
