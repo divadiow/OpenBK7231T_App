@@ -161,6 +161,25 @@ prebuild_OpenBL602: berry
 		sh platforms/BL602/pre_build.sh; \
 	else echo "prebuild for OpenBL602 not found ... "; \
 	fi
+	
+.PHONY: prebuild_OpenBL602_1M postbuild_OpenBL602_1M
+
+prebuild_OpenBL602_1M: berry
+	@echo "==> Preparing OpenBL602 1MB variant"
+	git submodule update --init --recursive --depth=1 sdk/OpenBL602
+	# Apply patch only if not already applied
+	cd sdk/OpenBL602 && (git apply --reverse --check ../../patches/bl602_1m_flash.patch >/dev/null 2>&1 && \
+		echo "Patch already applied, skipping." || \
+		git apply ../../patches/bl602_1m_flash.patch)
+	@if [ -e platforms/BL602/pre_build.sh ]; then \
+		echo "prebuild found for OpenBL602_1M"; \
+		sh platforms/BL602/pre_build.sh; \
+	else echo "prebuild for OpenBL602_1M not found ... "; \
+	fi
+
+# Optional: revert the single file after you finish building the variant
+postbuild_OpenBL602_1M:
+	cd sdk/OpenBL602 && git checkout -- customer_app/bl602_sharedApp/proj_config.mk
 
 prebuild_OpenLN882H: berry actions_gcc
 	git submodule update --init --recursive --depth=1 sdk/OpenLN882H
@@ -418,7 +437,15 @@ OpenBL602: prebuild_OpenBL602 sdk/OpenBL602/customer_app/bl602_sharedApp/bl602_s
 	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin
 	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin.xz output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz
 	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin.xz.ota output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz.ota
-	
+
+OpenBL602_1M: prebuild_OpenBL602_1M sdk/OpenBL602/customer_app/bl602_sharedApp/bl602_sharedApp/shared
+	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 CONFIG_LINK_ROM=1 -j $(shell nproc)
+	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 bins
+	mkdir -p output/$(APP_VERSION)
+	# (Optional) use a distinct filename so you can tell them apart:
+	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/bl602_sharedApp.bin output/$(APP_VERSION)/OpenBL602_1M_$(APP_VERSION).bin
+	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/*/FW_OTA.bin output/$(APP_VERSION)/OpenBL602_1M_$(APP_VERSION)_OTA.bin
+
 sdk/OpenW800/tools/w800/csky/bin:
 	mkdir -p sdk/OpenW800/tools/w800/csky
 	# cd sdk/OpenW800/tools/w800/csky && wget -q "https://occ-oss-prod.oss-cn-hangzhou.aliyuncs.com/resource/1356021/1619529419771/csky-elf-noneabiv2-tools-x86_64-newlib-20210423.tar.gz" && tar -xf *.tar.gz && rm -f *.tar.gz
