@@ -434,11 +434,6 @@ OpenBL602: prebuild_OpenBL602 sdk/OpenBL602/customer_app/bl602_sharedApp/bl602_s
 	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin.xz output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz
 	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin.xz.ota output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz.ota
 
-BL602_1M_FW_OTA := $(firstword $(wildcard sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/*/FW_OTA.bin))
-ifeq ($(BL602_1M_FW_OTA),)
-$(error Could not locate FW_OTA.bin under build_out/ota/*/)
-endif
-
 OpenBL602_1M: prebuild_OpenBL602_1M sdk/OpenBL602/customer_app/bl602_sharedApp/bl602_sharedApp/shared
 	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VER=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 CONFIG_LINK_ROM=1 -j $(shell nproc)
 	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VER=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 bins
