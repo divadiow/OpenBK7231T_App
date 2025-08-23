@@ -168,7 +168,7 @@ jobs:
             variant: default
           - platform: OpenBL602
             variant: default
--           platform: OpenBL602_1M
+-         - platform: OpenBL602_1M
             variant: default
           - platform: OpenW800
             variant: default
