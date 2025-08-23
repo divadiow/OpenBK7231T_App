@@ -165,7 +165,9 @@ prebuild_OpenBL602: berry
 		echo "BL602 1MB patch not required"; \
 	fi
 	@if [ -e platforms/BL602/pre_build.sh ]; then \
+		echo "prebuild found for OpenBL602"; \
 		sh platforms/BL602/pre_build.sh; \
+	else echo "prebuild for OpenBL602 not found ... "; \
 	fi
 
 prebuild_OpenLN882H: berry actions_gcc
