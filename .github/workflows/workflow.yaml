@@ -168,8 +168,6 @@ jobs:
             variant: default
           - platform: OpenBL602
             variant: default
-          - platform: OpenBL602_1M
-            variant: default
           - platform: OpenW800
             variant: default
           - platform: OpenW600
@@ -216,9 +214,12 @@ jobs:
           # extras for BK7238
           - platform: OpenBK7238
             variant: irRemoteESP
-            
+
+          # extras for BL602
           - platform: OpenBL602
             variant: berry
+          - platform: OpenBL602
+            variant: 1M
     steps:
       - name: Source checkout
         uses: actions/checkout@v4

@@ -156,25 +156,16 @@ prebuild_OpenBK7231T: berry
 
 prebuild_OpenBL602: berry
 	git submodule update --init --recursive --depth=1 sdk/OpenBL602
-	@if [ -e platforms/BL602/pre_build.sh ]; then \
-		echo "prebuild found for OpenBL602"; \
-		sh platforms/BL602/pre_build.sh; \
-	else echo "prebuild for OpenBL602 not found ... "; \
+	@if [ "$(VARIANT)" = "1M" ]; then \
+		echo "==> Applying BL602 1MB patch"; \
+		cd sdk/OpenBL602 && (git apply --reverse --check ../../patches/bl602_1m_flash.patch >/dev/null 2>&1 && \
+			echo "Patch already applied, skipping." || \
+			git apply ../../patches/bl602_1m_flash.patch); \
+	else \
+		echo "BL602 1MB patch not required"; \
 	fi
-	
-.PHONY: prebuild_OpenBL602_1M postbuild_OpenBL602_1M
-
-prebuild_OpenBL602_1M: berry
-	@echo "==> Preparing OpenBL602 1MB variant"
-	git submodule update --init --recursive --depth=1 sdk/OpenBL602
-	# Apply patch only if not already applied
-	cd sdk/OpenBL602 && (git apply --reverse --check ../../patches/bl602_1m_flash.patch >/dev/null 2>&1 && \
-		echo "Patch already applied, skipping." || \
-		git apply ../../patches/bl602_1m_flash.patch)
 	@if [ -e platforms/BL602/pre_build.sh ]; then \
-		echo "prebuild found for OpenBL602_1M"; \
 		sh platforms/BL602/pre_build.sh; \
-	else echo "prebuild for OpenBL602_1M not found ... "; \
 	fi
 
 prebuild_OpenLN882H: berry actions_gcc
@@ -429,19 +420,17 @@ OpenBL602: prebuild_OpenBL602 sdk/OpenBL602/customer_app/bl602_sharedApp/bl602_s
 	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VER=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 CONFIG_LINK_ROM=1 -j $(shell nproc)
 	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VER=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 bins
 	mkdir -p output/$(APP_VERSION)
-	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/bl602_sharedApp.bin output/$(APP_VERSION)/OpenBL602_$(APP_VERSION).bin
-	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin
-	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin.xz output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz
-	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota/dts40M_pt2M_boot2release_ef4015/FW_OTA.bin.xz.ota output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz.ota
 
-OpenBL602_1M: prebuild_OpenBL602_1M sdk/OpenBL602/customer_app/bl602_sharedApp/bl602_sharedApp/shared
-	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VER=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 CONFIG_LINK_ROM=1 -j $(shell nproc)
-	$(MAKE) -C sdk/OpenBL602/customer_app/bl602_sharedApp USER_SW_VER=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_CHIP_NAME=BL602 bins
-	mkdir -p output/$(APP_VERSION)
-	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/bl602_sharedApp.bin output/$(APP_VERSION)/OpenBL602_1M_$(APP_VERSION).bin
-	cp $(BL602_1M_FW_OTA) output/$(APP_VERSION)/OpenBL602_1M_$(APP_VERSION)_OTA.bin
-	cp $(BL602_1M_FW_OTA).xz output/$(APP_VERSION)/OpenBL602_1M_$(APP_VERSION)_OTA.bin.xz
-	cp $(BL602_1M_FW_OTA).xz.ota output/$(APP_VERSION)/OpenBL602_1M_$(APP_VERSION)_OTA.bin.xz.ota
+	# App image
+	cp sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/bl602_sharedApp.bin \
+	   output/$(APP_VERSION)/OpenBL602_$(APP_VERSION).bin
+
+	# OTA images — resolve a single FW_OTA.bin to avoid wildcard multi-match
+	@FW_OTA=$$(find sdk/OpenBL602/customer_app/bl602_sharedApp/build_out/ota -type f -name FW_OTA.bin | head -n 1); \
+	test -n "$$FW_OTA" || { echo "ERROR: FW_OTA.bin not found"; exit 2; }; \
+	cp "$$FW_OTA"        "output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin"; \
+	cp "$$FW_OTA".xz     "output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz"; \
+	cp "$$FW_OTA".xz.ota "output/$(APP_VERSION)/OpenBL602_$(APP_VERSION)_OTA.bin.xz.ota"
 
 sdk/OpenW800/tools/w800/csky/bin:
 	mkdir -p sdk/OpenW800/tools/w800/csky

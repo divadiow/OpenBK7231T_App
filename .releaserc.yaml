@@ -146,8 +146,8 @@ generateNotes:
         | XR872          | OTA Update | [OpenXR872_{{version}}_ota.img]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenXR872_{{version}}_ota.img)                     |
         | BL602          | UART Flash | [OpenBL602_{{version}}.bin]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenBL602_{{version}}.bin)                             |
         | BL602          | OTA Update | [OpenBL602_{{version}}_OTA.bin.xz.ota]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenBL602_{{version}}_OTA.bin.xz.ota)       |
-        | BL602 1MB      | UART Flash | [OpenBL602_1M_{{version}}.bin]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenBL602_1M_{{version}}.bin)                             |
-        | BL602 1MB      | OTA Update | [OpenBL602_1M_{{version}}_OTA.bin.xz.ota]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenBL602_1M_{{version}}_OTA.bin.xz.ota)       |        
+        | BL602 1MB      | UART Flash | [OpenBL602_{{version}}_1M.bin]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenBL602_{{version}}_1M.bin)                             |
+        | BL602 1MB      | OTA Update | [OpenBL602_{{version}}_1M_OTA.bin.xz.ota]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenBL602_{{version}}_1M_OTA.bin.xz.ota)       |        
         | W800           | OTA Update | [OpenW800_{{version}}_ota.img]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenW800_{{version}}_ota.img)                       |
         | W800           | UART Flash | [OpenW800_{{version}}.fls]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenW800_{{version}}.fls)                               |
         | W600           | OTA Update | [OpenW600_{{version}}_gz.img]({{host}}/{{owner}}/{{repository}}/releases/download/{{version}}/OpenW600_{{version}}_gz.img)                         |
