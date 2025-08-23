@@ -177,10 +177,6 @@ prebuild_OpenBL602_1M: berry
 	else echo "prebuild for OpenBL602_1M not found ... "; \
 	fi
 
-# Optional: revert the single file after you finish building the variant
-postbuild_OpenBL602_1M:
-	cd sdk/OpenBL602 && git checkout -- customer_app/bl602_sharedApp/proj_config.mk
-
 prebuild_OpenLN882H: berry actions_gcc
 	git submodule update --init --recursive --depth=1 sdk/OpenLN882H
 	@if [ -e platforms/LN882H/pre_build.sh ]; then \
