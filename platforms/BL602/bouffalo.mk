@@ -7,6 +7,7 @@ COMPONENT_ADD_INCLUDEDIRS += src/ src/httpserver/ src/httpclient/ src/cmnds/ src
 COMPONENT_PRIV_INCLUDEDIRS :=
 
 CFLAGS += -DOBK_VARIANT=${OBK_VARIANT}
+CFLAGS += -DCONF_BL602_USE_1M_FLASH=1
 
 ## This component's src 
 COMPONENT_SRCS := 
