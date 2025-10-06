@@ -75,8 +75,8 @@
 	branch = release/v1.1
 [submodule "sdk/OpenTXW81X"]
 	path = sdk/OpenTXW81X
-	url = https://github.com/NonPIayerCharacter/OpenTXW81X
-	branch = main
+	url = https://github.com/divadiow/txw81xcam
+	branch = opentxw81x_2
 [submodule "sdk/OpenRDA5981"]
 	path = sdk/OpenRDA5981
 	url = https://github.com/NonPIayerCharacter/OpenRDA5981
