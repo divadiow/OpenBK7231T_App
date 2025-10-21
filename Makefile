@@ -652,6 +652,9 @@ OpenBK7231N_ALT: prebuild_OpenBK7231N_ALT
 	cp sdk/beken_freertos_sdk/out/app.rbl output/$(APP_VERSION)/OpenBK7231N_ALT_${APP_VERSION}.rbl
 	cp sdk/beken_freertos_sdk/out/bk7231n_UA.bin output/$(APP_VERSION)/OpenBK7231N_ALT_UA_${APP_VERSION}.bin
 	cp sdk/beken_freertos_sdk/out/BK7231M_QIO.bin output/$(APP_VERSION)/OpenBK7231M_ALT_QIO_${APP_VERSION}.bin
+	cp sdk/beken_freertos_sdk/out/bk7231n_uascent_QIO.bin output/$(APP_VERSION)/OpenBK7231N_ALT_UASCENT_QIO_$(APP_VERSION).bin
+	cp sdk/beken_freertos_sdk/out/bk7231n_uascent_UA.bin output/$(APP_VERSION)/OpenBK7231N_ALT_UASCENT_UA_$(APP_VERSION).bin
+
 
 .PHONY: OpenBK7231T_ALT
 OpenBK7231T_ALT: prebuild_OpenBK7231T_ALT
