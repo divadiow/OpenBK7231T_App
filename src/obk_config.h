@@ -49,6 +49,8 @@
 #define ENABLE_NTP								1
 #define ENABLE_DRIVER_WEMO						1
 #define ENABLE_DRIVER_HUE						1
+#define ENABLE_MULTIPINI2CSCANNER				1
+#define ENABLE_I2C								1
 
 #if PLATFORM_XR809
 #define ENABLE_DRIVER_BATTERY					1
