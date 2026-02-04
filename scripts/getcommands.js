@@ -1083,6 +1083,19 @@ function _escapePipesNoDouble(s) {
 function mdCell(s) {
 	return _escapePipesNoDouble(s);
 }
+
+// For markdown tables, long argument lists like "[A][B][C]" become an unbreakable "word",
+// which forces GitHub to render the table in a horizontally-scrollable container.
+// Insert spaces between bracket-groups (and after commas) to give the renderer wrap points.
+function formatArgsForTable(args) {
+	if (!args) return '';
+	let s = String(args);
+	// "[A][B][C]" -> "[A] [B] [C]"
+	s = s.replace(/\]\[/g, '] [');
+	// "a,b" -> "a, b" (only if no whitespace already follows)
+	s = s.replace(/,(\S)/g, ', $1');
+	return s;
+}
 // Insert soft wrap opportunities so GitHub can wrap long identifiers/paths inside table cells.
 function mdWrapIdent(s) {
 	s = mdCell(s);
@@ -1119,7 +1132,7 @@ for (let i = 0; i < commands.length; i++) {
 	let descBasic = formatDesc(cmd.descr);
 
 	let cmdName = mdCell(cmd.name);
-	let cmdArgs = mdCell(cmd.args) + (cmd.requires ? '\nReq:' + mdCell(cmd.requires) : '');
+	let cmdArgs = mdCell(formatArgsForTable(cmd.args)) + (cmd.requires ? '\nReq:' + mdCell(cmd.requires) : '');
 	let cmdExamples = cmd.examples ? '<br/><br/>Example: ' + mdCell(cmd.examples) : '';
 	let cmdDescMore = mdCell(descMore);
 	let cmdDescBasic = mdCell(descBasic);
