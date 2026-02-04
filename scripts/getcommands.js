@@ -1069,46 +1069,26 @@ commands.sort((a, b) => {
 		return 1;
 	return 0;
 });
-function _escapePipesNoDouble(s) {
-	// In Markdown tables, unescaped '|' creates extra columns.
-	// Preserve existing '\|' sequences while escaping any remaining pipes.
+function mdEscapePipesNoDouble(s) {
 	if (s === undefined || s === null) return '';
-	s = String(s);
-	const sentinel = '__OBK_PIPE_ESC__';
-	s = s.replace(/\\\|/g, sentinel);
+	s = '' + s;
+	// Preserve already-escaped pipes so we don't double-escape.
+	s = s.replace(/\\\|/g, '__ESCAPED_PIPE__');
 	s = s.replace(/\|/g, '\\|');
-	s = s.replace(new RegExp(sentinel, 'g'), '\\|');
+	s = s.replace(/__ESCAPED_PIPE__/g, '\\|');
 	return s;
-}
-function mdCell(s) {
-	return _escapePipesNoDouble(s);
 }
 
-// For markdown tables, long argument lists like "[A][B][C]" become an unbreakable "word",
-// which forces GitHub to render the table in a horizontally-scrollable container.
-// Insert spaces between bracket-groups (and after commas) to give the renderer wrap points.
 function formatArgsForTable(args) {
-	if (!args) return '';
-	let s = String(args);
-	// "[A][B][C]" -> "[A] [B] [C]"
-	s = s.replace(/\]\[/g, '] [');
-	// "a,b" -> "a, b" (only if no whitespace already follows)
-	s = s.replace(/,(\S)/g, ', $1');
-	return s;
+	if (args === undefined || args === null) return '';
+	args = '' + args;
+	// Insert spaces between adjacent bracket groups: [a][b] -> [a] [b]
+	args = args.replace(/\]\[/g, '] [');
+	// Normalise inline whitespace but keep newlines (newlines are later converted to <br/>).
+	args = args.replace(/[ \t]+/g, ' ').trim();
+	return args;
 }
-// Insert soft wrap opportunities so GitHub can wrap long identifiers/paths inside table cells.
-function mdWrapIdent(s) {
-	s = mdCell(s);
-	s = s.replace(/([A-Z])([A-Z][a-z])/g, '$1<wbr>$2');
-	s = s.replace(/([a-z0-9])([A-Z])/g, '$1<wbr>$2');
-	s = s.replace(/([_\/\\\.:-])/g, '$1<wbr>');
-	return s;
-}
-function mdWrapPath(s) {
-	s = mdCell(s);
-	s = s.replace(/([\/\\_.:-])/g, '$1<wbr>');
-	return s;
-}
+
 function formatDesc(descBasic) {
 	if (!descBasic.endsWith('.')) {
 		descBasic += '.';
@@ -1129,19 +1109,13 @@ for (let i = 0; i < commands.length; i++) {
 
 
 	let descMore = "<br/><br/>" + genReadMore(cmd.name);
-	let descBasic = formatDesc(cmd.descr);
-
-	let cmdName = mdCell(cmd.name);
-	let cmdArgs = mdCell(formatArgsForTable(cmd.args)) + (cmd.requires ? '\nReq:' + mdCell(cmd.requires) : '');
-	let cmdExamples = cmd.examples ? '<br/><br/>Example: ' + mdCell(cmd.examples) : '';
-	let cmdDescMore = mdCell(descMore);
-	let cmdDescBasic = mdCell(descBasic);
-	let locFile = mdWrapPath(cmd.file);
-	let locFn = mdWrapIdent(cmd.fn);
-
-	let textshort = `| ${cmdName} | ${cmdArgs} | ${cmdDescBasic}${cmdExamples}${cmdDescMore} |`;
-	let textlong = `| ${cmdName} | ${cmdArgs} | ${cmdDescBasic}${cmdExamples}${cmdDescMore} | File: ${locFile}
-Function: ${locFn} |`;
+	let cmdName = mdEscapePipesNoDouble(cmd.name);
+	let cmdArgs = formatArgsForTable(mdEscapePipesNoDouble(cmd.args));
+	let cmdReq = cmd.requires ? ('\nReq:' + mdEscapePipesNoDouble(cmd.requires)) : '';
+	let cmdExamples = cmd.examples ? ('<br/><br/>Example: ' + mdEscapePipesNoDouble(cmd.examples)) : '';
+	let descBasic = mdEscapePipesNoDouble(formatDesc(cmd.descr));
+	let textshort = `| ${cmdName} | ${cmdArgs}${cmdReq} | ${descBasic}${cmdExamples}${descMore} |`;
+	let textlong = `| ${cmdName} | ${cmdArgs}${cmdReq} | ${descBasic}${cmdExamples}${descMore} | File: ${mdEscapePipesNoDouble(cmd.file)}\nFunction: ${mdEscapePipesNoDouble(cmd.fn)} |`;
 
 	// allow multi-row entries in table entries.
 	textshort = textshort.replace(/\n/g, '<br/>');
