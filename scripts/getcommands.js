@@ -1069,6 +1069,33 @@ commands.sort((a, b) => {
 		return 1;
 	return 0;
 });
+function _escapePipesNoDouble(s) {
+	// In Markdown tables, unescaped '|' creates extra columns.
+	// Preserve existing '\|' sequences while escaping any remaining pipes.
+	if (s === undefined || s === null) return '';
+	s = String(s);
+	const sentinel = '__OBK_PIPE_ESC__';
+	s = s.replace(/\\\|/g, sentinel);
+	s = s.replace(/\|/g, '\\|');
+	s = s.replace(new RegExp(sentinel, 'g'), '\\|');
+	return s;
+}
+function mdCell(s) {
+	return _escapePipesNoDouble(s);
+}
+// Insert soft wrap opportunities so GitHub can wrap long identifiers/paths inside table cells.
+function mdWrapIdent(s) {
+	s = mdCell(s);
+	s = s.replace(/([A-Z])([A-Z][a-z])/g, '$1<wbr>$2');
+	s = s.replace(/([a-z0-9])([A-Z])/g, '$1<wbr>$2');
+	s = s.replace(/([_\/\\\.:-])/g, '$1<wbr>');
+	return s;
+}
+function mdWrapPath(s) {
+	s = mdCell(s);
+	s = s.replace(/([\/\\_.:-])/g, '$1<wbr>');
+	return s;
+}
 function formatDesc(descBasic) {
 	if (!descBasic.endsWith('.')) {
 		descBasic += '.';
@@ -1090,8 +1117,18 @@ for (let i = 0; i < commands.length; i++) {
 
 	let descMore = "<br/><br/>" + genReadMore(cmd.name);
 	let descBasic = formatDesc(cmd.descr);
-	let textshort = `| ${cmd.name} | ${cmd.args}${cmd.requires ? '\nReq:' + cmd.requires : ''} | ${descBasic}${cmd.examples ? '<br/><br/>Example: ' + cmd.examples : ''}${descMore} |`;
-	let textlong = `| ${cmd.name} | ${cmd.args}${cmd.requires ? '\nReq:' + cmd.requires : ''} | ${descBasic}${cmd.examples ? '<br/><br/>Example: ' + cmd.examples : ''}${descMore} | File: ${cmd.file}\nFunction: ${cmd.fn} |`;
+
+	let cmdName = mdCell(cmd.name);
+	let cmdArgs = mdCell(cmd.args) + (cmd.requires ? '\nReq:' + mdCell(cmd.requires) : '');
+	let cmdExamples = cmd.examples ? '<br/><br/>Example: ' + mdCell(cmd.examples) : '';
+	let cmdDescMore = mdCell(descMore);
+	let cmdDescBasic = mdCell(descBasic);
+	let locFile = mdWrapPath(cmd.file);
+	let locFn = mdWrapIdent(cmd.fn);
+
+	let textshort = `| ${cmdName} | ${cmdArgs} | ${cmdDescBasic}${cmdExamples}${cmdDescMore} |`;
+	let textlong = `| ${cmdName} | ${cmdArgs} | ${cmdDescBasic}${cmdExamples}${cmdDescMore} | File: ${locFile}
+Function: ${locFn} |`;
 
 	// allow multi-row entries in table entries.
 	textshort = textshort.replace(/\n/g, '<br/>');
