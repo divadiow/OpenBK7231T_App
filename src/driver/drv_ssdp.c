@@ -276,7 +276,7 @@ static void DRV_SSDP_Send_Advert_To(struct sockaddr_in *addr) {
 
 // we could add a SERVER: entry so we could recognise our Devices
 // without making the HTTP call....
-static const char notify_template[] = 
+static const char notify_template[] =
 "NOTIFY * HTTP/1.1\r\n" \
 "SERVER: OpenBk\r\n" \
 "HOST: 239.255.255.250:1900\r\n" \
@@ -288,15 +288,28 @@ static const char notify_template[] =
 "\r\n\r\n" \
 ;
 
+// OpenBK peer discovery notify. Uses a non-standard NT so generic SSDP
+// control points are less likely to represent it as a regular rootdevice.
+static const char notify_template_peer[] =
+"NOTIFY * HTTP/1.1\r\n" \
+"SERVER: OpenBk\r\n" \
+"HOST: 239.255.255.250:1900\r\n" \
+"CACHE-CONTROL: max-age=1800\r\n" \
+"LOCATION: http://%s:80/ssdp.xml\r\n" \
+"NTS: ssdp:alive\r\n" \
+"NT: urn:openbk-org:device:openbk:1\r\n" \
+"USN: uuid:%s::urn:openbk-org:device:openbk:1\r\n" \
+"\r\n\r\n" \
+;
 
 
 
-static void DRV_SSDP_Send_Notify() {
+static void DRV_SSDP_Send_Notify_Generic(const char *templ) {
 	int nbytes;
     struct sockaddr_in multicastaddr;
 
     if (g_ssdp_socket_receive <= 0){
-    	addLogAdv(LOG_ERROR, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify: no socket");
+		addLogAdv(LOG_ERROR, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify_Generic: no socket");
         return;
     }
     // set up destination address
@@ -308,17 +321,21 @@ static void DRV_SSDP_Send_Notify() {
 
     const char *myip = HAL_GetMyIPString();
 
-    if (!notify_message){
-        notify_maxlen = strlen(notify_template) +  100;
+    int desired_maxlen = strlen(templ) + 100;
+    if (!notify_message || notify_maxlen < desired_maxlen){
+        if (notify_message) {
+            free(notify_message);
+        }
+        notify_maxlen = desired_maxlen;
         notify_message = (char *)malloc(notify_maxlen+1);
     }
 
-    snprintf(notify_message, notify_maxlen, notify_template, myip, g_ssdp_uuid);
+    snprintf(notify_message, notify_maxlen, templ, myip, g_ssdp_uuid);
 
     int len = strlen(notify_message);
 
-	addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify: space: %d msg:%d", strlen(notify_template) +  100, len);
-	addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify: \r\n%s\r\n", notify_message);
+	addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify_Generic: space: %d msg:%d", strlen(templ) + 100, len);
+	addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify_Generic: \r\n%s\r\n", notify_message);
 
     // set up destination address
     //
@@ -332,11 +349,20 @@ static void DRV_SSDP_Send_Notify() {
     );
 	
     if (nbytes <= 0){
-	    addLogAdv(LOG_INFO, LOG_FEATURE_HTTP,"#### ERROR ##### DRV_SSDP_Send_Notify: sent message %d bytes", nbytes);
+	    addLogAdv(LOG_INFO, LOG_FEATURE_HTTP,"#### ERROR ##### DRV_SSDP_Send_Notify_Generic: sent message %d bytes", nbytes);
     } else {
-	    addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify: sent message %d bytes", nbytes);
+	    addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"DRV_SSDP_Send_Notify_Generic: sent message %d bytes", nbytes);
     }
 }
+
+static void DRV_SSDP_Send_Notify() {
+	DRV_SSDP_Send_Notify_Generic(notify_template);
+}
+
+static void DRV_SSDP_Send_Notify_Peer() {
+	DRV_SSDP_Send_Notify_Generic(notify_template_peer);
+}
+
 
 
 static const char *http_reply = 
@@ -449,14 +475,30 @@ void DRV_SSDP_Init()
 
 
 void DRV_SSDP_RunEverySecond() {
+	bool skipGenericNotify = false;
+
 	if (g_ssdp_socket_receive <= 0) {
 		return ;
 	}
 
+#if ENABLE_DRIVER_WEMO
+	// WEMO emulation publishes its own distinct device identity. If we also
+	// multicast the generic OpenBK SSDP identity, SSDP control points may
+	// render two logical network devices for one physical unit.
+	if (DRV_IsRunning("WEMO")) {
+		skipGenericNotify = true;
+	}
+#endif
+
     ssdp_timercount++;
     if (ssdp_timercount >= 30){
         // multicast a notify
-        DRV_SSDP_Send_Notify();
+		if (!skipGenericNotify) {
+			DRV_SSDP_Send_Notify();
+		}
+		else {
+			DRV_SSDP_Send_Notify_Peer();
+		}
         ssdp_timercount = 0;
     }
 
@@ -518,10 +560,14 @@ void DRV_SSDP_RunQuickTick() {
     // if search, then respond
     // we SHOULD be a little more specific!!!
     if (!strncmp(udp_msgbuf, "M-SEARCH", 8)){
+        bool allowGenericAdvert = true;
         // reply with our advert to the sender
         addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"Is MSEARCH - responding");
 #if ENABLE_DRIVER_WEMO
 		if (DRV_IsRunning("WEMO")) {
+			// Keep SSDP transport active for WEMO emulation, but suppress the
+			// generic OpenBK SSDP identity to avoid dual logical identities.
+			allowGenericAdvert = false;
 			if (strcasestr(udp_msgbuf, "urn:belkin:device:**")) {
 				DRV_WEMO_Send_Advert_To(1, &addr);
 				return;
@@ -547,7 +593,9 @@ void DRV_SSDP_RunQuickTick() {
 			}
 		}
 #endif
-		DRV_SSDP_Send_Advert_To(&addr);
+		if (allowGenericAdvert) {
+			DRV_SSDP_Send_Advert_To(&addr);
+		}
     }
 
     // our NOTIFTY like:
