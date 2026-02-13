@@ -91,9 +91,16 @@ int rtos_create_thread(int *out, int prio, const char *name, LPTHREAD_START_ROUT
 }
 #else
 int rtos_create_thread(int *out, int prio, const char *name, void *function, int stackSize, void *arg) {
+	(void)out;
+	(void)prio;
+	(void)name;
+	(void)stackSize;
 	pthread_t handle;
-	pthread_create(&handle, NULL, function, (arg) != 0);
-	return 0;
+	int rc = pthread_create(&handle, NULL, (void *(*)(void *))function, arg);
+	if (rc == 0) {
+		pthread_detach(handle);
+	}
+	return rc;
 }
 #endif
 void rtos_delete_thread(int i) {

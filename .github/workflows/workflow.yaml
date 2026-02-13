@@ -55,10 +55,10 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
   build2:
-    name: Build Simulator
-    if: ${{ false }}  # disabled: Win32 simulator build is not required for sanitizers/firmware CI
+    name: Build Simulator (disabled)
     needs: refs
     runs-on: windows-2022
+    if: false
 
     steps:
     - name: Checkout repository
@@ -123,7 +123,7 @@ jobs:
     - name: Run unit tests
       run: |
         export LSAN_OPTIONS=suppressions=platforms/linux/asan.suppressions
-        ./build/win_main -port 18080 -runUnitTests 2
+        ./build/win_main -runUnitTests 2
 
   build_ubsan:
     name: Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer
@@ -145,7 +145,7 @@ jobs:
     - name: Run unit tests
       run: |
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
-        ./build/win_main -port 18080 -runUnitTests 2
+        ./build/win_main -runUnitTests 2
 
   build:
     name: Build
