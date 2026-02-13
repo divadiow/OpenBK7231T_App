@@ -12,7 +12,9 @@ void SelfTest_Failed(const char *file, const char *function, int line, const cha
 	printf("Check %s - %s - line %i\n", file, function, line);
 	printf("Total SelfTest errors so far: %i\n", g_selfTestErrors);
 
+	#ifndef LINUX
 	system("pause");
+#endif
 }
 int SelfTest_GetNumErrors() {
 	return g_selfTestErrors;

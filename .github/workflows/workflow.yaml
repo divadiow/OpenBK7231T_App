@@ -55,10 +55,10 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
   build2:
+    if: false
     name: Build Simulator (disabled)
     needs: refs
     runs-on: windows-2022
-    if: false
 
     steps:
     - name: Checkout repository
@@ -107,6 +107,7 @@ jobs:
     name: Build Linux Simulator and Run Tests With Address Sanitizer
     needs: refs
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
 
     steps:
     - name: Checkout repository
@@ -123,12 +124,14 @@ jobs:
     - name: Run unit tests
       run: |
         export LSAN_OPTIONS=suppressions=platforms/linux/asan.suppressions
-        ./build/win_main -runUnitTests 2
+        export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:halt_on_error=1
+        timeout 600s ./build/win_main -runUnitTests 2
 
   build_ubsan:
     name: Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer
     needs: refs
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
 
     steps:
     - name: Checkout repository
@@ -145,7 +148,7 @@ jobs:
     - name: Run unit tests
       run: |
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
-        ./build/win_main -runUnitTests 2
+        timeout 600s ./build/win_main -runUnitTests 2
 
   build:
     name: Build
@@ -477,7 +480,7 @@ jobs:
   merge:
     name: Merge Artifacts
     runs-on: ubuntu-22.04
-    needs: [refs, build, build_idf, build_txw81x]
+    needs: [refs, build, build2, build_idf, build_txw81x]
     #if: always() && needs.refs.outputs.new_release == 'true' && (github.ref == 'refs/heads/main' || github.ref_name == 'alpha')
     steps:
       - name: Merge Artifacts

@@ -20,7 +20,9 @@
 
 void HTTPServer_Start();
 
-#define HTTP_SERVER_PORT			80
+#ifndef HTTP_SERVER_PORT
+#define HTTP_SERVER_PORT 80
+#endif
 #define INVALID_SOCK				-1
 
 #ifndef REPLY_BUFFER_SIZE

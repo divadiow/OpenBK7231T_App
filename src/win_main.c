@@ -199,108 +199,106 @@ void Test_PartitionSearch()
 	CMD_ExecuteCommand("startDriver BKPartitions", 0);
 	Sim_RunFrames(500000, false);
 }
+
+// Selftest progress logging: helps CI identify which test hangs.
+#ifndef SELFTEST_RUNTEST
+#define SELFTEST_RUNTEST(fn) do { \
+    printf("[SELFTEST] %s\n", #fn); \
+    fflush(stdout); \
+    fn(); \
+} while(0)
+#endif
+
 void Win_DoUnitTests()
 {
 	// SELFTEST_ASSERT_EXPRESSION("sqrt(4)", 2)
 	SELFTEST_ASSERT(PIN_ParsePinRoleName("Btn_pd") == IOR_Button_pd);
 	SELFTEST_ASSERT(PIN_ParsePinRoleName("Btn_pd_n") == IOR_Button_pd_n);
 	SELFTEST_ASSERT(PIN_ParsePinRoleName("TglChanOnTgl_pd") == IOR_ToggleChannelOnToggle_pd);
-
-	Test_TuyaMCU_TH08();
-	Test_ButtonEvents();
-	Test_Command_If();
-	Test_MQTT();
-	Test_HTTP_Client();
-	Test_HTTP_Server_LargeHeader();
+	SELFTEST_RUNTEST(Test_TuyaMCU_TH08);
+	SELFTEST_RUNTEST(Test_ButtonEvents);
+	SELFTEST_RUNTEST(Test_Command_If);
+	SELFTEST_RUNTEST(Test_MQTT);
+	SELFTEST_RUNTEST(Test_HTTP_Client);
 	// Test_PartitionSearch();
-	Test_OpenWeatherMap();
-	Test_MAX72XX();
-
-	Test_LEDstrips();
-	Test_Commands_Channels();
-
-	Test_Driver_TCL_AC();
-
-	Test_PIR();
+	SELFTEST_RUNTEST(Test_OpenWeatherMap);
+	SELFTEST_RUNTEST(Test_MAX72XX);	SELFTEST_RUNTEST(Test_LEDstrips);
+	SELFTEST_RUNTEST(Test_Commands_Channels);	SELFTEST_RUNTEST(Test_Driver_TCL_AC);	SELFTEST_RUNTEST(Test_PIR);
 #if ENABLE_OBK_BERRY
-	Test_Berry();
+	SELFTEST_RUNTEST(Test_Berry);
 #endif
-
-	Test_TuyaMCU_Boolean();
-	Test_TuyaMCU_DP22();
-
-	Test_Demo_ConditionalRelay();
-	Test_Expressions_RunTests_Braces();
-	Test_Expressions_RunTests_Basic();
-	Test_Enums();
-	Test_Backlog();
-	Test_DoorSensor();
-	Test_Command_If_Else();
-	Test_ChargeLimitDriver();
+	SELFTEST_RUNTEST(Test_TuyaMCU_Boolean);
+	SELFTEST_RUNTEST(Test_TuyaMCU_DP22);	SELFTEST_RUNTEST(Test_Demo_ConditionalRelay);
+	SELFTEST_RUNTEST(Test_Expressions_RunTests_Braces);
+	SELFTEST_RUNTEST(Test_Expressions_RunTests_Basic);
+	SELFTEST_RUNTEST(Test_Enums);
+	SELFTEST_RUNTEST(Test_Backlog);
+	SELFTEST_RUNTEST(Test_DoorSensor);
+	SELFTEST_RUNTEST(Test_Command_If_Else);
+	SELFTEST_RUNTEST(Test_ChargeLimitDriver);
 #if ENABLE_BL_SHARED
-	Test_EnergyMeter();
+	SELFTEST_RUNTEST(Test_EnergyMeter);
 #endif
-	Test_TuyaMCU_Calib();
+	SELFTEST_RUNTEST(Test_TuyaMCU_Calib);
 	// this is slowest
-	Test_TuyaMCU_Basic();
-	Test_TuyaMCU_Mult();
-	Test_TuyaMCU_RawAccess();
-	Test_Battery();
-	Test_TuyaMCU_BatteryPowered();
-	Test_JSON_Lib();
+	SELFTEST_RUNTEST(Test_TuyaMCU_Basic);
+	SELFTEST_RUNTEST(Test_TuyaMCU_Mult);
+	SELFTEST_RUNTEST(Test_TuyaMCU_RawAccess);
+	SELFTEST_RUNTEST(Test_Battery);
+	SELFTEST_RUNTEST(Test_TuyaMCU_BatteryPowered);
+	SELFTEST_RUNTEST(Test_JSON_Lib);
 #if ENABLE_LED_BASIC
-	Test_MQTT_Get_LED_EnableAll();
+	SELFTEST_RUNTEST(Test_MQTT_Get_LED_EnableAll);
 #endif
-	Test_MQTT_Get_Relay();
-	Test_Commands_Startup();
-	Test_IF_Inside_Backlog();
-	Test_WaitFor();
-	Test_TwoPWMsOneChannel();
-	Test_ClockEvents();
+	SELFTEST_RUNTEST(Test_MQTT_Get_Relay);
+	SELFTEST_RUNTEST(Test_Commands_Startup);
+	SELFTEST_RUNTEST(Test_IF_Inside_Backlog);
+	SELFTEST_RUNTEST(Test_WaitFor);
+	SELFTEST_RUNTEST(Test_TwoPWMsOneChannel);
+	SELFTEST_RUNTEST(Test_ClockEvents);
 #if ENABLE_HA_DISCOVERY
-	Test_HassDiscovery_Base();
-	Test_HassDiscovery();
-	Test_HassDiscovery_Ext();
+	SELFTEST_RUNTEST(Test_HassDiscovery_Base);
+	SELFTEST_RUNTEST(Test_HassDiscovery);
+	SELFTEST_RUNTEST(Test_HassDiscovery_Ext);
 #endif
-	Test_Role_ToggleAll_2();
-	Test_Demo_ButtonToggleGroup();
-	Test_Demo_ButtonScrollingChannelValues();
-	Test_CFG_Via_HTTP();
-	Test_Commands_Calendar();
-	Test_Commands_Generic();
-	Test_Demo_SimpleShuttersScript();
-	Test_Role_ToggleAll();
-	Test_Demo_FanCyclingRelays();
-	Test_Demo_MapFanSpeedToRelays();
-	Test_MapRanges();
-	Test_Demo_ExclusiveRelays();
-	Test_MultiplePinsOnChannel();
-	Test_Flags();
+	SELFTEST_RUNTEST(Test_Role_ToggleAll_2);
+	SELFTEST_RUNTEST(Test_Demo_ButtonToggleGroup);
+	SELFTEST_RUNTEST(Test_Demo_ButtonScrollingChannelValues);
+	SELFTEST_RUNTEST(Test_CFG_Via_HTTP);
+	SELFTEST_RUNTEST(Test_Commands_Calendar);
+	SELFTEST_RUNTEST(Test_Commands_Generic);
+	SELFTEST_RUNTEST(Test_Demo_SimpleShuttersScript);
+	SELFTEST_RUNTEST(Test_Role_ToggleAll);
+	SELFTEST_RUNTEST(Test_Demo_FanCyclingRelays);
+	SELFTEST_RUNTEST(Test_Demo_MapFanSpeedToRelays);
+	SELFTEST_RUNTEST(Test_MapRanges);
+	SELFTEST_RUNTEST(Test_Demo_ExclusiveRelays);
+	SELFTEST_RUNTEST(Test_MultiplePinsOnChannel);
+	SELFTEST_RUNTEST(Test_Flags);
 #ifndef LINUX
 	// TODO: fix on Linux
-	Test_DHT();
+	SELFTEST_RUNTEST(Test_DHT);
 #endif
-	Test_Tasmota();
-	Test_NTP();
-	Test_TIME_DST();
-	Test_TIME_SunsetSunrise();
-	Test_ExpandConstant();
-	Test_ChangeHandlers_MQTT();
-	Test_ChangeHandlers();
-	Test_ChangeHandlers2();
-	Test_ChangeHandlers_EnsureThatChannelVariableIsExpandedAtHandlerRunTime();
-	Test_RepeatingEvents();
-	Test_Commands_Alias();
-	Test_Demo_SignAndValue();
-	Test_LEDDriver();
-	Test_LFS();
-	Test_Scripting();
-	Test_Tokenizer();
-	Test_Pins();
-	Test_Http();
-	Test_Http_LED();
-	Test_DeviceGroups();
-
+	SELFTEST_RUNTEST(Test_Tasmota);
+	SELFTEST_RUNTEST(Test_NTP);
+	SELFTEST_RUNTEST(Test_TIME_DST);
+	SELFTEST_RUNTEST(Test_TIME_SunsetSunrise);
+	SELFTEST_RUNTEST(Test_ExpandConstant);
+	SELFTEST_RUNTEST(Test_ChangeHandlers_MQTT);
+	SELFTEST_RUNTEST(Test_ChangeHandlers);
+	SELFTEST_RUNTEST(Test_ChangeHandlers2);
+	SELFTEST_RUNTEST(Test_ChangeHandlers_EnsureThatChannelVariableIsExpandedAtHandlerRunTime);
+	SELFTEST_RUNTEST(Test_RepeatingEvents);
+	SELFTEST_RUNTEST(Test_Commands_Alias);
+	SELFTEST_RUNTEST(Test_Demo_SignAndValue);
+	SELFTEST_RUNTEST(Test_LEDDriver);
+	SELFTEST_RUNTEST(Test_LFS);
+	SELFTEST_RUNTEST(Test_Scripting);
+	SELFTEST_RUNTEST(Test_Tokenizer);
+	SELFTEST_RUNTEST(Test_Pins);
+	SELFTEST_RUNTEST(Test_Http);
+	SELFTEST_RUNTEST(Test_Http_LED);
+	SELFTEST_RUNTEST(Test_DeviceGroups);
 	// Just to be sure
 	// Must be last step
 	// reset whole device

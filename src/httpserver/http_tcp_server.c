@@ -8,7 +8,9 @@
 
 #if !NEW_TCP_SERVER
 
-#define HTTP_SERVER_PORT            80
+#ifndef HTTP_SERVER_PORT
+#define HTTP_SERVER_PORT 80
+#endif
 #define REPLY_BUFFER_SIZE			2048
 #define INCOMING_BUFFER_SIZE		1024
 

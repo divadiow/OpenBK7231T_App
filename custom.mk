@@ -39,16 +39,16 @@ LDFLAGS ?=
 
 # Append ASAN flags if ASAN=1
 ifeq ($(ASAN),1)
-    CPPFLAGS += -g -fsanitize=address -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1
-    CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
+    CPPFLAGS += -g -fsanitize=address -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DNEW_TCP_SERVER=1 -DHTTP_SERVER_PORT=18080
+    CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DNEW_TCP_SERVER=1 -DHTTP_SERVER_PORT=18080
     LDFLAGS += -g -static-libasan -fsanitize=address
 endif
 
 # Append UBSAN flags if UBSAN=1
 ifeq ($(UBSAN),1)
-    CPPFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1
-    CFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer
-    LDFLAGS += -g -static-libubsan -fsanitize=undefined
+    CPPFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DNEW_TCP_SERVER=1 -DHTTP_SERVER_PORT=18080
+    CFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DNEW_TCP_SERVER=1 -DHTTP_SERVER_PORT=18080
+    LDFLAGS += -g -static-libasan -fsanitize=undefined
 endif
 
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)
