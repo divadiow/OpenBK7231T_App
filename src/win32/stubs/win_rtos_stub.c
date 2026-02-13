@@ -11,6 +11,7 @@
 #else
 
 #include <time.h>
+#include <pthread.h>
 
 #define timeGetTime() time(NULL)
 #define DWORD uint
@@ -90,17 +91,32 @@ int rtos_create_thread(int *out, int prio, const char *name, LPTHREAD_START_ROUT
 	return 0;
 }
 #else
+
+typedef struct {
+	void (*fn)(void *);
+	void *arg;
+} obk_pthread_wrap_t;
+
+static void *obk_pthread_trampoline(void *p) {
+	obk_pthread_wrap_t *w = (obk_pthread_wrap_t *)p;
+	void (*fn)(void *) = w->fn;
+	void *arg = w->arg;
+	free(w);
+	fn(arg);
+	return NULL;
+}
+
 int rtos_create_thread(int *out, int prio, const char *name, void *function, int stackSize, void *arg) {
-	(void)out;
-	(void)prio;
-	(void)name;
-	(void)stackSize;
 	pthread_t handle;
-	int rc = pthread_create(&handle, NULL, (void *(*)(void *))function, arg);
-	if (rc == 0) {
-		pthread_detach(handle);
+	obk_pthread_wrap_t *w = (obk_pthread_wrap_t *)malloc(sizeof(*w));
+	if (w == NULL) {
+		return -1;
 	}
-	return rc;
+	w->fn = (void (*)(void *))function;
+	w->arg = arg;
+	pthread_create(&handle, NULL, obk_pthread_trampoline, w);
+	pthread_detach(handle);
+	return 0;
 }
 #endif
 void rtos_delete_thread(int i) {

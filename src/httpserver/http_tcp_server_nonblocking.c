@@ -11,11 +11,11 @@
 #include <timeapi.h>
 #endif
 
+SOCKET ListenSocket = INVALID_SOCKET;
+
 #ifndef HTTP_SERVER_PORT
 #define HTTP_SERVER_PORT 80
 #endif
-
-SOCKET ListenSocket = INVALID_SOCKET;
 
 int g_httpPort = HTTP_SERVER_PORT;
 

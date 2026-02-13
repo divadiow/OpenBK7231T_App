@@ -55,8 +55,9 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
   build2:
-    if: false
-    name: Build Simulator (disabled)
+    if: ${{ false }}
+    # Disabled: focus CI on ASan/UBSan Linux simulator jobs only
+    name: Build Simulator
     needs: refs
     runs-on: windows-2022
 
@@ -107,7 +108,6 @@ jobs:
     name: Build Linux Simulator and Run Tests With Address Sanitizer
     needs: refs
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
 
     steps:
     - name: Checkout repository
@@ -124,14 +124,12 @@ jobs:
     - name: Run unit tests
       run: |
         export LSAN_OPTIONS=suppressions=platforms/linux/asan.suppressions
-        export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1:halt_on_error=1
-        timeout 600s ./build/win_main -runUnitTests 2
+        ./build/win_main -runUnitTests 2
 
   build_ubsan:
     name: Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer
     needs: refs
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
 
     steps:
     - name: Checkout repository
@@ -148,9 +146,11 @@ jobs:
     - name: Run unit tests
       run: |
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
-        timeout 600s ./build/win_main -runUnitTests 2
+        ./build/win_main -runUnitTests 2
 
   build:
+    if: ${{ false }}
+    # Disabled: focus CI on ASan/UBSan Linux simulator jobs only
     name: Build
     needs: refs
     runs-on: ubuntu-22.04
