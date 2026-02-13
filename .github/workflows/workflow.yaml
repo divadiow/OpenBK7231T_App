@@ -25,8 +25,10 @@ jobs:
           ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=1:strict_string_checks=1:check_initialization_order=1
           LSAN_OPTIONS: suppressions=platforms/linux/asan.suppressions
         run: |
-          timeout 600s ./build/win_main -port 18080 -runUnitTests 2
-
+          set -o pipefail
+          timeout 600s ./build/win_main -port 18080 -runUnitTests 2 | tee asan_run.log
+          grep -q "SAN_HTTPSTRESS_START" asan_run.log
+          grep -q "SAN_HTTPSTRESS_OK" asan_run.log
   build_ubsan:
     name: Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer
     runs-on: ubuntu-22.04
@@ -45,4 +47,7 @@ jobs:
         env:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
         run: |
-          timeout 600s ./build/win_main -port 18080 -runUnitTests 2
+          set -o pipefail
+          timeout 600s ./build/win_main -port 18080 -runUnitTests 2 | tee ubsan_run.log
+          grep -q "SAN_HTTPSTRESS_START" ubsan_run.log
+          grep -q "SAN_HTTPSTRESS_OK" ubsan_run.log

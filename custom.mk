@@ -23,6 +23,23 @@ include libraries/berry.mk
 
 SRCS += $(BERRY_SRC_C)
 
+# Berry needs generated headers (libraries/berry/generate/*). Ensure they exist before compiling Berry sources.
+BERRY_PREBUILD_STAMP := $(BUILD_DIR)/.berry_prebuild
+
+$(BERRY_PREBUILD_STAMP):
+	$(MKDIR_P) $(dir $@)
+	@echo "Running Berry prebuild (generate/ headers)..."
+	$(MAKE) -C libraries/berry prebuild
+	@touch $@
+
+# Ensure Berry sources are only compiled after prebuild has created libraries/berry/generate/*
+$(BUILD_DIR)/$(BERRY_SRCPATH)/%.c.o: $(BERRY_SRCPATH)/%.c | $(BERRY_PREBUILD_STAMP)
+	$(MKDIR_P) $(dir $@)
+	@echo "Compiling: $< -> $@"
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+
+
 
 #OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
@@ -39,16 +56,14 @@ LDFLAGS ?=
 
 # Append ASAN flags if ASAN=1
 ifeq ($(ASAN),1)
-    CPPFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
-	CPPFLAGS += -DOBK_SANITIZER_RUN=1 -DNEW_TCP_SERVER=1 -DHTTP_SERVER_PORT=8080
+    CPPFLAGS += -g -fsanitize=address -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DHTTP_SERVER_PORT=18080
     CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
     LDFLAGS += -g -static-libasan -fsanitize=address
 endif
 
 # Append UBSAN flags if UBSAN=1
 ifeq ($(UBSAN),1)
-    CPPFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer
-	CPPFLAGS += -DOBK_SANITIZER_RUN=1 -DNEW_TCP_SERVER=1 -DHTTP_SERVER_PORT=8080
+    CPPFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DHTTP_SERVER_PORT=18080
     CFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer
     LDFLAGS += -g -static-libasan -fsanitize=undefined
 endif
@@ -67,4 +82,3 @@ $(BUILD_DIR)/%.c.o: %.c
 
 
 MKDIR_P ?= mkdir -p
-
