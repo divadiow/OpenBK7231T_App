@@ -16,23 +16,9 @@ INCLUDES := $(addprefix -I,$(INC_DIRS))
 
 default: $(BUILD_DIR)/$(TARGET_EXEC)
 
-BERRY_MODULEPATH = src/berry/modules
-BERRY_SRCPATH = libraries/berry/src
-
-include libraries/berry.mk
-
-SRCS += $(BERRY_SRC_C)
-
-# Berry needs generated headers (libraries/berry/generate/*). Ensure they exist before compiling Berry sources.
-BERRY_GENERATED_HEADER := libraries/berry/generate/be_const_strtab.h
-BERRY_OBJS := $(BERRY_SRC_C:%=$(BUILD_DIR)/%.o)
-
-$(BERRY_GENERATED_HEADER):
-	@echo "Running Berry prebuild (generate resources)..."
-	$(MAKE) -C libraries/berry generate/be_const_strtab.h
-
-# Ensure Berry objects are built only after generated headers exist
-$(BERRY_OBJS): $(BERRY_GENERATED_HEADER)
+# Berry is not needed for the Linux simulator sanitizer CI (src/berry is already pruned above).
+# Berry also normally relies on generated headers under libraries/berry/generate/, which are not produced in CI by default.
+# So, for this target we skip compiling the Berry VM sources entirely.
 
 #OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
@@ -49,14 +35,14 @@ LDFLAGS ?=
 
 # Append ASAN flags if ASAN=1
 ifeq ($(ASAN),1)
-    CPPFLAGS += -g -fsanitize=address -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DHTTP_SERVER_PORT=8080
+    CPPFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
     CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
     LDFLAGS += -g -static-libasan -fsanitize=address
 endif
 
 # Append UBSAN flags if UBSAN=1
 ifeq ($(UBSAN),1)
-    CPPFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer -DOBK_SANITIZER_RUN=1 -DHTTP_SERVER_PORT=8080
+    CPPFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer
     CFLAGS += -g -fsanitize=undefined -fno-omit-frame-pointer
     LDFLAGS += -g -static-libasan -fsanitize=undefined
 endif
@@ -75,3 +61,4 @@ $(BUILD_DIR)/%.c.o: %.c
 
 
 MKDIR_P ?= mkdir -p
+
