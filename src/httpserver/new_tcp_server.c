@@ -15,7 +15,12 @@
 #define HTTP_CLIENT_STACK_SIZE		4096
 #endif
 #ifndef MAX_SOCKETS_TCP
+#ifdef MEMP_NUM_TCP_PCB
 #define MAX_SOCKETS_TCP MEMP_NUM_TCP_PCB
+#else
+// Simulator lwIP stubs don't provide MEMP_NUM_TCP_PCB; pick a small, safe default.
+#define MAX_SOCKETS_TCP 8
+#endif
 #endif
 
 void HTTPServer_Start();
@@ -124,7 +129,7 @@ exit:
 	if(reply != NULL)
 		os_free(reply);
 
-	lwip_close(fd);
+	close(fd);
 	arg->isCompleted = true;
 #if PLATFORM_RDA5981
 	arg->thread = NULL;
@@ -308,7 +313,7 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 					(beken_thread_arg_t)&sock[new_idx]))
 				{
 					ADDLOG_ERROR(LOG_FEATURE_HTTP, "[sock=%d]: TCP Client thread creation failed!", sock[new_idx].fd);
-					lwip_close(sock[new_idx].fd);
+					close(sock[new_idx].fd);
 					sock[new_idx].fd = INVALID_SOCK;
 					goto error;
 				}

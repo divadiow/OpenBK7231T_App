@@ -370,8 +370,17 @@ enum {
 };
 
 typedef void * beken_thread_arg_t;
-typedef int (*beken_thread_function_t)(void *p);
+typedef void * beken_thread_t;
+typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 #define BEKEN_APPLICATION_PRIORITY 1
+
+// Simulator stubs (WINDOWS+LINUX build) expose a small subset of the RTOS API.
+OSStatus rtos_create_thread( beken_thread_t* thread,
+							uint8_t priority, const char* name,
+							beken_thread_function_t function,
+							uint32_t stack_size, beken_thread_arg_t arg );
+OSStatus rtos_delete_thread( beken_thread_t* thread );
+OSStatus rtos_suspend_thread( beken_thread_t* thread );
 
 #elif PLATFORM_BL602
 

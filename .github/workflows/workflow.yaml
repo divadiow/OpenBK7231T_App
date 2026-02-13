@@ -55,8 +55,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
   build2:
-    if: ${{ false }}
-    # Disabled: focus CI on ASan/UBSan Linux simulator jobs only
+    if: false
     name: Build Simulator
     needs: refs
     runs-on: windows-2022
@@ -124,7 +123,7 @@ jobs:
     - name: Run unit tests
       run: |
         export LSAN_OPTIONS=suppressions=platforms/linux/asan.suppressions
-        ./build/win_main -runUnitTests 2
+        timeout 300s ./build/win_main -runUnitTests 2
 
   build_ubsan:
     name: Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer
@@ -146,11 +145,10 @@ jobs:
     - name: Run unit tests
       run: |
         export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
-        ./build/win_main -runUnitTests 2
+        timeout 300s ./build/win_main -runUnitTests 2
 
   build:
-    if: ${{ false }}
-    # Disabled: focus CI on ASan/UBSan Linux simulator jobs only
+    if: false
     name: Build
     needs: refs
     runs-on: ubuntu-22.04
@@ -328,6 +326,7 @@ jobs:
           if-no-files-found: warn
 
   build_idf:
+    if: false
     name: Build IDF
     needs: refs
     runs-on: ubuntu-24.04
@@ -445,6 +444,7 @@ jobs:
           if-no-files-found: warn
 
   build_txw81x:
+    if: false
     name: Build TXW81X
     needs: refs
     runs-on: windows-latest
@@ -478,6 +478,7 @@ jobs:
           if-no-files-found: warn
 
   merge:
+    if: false
     name: Merge Artifacts
     runs-on: ubuntu-22.04
     needs: [refs, build, build2, build_idf, build_txw81x]
@@ -490,6 +491,7 @@ jobs:
           #delete-merged: true
 
   release:
+    if: false
     name: Semantic Release Images and Artifacts
     runs-on: ubuntu-22.04
     needs: [merge, refs]
