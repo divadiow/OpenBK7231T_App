@@ -104,6 +104,7 @@ void Test_ExpandConstant();
 void Test_Scripting();
 void Test_RepeatingEvents();
 void Test_HTTP_Client();
+void Test_HTTP_Server_LargeHeader();
 void Test_DeviceGroups();
 void Test_NTP();
 void Test_TIME_DST();

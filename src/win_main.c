@@ -211,6 +211,7 @@ void Win_DoUnitTests()
 	Test_Command_If();
 	Test_MQTT();
 	Test_HTTP_Client();
+	Test_HTTP_Server_LargeHeader();
 	// Test_PartitionSearch();
 	Test_OpenWeatherMap();
 	Test_MAX72XX();
