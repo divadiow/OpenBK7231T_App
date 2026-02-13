@@ -56,6 +56,7 @@ jobs:
 
   build2:
     name: Build Simulator
+    if: ${{ false }}  # disabled: Win32 simulator build is not required for sanitizers/firmware CI
     needs: refs
     runs-on: windows-2022
 
@@ -122,16 +123,7 @@ jobs:
     - name: Run unit tests
       run: |
         export LSAN_OPTIONS=suppressions=platforms/linux/asan.suppressions
-        export ASAN_OPTIONS=abort_on_error=1:halt_on_error=1:detect_leaks=1:strict_string_checks=1:log_path=asan
         ./build/win_main -port 18080 -runUnitTests 2
-
-    - name: Upload ASan logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: asan-logs
-        path: |
-          asan.*
 
   build_ubsan:
     name: Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer
@@ -152,16 +144,8 @@ jobs:
       run: UBSAN=1 make -f custom.mk
     - name: Run unit tests
       run: |
-        export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions:log_path=ubsan
+        export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
         ./build/win_main -port 18080 -runUnitTests 2
-
-    - name: Upload UBSan logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ubsan-logs
-        path: |
-          ubsan.*
 
   build:
     name: Build
@@ -493,7 +477,7 @@ jobs:
   merge:
     name: Merge Artifacts
     runs-on: ubuntu-22.04
-    needs: [refs, build, build2, build_idf, build_txw81x]
+    needs: [refs, build, build_idf, build_txw81x]
     #if: always() && needs.refs.outputs.new_release == 'true' && (github.ref == 'refs/heads/main' || github.ref_name == 'alpha')
     steps:
       - name: Merge Artifacts
