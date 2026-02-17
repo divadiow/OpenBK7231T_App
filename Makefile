@@ -585,6 +585,15 @@ OpenTR6260: prebuild_OpenTR6260
 		echo "Generating TR6260 OTA diff (platforms/TR6260/current.bin -> OpenTR6260_$(APP_VERSION).bin)"; \
 		chmod +x sdk/OpenTR6260/tool/ota_tool || true; \
 		sdk/OpenTR6260/tool/ota_tool diff sdk/OpenTR6260/new_partition_0x6000.bin platforms/TR6260/current.bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION)_ota.img || echo "WARNING: TR6260 ota_tool failed; OpenTR6260_$(APP_VERSION)_ota.img was not generated"; \
+		OTA_IMG=output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION)_ota.img; \
+		if [ -f "$$OTA_IMG" ]; then \
+			echo "Patching TR6260 OTA header: patch_version @0x07 -> 0x01 (bootloader compat)"; \
+			if command -v dd >/dev/null 2>&1; then \
+				printf '\001' | dd of="$$OTA_IMG" bs=1 seek=7 count=1 conv=notrunc 2>/dev/null || true; \
+			else \
+				python3 -c "import sys; p=sys.argv[1]; f=open(p, 'r+b'); f.seek(7); f.write(b'\\x01'); f.close()" "$$OTA_IMG" || true; \
+			fi; \
+		fi; \
 	else \
 		echo "No TR6260 OTA baseline (platforms/TR6260/current.bin) or missing sdk/OpenTR6260/tool/ota_tool; skipping TR6260 OTA diff generation"; \
 	fi
