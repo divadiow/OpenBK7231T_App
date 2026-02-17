@@ -581,22 +581,17 @@ OpenTR6260: prebuild_OpenTR6260
 	cd sdk/OpenTR6260/scripts && APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) bash build_tr6260s1.sh
 	mkdir -p output/$(APP_VERSION)
 	cp sdk/OpenTR6260/out/tr6260s1/standalone/tr6260s1_0x007000.bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin
-	
-
-	@# TR6260 OTA (Tuya-style FotaPKG v1) generation
-	@if [ -f platforms/TR6260/current.bin ]; then \
-		echo "[TR6260] Building OTA diff (FotaPKG v1) against platforms/TR6260/current.bin"; \
+	# Build TR6260 OTA package (FotaPKG v1) if a baseline is available
+	if [ -f platforms/TR6260/current.bin ]; then \
 		python3 tools/tr6260_ota_v1_builder.py \
+			--partition sdk/OpenTR6260/new_partition_0x6000.bin \
 			--current platforms/TR6260/current.bin \
 			--new output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin \
-			--out output/$(APP_VERSION)/OpenTR6260_UG_$(APP_VERSION).img \
-			--out-alt output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION)_ota.img \
-			--base-addr 0x7000 --chunk-size 0x5000 \
-			--src "OBK_CUR" --tgt "$(APP_VERSION)" \
-		|| echo "[TR6260] OTA diff generation failed (install bsdiff on your build host)."; \
+			--out output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION)_ota.img ; \
 	else \
-		echo "[TR6260] Skipping OTA diff: platforms/TR6260/current.bin not present."; \
+		echo "TR6260 OTA: platforms/TR6260/current.bin not found - skipping" ; \
 	fi
+	
 .PHONY: OpenRTL87X0C
 OpenRTL87X0C: prebuild_OpenRTL87X0C
 	$(MAKE) -C sdk/OpenRTL87X0C/project/OpenBeken/GCC-RELEASE APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) -j $(shell nproc)
