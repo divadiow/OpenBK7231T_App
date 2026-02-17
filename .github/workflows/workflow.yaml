@@ -301,6 +301,80 @@ jobs:
       - name: Run make
         run: make APP_VERSION=${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} APP_NAME=${{ matrix.platform }} VARIANT="${{ matrix.variant }}" ${{ matrix.platform }}
 
+      - name: Generate TR6260 OTA diff (self-diff smoke test)
+        if: matrix.platform == 'OpenTR6260'
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+
+          OUTDIR="output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}"
+          BASE="${{ matrix.platform }}_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}"
+
+          NEWBIN="${OUTDIR}/${BASE}.bin"
+          OUTIMG="${OUTDIR}/${BASE}_ota.img"
+
+          TOOL="sdk/OpenTR6260/tool/ota_tool"
+          PART="sdk/OpenTR6260/new_partition_0x6000.bin"
+
+          echo "Generating TR6260 OTA diff (self-diff) -> ${OUTIMG}"
+
+          if [ ! -f "${NEWBIN}" ]; then
+            echo "ERROR: built firmware not found: ${NEWBIN}"
+            ls -la "${OUTDIR}" || true
+            exit 1
+          fi
+
+          if [ ! -f "${TOOL}" ]; then
+            echo "ERROR: ota_tool not found: ${TOOL}"
+            ls -la "sdk/OpenTR6260/tool" || true
+            exit 1
+          fi
+
+          if [ ! -f "${PART}" ]; then
+            echo "ERROR: partition file not found: ${PART}"
+            ls -la "sdk/OpenTR6260" || true
+            exit 1
+          fi
+
+          chmod +x "${TOOL}"
+
+          # Try a few candidates in case ota_tool expects a different TR6260 image flavor.
+          CANDIDATES=(
+            "${NEWBIN}"
+            "sdk/OpenTR6260/out/tr6260s1/standalone/tr6260s1_0x007000.bin"
+            "sdk/OpenTR6260/out/tr6260s1/standalone/standalone_tr6260s1.bin"
+            "sdk/OpenTR6260/out/tr6260s1/standalone/xip.bin"
+          )
+
+          rm -f "${OUTIMG}"
+
+          for C in "${CANDIDATES[@]}"; do
+            if [ ! -f "${C}" ]; then
+              echo "Skip (missing): ${C}"
+              continue
+            fi
+
+            echo "Attempt: ${TOOL} diff ${PART} ${C} ${C} ${OUTIMG}"
+            rm -f "${OUTIMG}"
+
+            set +e
+            "${TOOL}" diff "${PART}" "${C}" "${C}" "${OUTIMG}"
+            RC=$?
+            set -e
+
+            if [ $RC -eq 0 ] && [ -f "${OUTIMG}" ] && [ "$(stat -c%s "${OUTIMG}")" -gt 64 ]; then
+              echo "Success: generated ${OUTIMG} from ${C} (size $(stat -c%s "${OUTIMG}") bytes)"
+              exit 0
+            fi
+
+            echo "Failed (rc=${RC}) for ${C}"
+          done
+
+          echo "ERROR: Failed to generate TR6260 OTA diff with all candidates."
+          exit 1
+
+
       - name: Save build assets
         uses: actions/upload-artifact@v4
         with:
