@@ -31,7 +31,7 @@
 	branch = release/v5.5
 [submodule "sdk/OpenTR6260"]
 	path = sdk/OpenTR6260
-	url = https://github.com/NonPIayerCharacter/OpenTR6260.git
+	url = https://github.com/divadiow/OpenTR6260.git
 	branch = master
 [submodule "sdk/OpenRTL87X0C"]
 	path = sdk/OpenRTL87X0C
