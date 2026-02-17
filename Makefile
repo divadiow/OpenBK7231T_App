@@ -581,6 +581,13 @@ OpenTR6260: prebuild_OpenTR6260
 	cd sdk/OpenTR6260/scripts && APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) bash build_tr6260s1.sh
 	mkdir -p output/$(APP_VERSION)
 	cp sdk/OpenTR6260/out/tr6260s1/standalone/tr6260s1_0x007000.bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin
+	if [ -f platforms/TR6260/current.bin ] && [ -f sdk/OpenTR6260/tool/ota_tool ] && [ -f sdk/OpenTR6260/new_partition_0x6000.bin ]; then \
+		echo "Generating TR6260 OTA diff (platforms/TR6260/current.bin -> OpenTR6260_$(APP_VERSION).bin)"; \
+		chmod +x sdk/OpenTR6260/tool/ota_tool || true; \
+		sdk/OpenTR6260/tool/ota_tool diff sdk/OpenTR6260/new_partition_0x6000.bin platforms/TR6260/current.bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION)_ota.img || echo "WARNING: TR6260 ota_tool failed; OpenTR6260_$(APP_VERSION)_ota.img was not generated"; \
+	else \
+		echo "No TR6260 OTA baseline (platforms/TR6260/current.bin) or missing sdk/OpenTR6260/tool/ota_tool; skipping TR6260 OTA diff generation"; \
+	fi
 	
 .PHONY: OpenRTL87X0C
 OpenRTL87X0C: prebuild_OpenRTL87X0C
