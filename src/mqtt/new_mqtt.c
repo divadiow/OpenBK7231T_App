@@ -235,6 +235,13 @@ static int mqtt_published_events = 0;
 static int mqtt_publish_errors = 0;
 static int mqtt_received_events = 0;
 
+// Last broker/stack status (for UI diagnostics)
+static volatile mqtt_connection_status_t mqtt_last_broker_status = MQTT_CONNECT_DISCONNECTED;
+static char mqtt_broker_status_message[128] = "";
+static volatile err_t mqtt_last_request_cb_err = ERR_OK;
+static volatile err_t mqtt_last_publish_cb_err = ERR_OK;
+
+
 static int g_just_connected = 0;
 
 
@@ -341,6 +348,7 @@ int MQTT_GetConnectResult(void)
 const char* get_callback_error(int reason) {
 	switch (reason)
 	{
+	case MQTT_CONNECT_ACCEPTED: return "Accepted";
 	case MQTT_CONNECT_REFUSED_PROTOCOL_VERSION: return "Refused protocol version";
 	case MQTT_CONNECT_REFUSED_IDENTIFIER: return "Refused identifier";
 	case MQTT_CONNECT_REFUSED_SERVER: return "Refused server";
@@ -349,7 +357,7 @@ const char* get_callback_error(int reason) {
 	case MQTT_CONNECT_DISCONNECTED: return "Disconnected";
 	case MQTT_CONNECT_TIMEOUT: return "Timeout";
 	}
-	return "";
+	return "Unknown";
 }
 
 const char* get_error_name(int err)
@@ -397,6 +405,27 @@ const char* get_error_name(int err)
 char* MQTT_GetStatusMessage(void)
 {
 	return mqtt_status_message;
+}
+
+// UI diagnostics helpers
+int MQTT_GetLastBrokerStatusCode(void)
+{
+	return (int)mqtt_last_broker_status;
+}
+
+const char* MQTT_GetLastBrokerStatusMessage(void)
+{
+	return mqtt_broker_status_message;
+}
+
+int MQTT_GetLastRequestCbError(void)
+{
+	return (int)mqtt_last_request_cb_err;
+}
+
+int MQTT_GetLastPublishCbError(void)
+{
+	return (int)mqtt_last_publish_cb_err;
 }
 
 void MQTT_ClearCallbacks() {
@@ -846,12 +875,15 @@ static void MQTT_disconnect(mqtt_client_t* client)
 /* Called when publish is complete either with sucess or failure */
 static void mqtt_pub_request_cb(void* arg, err_t result)
 {
+	LWIP_UNUSED_ARG(arg);
+	mqtt_last_publish_cb_err = result;
 	if (result != ERR_OK)
 	{
 		addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "Publish result: %d(%s)\n", result, get_error_name(result));
 		mqtt_publish_errors++;
 	}
 }
+
 
 // This publishes value to the specified topic/channel.
 static OBK_Publish_Result MQTT_PublishTopicToClient(mqtt_client_t* client, const char* sTopic, const char* sChannel, const char* sVal, int flags, bool appendGet)
@@ -1107,10 +1139,12 @@ static void mqtt_incoming_publish_cb(void* arg, const char* topic, u32_t tot_len
 static void mqtt_request_cb(void* arg, err_t err)
 {
 	const struct mqtt_connect_client_info_t* client_info = (const struct mqtt_connect_client_info_t*)arg;
-	if (err != 0) {
-		addLogAdv(LOG_ERROR, LOG_FEATURE_MQTT, "MQTT client \"%s\" request cb: err %d\n", client_info->client_id, (int)err);
+	mqtt_last_request_cb_err = err;
+	if (err != ERR_OK) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_MQTT, "MQTT client \"%s\" request cb: err %d(%s)\n", client_info->client_id, (int)err, get_error_name(err));
 	}
 }
+
 
 /////////////////////////////////////////////
 // should be called in tcp_thread context.
@@ -1123,12 +1157,21 @@ static void mqtt_connection_cb(mqtt_client_t* client, void* arg, mqtt_connection
 	const struct mqtt_connect_client_info_t* client_info = (const struct mqtt_connect_client_info_t*)arg;
 	LWIP_UNUSED_ARG(client);
 
+	mqtt_last_broker_status = status;
+	snprintf(mqtt_broker_status_message, sizeof(mqtt_broker_status_message), "%d(%s)", (int)status, get_callback_error(status));
+	// If broker rejects the session (CONNACK != accepted), expose that in UI.
+	if (status != MQTT_CONNECT_ACCEPTED && mqtt_status_message[0] == '\0') {
+		snprintf(mqtt_status_message, sizeof(mqtt_status_message), "broker: %s", get_callback_error(status));
+	}
+
+
 	//   addLogAdv(LOG_INFO,LOG_FEATURE_MQTT,"MQTT client < removed name > connection cb: status %d\n",  (int)status);
 	 //  addLogAdv(LOG_INFO,LOG_FEATURE_MQTT,"MQTT client \"%s\" connection cb: status %d\n", client_info->client_id, (int)status);
 
 	if (status == MQTT_CONNECT_ACCEPTED)
 	{
 		addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "mqtt_connection_cb: Successfully connected\n");
+		mqtt_status_message[0] = '\0';
 
 #if LWIP_ALTCP_TLS_MBEDTLS
 		if (CFG_GetMQTTUseTls() && client && client->conn && client->conn->state) {
@@ -1200,6 +1243,7 @@ static volatile int dns_in_progress_time;
 static volatile bool dns_resolved;
 void dnsFound(const char *name, ip_addr_t *ipaddr, void *arg) 
 {       
+	LWIP_UNUSED_ARG(arg);
 
 	if (NULL != ipaddr)
 	{
@@ -1208,14 +1252,20 @@ void dnsFound(const char *name, ip_addr_t *ipaddr, void *arg)
 		/* Try to reconnect immediately after resolving the host */
 		mqtt_loopsWithDisconnected = LOOPS_WITH_DISCONNECTED + 1;
 		addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "mqtt_host %s resolution SUCCESS\r\n", name);
+		snprintf(mqtt_broker_status_message, sizeof(mqtt_broker_status_message), "DNS resolved");
 	}
 	else
 	{
 		dns_resolved = false;
 		addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "mqtt_host %s resolution FAILED\r\n", name);
+		snprintf(mqtt_broker_status_message, sizeof(mqtt_broker_status_message), "DNS failed");
+		if (mqtt_status_message[0] == '\0') {
+			snprintf(mqtt_status_message, sizeof(mqtt_status_message), "dns failed");
+		}
 	}
 	dns_in_progress_time = 0;
 }
+
 
 static int MQTT_do_connect(mqtt_client_t* client)
 {
@@ -1402,6 +1452,7 @@ static int MQTT_do_connect(mqtt_client_t* client)
 		{
 			addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "Connect error in mqtt_client_connect - code: %d (%s)\n", res, get_error_name(res));
 			snprintf(mqtt_status_message, sizeof(mqtt_status_message), "mqtt_client_connect connect failed");
+			snprintf(mqtt_broker_status_message, sizeof(mqtt_broker_status_message), "connect() failed: %d(%s)", res, get_error_name(res));
 			if (res == ERR_ISCONN)
 			{
 				mqtt_disconnect(mqtt_client);
@@ -1409,6 +1460,9 @@ static int MQTT_do_connect(mqtt_client_t* client)
 		}
 		else {
 			mqtt_status_message[0] = '\0';
+			snprintf(mqtt_broker_status_message, sizeof(mqtt_broker_status_message), "Connecting...");
+			mqtt_last_request_cb_err = ERR_OK;
+			mqtt_last_publish_cb_err = ERR_OK;
 		}
 		return res;
 	}

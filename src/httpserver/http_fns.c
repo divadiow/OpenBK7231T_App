@@ -1077,6 +1077,11 @@ typedef enum {
 		}
 		hprintf255(request, "<h5>MQTT State: <span style=\"color:%s\">%s</span> RES: %d(%s)<br>", colorStr,
 			stateStr, MQTT_GetConnectResult(), get_error_name(MQTT_GetConnectResult()));
+		hprintf255(request, "MQTT Broker: %s <br>", (MQTT_GetLastBrokerStatusMessage() != NULL) ? MQTT_GetLastBrokerStatusMessage() : "");
+		hprintf255(request, "MQTT Broker IP: %s:%d <br>", (ipaddr_ntoa(&mqtt_ip) != NULL) ? ipaddr_ntoa(&mqtt_ip) : "n/a", CFG_GetMQTTPort());
+		hprintf255(request, "MQTT LastReqCb: %d(%s) LastPubCb: %d(%s) <br>",
+			MQTT_GetLastRequestCbError(), get_error_name(MQTT_GetLastRequestCbError()),
+			MQTT_GetLastPublishCbError(), get_error_name(MQTT_GetLastPublishCbError()));
 		hprintf255(request, "MQTT ErrMsg: %s <br>", (MQTT_GetStatusMessage() != NULL) ? MQTT_GetStatusMessage() : "");
 		hprintf255(request, "MQTT Stats: CONN: %d PUB: %d RECV: %d ERR: %d </h5>", MQTT_GetConnectEvents(),
 			MQTT_GetPublishEventCounter(), MQTT_GetReceivedEventCounter(), MQTT_GetPublishErrorCounter());
