@@ -15,8 +15,6 @@
 
 #define GIRIERMCU_BUFFER_SIZE 	256
 
-void GirierMCU_RunFrame();
-
 typedef struct GirierMCUMapping_s {
 	// internal Tuya variable index
 	byte dpId;
@@ -83,24 +81,60 @@ typedef struct GirierMCUPacket_s {
 GirierMCUPacket_t *gmcu_emptyPackets = 0;
 GirierMCUPacket_t *gmcu_sendPackets = 0;
 
+static inline int GirierMCU_ClampInt(int v, int lo, int hi) {
+	if (v < lo) return lo;
+	if (v > hi) return hi;
+	return v;
+}
+
+static inline bool GirierMCU_IsBoolLike(int v) {
+	return (v == 0) || (v == 1);
+}
+
 GirierMCUPacket_t *GirierMCU_AddToQueue(int len) {
 	GirierMCUPacket_t *toUse;
+	if (len < 0) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AddToQueue: negative len=%d\n", len);
+		return NULL;
+	}
+	const size_t want = (size_t)len;
 	if (gmcu_emptyPackets) {
 		toUse = gmcu_emptyPackets;
 		gmcu_emptyPackets = toUse->next;
 
-		if (len > toUse->allocated) {
-			toUse->data = realloc(toUse->data, len);
-			toUse->allocated = len;
+		// Make sure we don't keep stale links from the free-list.
+		toUse->next = NULL;
+
+		if (want > (size_t)toUse->allocated) {
+			void *tmp = realloc(toUse->data, want);
+			if (tmp == NULL) {
+				addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AddToQueue: realloc(%u) failed\n", (unsigned)want);
+				// Put it back on the free-list so we don't lose it.
+				toUse->next = gmcu_emptyPackets;
+				gmcu_emptyPackets = toUse;
+				return NULL;
+			}
+			toUse->data = (byte*)tmp;
+			toUse->allocated = (int)want;
 		}
 	}
 	else {
-		toUse = malloc(sizeof(GirierMCUPacket_t));
+		toUse = (GirierMCUPacket_t*)malloc(sizeof(GirierMCUPacket_t));
+		if (toUse == NULL) {
+			addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AddToQueue: malloc(packet) failed\n");
+			return NULL;
+		}
+		memset(toUse, 0, sizeof(*toUse));
 		int toAlloc = 128;
 		if (len > toAlloc)
 			toAlloc = len;
 		toUse->allocated = toAlloc;
-		toUse->data = malloc(toUse->allocated);
+		toUse->data = (byte*)malloc((size_t)toUse->allocated);
+		if (toUse->data == NULL) {
+			addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AddToQueue: malloc(%d) failed\n", toUse->allocated);
+			free(toUse);
+			return NULL;
+		}
 	}
 	toUse->size = len;
 	if (gmcu_sendPackets == 0) {
@@ -113,11 +147,11 @@ GirierMCUPacket_t *GirierMCU_AddToQueue(int len) {
 		}
 		p->next = toUse;
 	}
-	toUse->next = 0;
+	toUse->next = NULL;
 	return toUse;
 }
 
-bool GirierMCU_SendFromQueue() {
+bool GirierMCU_SendFromQueue(void) {
 	GirierMCUPacket_t *toUse;
 	if (gmcu_sendPackets == 0)
 		return false;
@@ -184,26 +218,29 @@ girierMCUMapping_t* GirierMCU_MapIDToChannel(int dpId, int dpType, int channel, 
 
 	if (cur == 0) {
 		cur = (girierMCUMapping_t*)malloc(sizeof(girierMCUMapping_t));
+		if (cur == NULL) {
+			addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_MapIDToChannel: malloc failed\n");
+			return NULL;
+		}
+		memset(cur, 0, sizeof(*cur));
 		cur->next = g_girierMappings;
-		cur->rawData = 0;
-		cur->rawDataLen = 0;
-		cur->rawBufferSize = 0;
 		g_girierMappings = cur;
 	}
-	cur->dpId = dpId;
-	cur->dpType = dpType;
-	cur->obkFlags = obkFlags;
+	// Clamp/cast to on-wire / struct sizes to avoid silent truncation.
+	cur->dpId = (byte)GirierMCU_ClampInt(dpId, 0, 255);
+	cur->dpType = (byte)GirierMCU_ClampInt(dpType, 0, 255);
+	cur->obkFlags = (byte)GirierMCU_ClampInt(obkFlags, 0, 255);
 	cur->mult = mul;
 	cur->delta = delta;
 	cur->delta2 = delta2;
 	cur->delta3 = delta3;
-	cur->inv = inv;
+	cur->inv = (byte)GirierMCU_ClampInt(inv, 0, 255);
 	cur->prevValue = 0;
-	cur->channel = channel;
+	cur->channel = (short)GirierMCU_ClampInt(channel, -32768, 32767);
 	return cur;
 }
 
-void GirierMCU_SendInit() {
+void GirierMCU_SendInit(void) {
 
 	    byte girier_hello[] = {
 			0x55, 0xaa, 0x00, 0xfe, 0x00, 0x05, 0x03, 0x03, 0xff, 0x03, 0xff, 0x09,
@@ -228,12 +265,25 @@ void GirierMCU_SendCommandWithData(byte* data, int payload_len) {
 		 data, payload_len
 	);
 	int i;
+	if (payload_len < 0) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_SendCommandWithData: negative payload_len=%d\n", payload_len);
+		return;
+	}
+	if ((payload_len > 0) && (data == NULL)) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_SendCommandWithData: NULL data with payload_len=%d\n", payload_len);
+		return;
+	}
 	
 	UART_InitUART(g_baudRate, 0, false);
 	 if (CFG_HasFlag(OBK_FLAG_TUYAMCU_USE_QUEUE)) {
 		GirierMCUPacket_t *p = GirierMCU_AddToQueue(payload_len);
-		p->data[0] = payload_len & 0xFF;
-		memcpy(p->data, data, payload_len);
+		if (p == NULL) {
+			addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_SendCommandWithData: queue alloc failed (len=%d)\n", payload_len);
+			return;
+		}
+		if (payload_len > 0) {
+			memcpy(p->data, data, (size_t)payload_len);
+		}
 
 	} else {
 		UART_SendByte(0x00);
@@ -262,12 +312,25 @@ int GirierMCU_AppendStateInternal(byte *buffer, int bufferMax, int currentLen, u
 		buffer, bufferMax, currentLen, dpId, value, dataLen
 	);
 
-	if (currentLen + 1 + dataLen >= bufferMax) {
-		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "Girier buff overflow");
-		return 0;
+	if (buffer == NULL || bufferMax <= 0 || currentLen < 0 || currentLen > bufferMax || dataLen < 0) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AppendStateInternal: bad args (buffer=%p bufferMax=%d currentLen=%d dataLen=%d)\n",
+			buffer, bufferMax, currentLen, dataLen);
+		return -1;
+	}
+	if ((dataLen > 0) && (value == NULL)) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AppendStateInternal: NULL value with dataLen=%d\n", dataLen);
+		return -1;
+	}
+
+	if (currentLen + 1 + dataLen > bufferMax) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_AppendStateInternal: buffer overflow (need=%d max=%d)\n",
+			currentLen + 1 + dataLen, bufferMax);
+		return -1;
 	}
 	buffer[currentLen + 0] = dpId;
-	memcpy(buffer + (currentLen + 1), value, dataLen);
+	if (dataLen > 0) {
+		memcpy(buffer + (currentLen + 1), value, (size_t)dataLen);
+	}
 
 	return currentLen + 1 + dataLen;
 }
@@ -278,7 +341,11 @@ void GirierMCU_SendStateInternal(uint8_t dpId, void* value, int dataLen) {
 		"_SendStateInternal(id=%d, value=%p, dataLen=%d) called\n", 
 		dpId, value, dataLen
 	);
-	uint16_t payload_len = 0;
+	int payload_len = 0;
+	if (g_GirierMCUpayloadBuffer == NULL || g_GirierMCUpayloadBufferSize <= 0) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU_SendStateInternal: payload buffer not initialised\n");
+		return;
+	}
 	
 	payload_len = GirierMCU_AppendStateInternal(
 		g_GirierMCUpayloadBuffer,
@@ -288,6 +355,10 @@ void GirierMCU_SendStateInternal(uint8_t dpId, void* value, int dataLen) {
 		value, 
 		dataLen
 	);
+
+	if (payload_len <= 0) {
+		return;
+	}
 
 	GirierMCU_SendCommandWithData(g_GirierMCUpayloadBuffer, payload_len);
 }
@@ -323,10 +394,10 @@ commandResult_t GirierMCU_LinkGirierMCUOutputToChannel(const void* context, cons
 		context, cmd, args, cmdFlags
 	);
 	const char* dpTypeString;
-	byte dpId;
+	int dpId;
 	byte dpType;
 	int channelID;
-	byte argsCount;
+	int argsCount;
 	byte obkFlags;
 	float mult, delta, delta2, delta3;
 	byte inv;
@@ -351,10 +422,37 @@ commandResult_t GirierMCU_LinkGirierMCUOutputToChannel(const void* context, cons
 	else {
 		channelID = Tokenizer_GetArgInteger(2);
 	}
-	dpType = 0; // TODO - uninitialized
-	obkFlags = Tokenizer_GetArgInteger(3);
+	// Keep the same numeric codes as TuyaMCU for familiarity.
+	// (This driver currently does not use dpType in its send path.)
+	#define DP_TYPE_RAW    0x00
+	#define DP_TYPE_BOOL   0x01
+	#define DP_TYPE_VALUE  0x02
+	#define DP_TYPE_STRING 0x03
+	#define DP_TYPE_ENUM   0x04
+	#define DP_TYPE_BITMAP 0x05
+
+	if (dpTypeString == NULL) {
+		dpType = DP_TYPE_VALUE;
+	} else if (!stricmp(dpTypeString, "raw")) {
+		dpType = DP_TYPE_RAW;
+	} else if (!stricmp(dpTypeString, "bool")) {
+		dpType = DP_TYPE_BOOL;
+	} else if (!stricmp(dpTypeString, "val") || !stricmp(dpTypeString, "value")) {
+		dpType = DP_TYPE_VALUE;
+	} else if (!stricmp(dpTypeString, "str") || !stricmp(dpTypeString, "string")) {
+		dpType = DP_TYPE_STRING;
+	} else if (!stricmp(dpTypeString, "enum")) {
+		dpType = DP_TYPE_ENUM;
+	} else if (!stricmp(dpTypeString, "bitmap")) {
+		dpType = DP_TYPE_BITMAP;
+	} else {
+		addLogAdv(LOG_WARN, LOG_FEATURE_TUYAMCU, "GirierMCU: unknown dpType '%s', defaulting to VALUE\n", dpTypeString);
+		dpType = DP_TYPE_VALUE;
+	}
+
+	obkFlags = (byte)Tokenizer_GetArgIntegerDefault(3, 0);
 	mult = Tokenizer_GetArgFloatDefault(4, 1.0f);
-	inv = Tokenizer_GetArgInteger(5);
+	inv = (byte)Tokenizer_GetArgIntegerDefault(5, 0);
 	delta = Tokenizer_GetArgFloatDefault(6, 0.0f);
 	delta2 = Tokenizer_GetArgFloatDefault(7, 0.0f);
 	delta3 = Tokenizer_GetArgFloatDefault(8, 0.0f);
@@ -393,10 +491,30 @@ void GirierMCU_OnChannelChanged(int channel, int iVal) {
 	}
 
 	if (mapping->inv) {
-		iVal = !iVal;
+		// Historically this flag behaved like a boolean NOT. Preserve that for boolean-like values,
+		// but for dimmer-like values invert within the configured range.
+		if (GirierMCU_IsBoolLike(iVal)) {
+			iVal = !iVal;
+		} else {
+			iVal = (g_dimmerRangeMax + g_dimmerRangeMin) - iVal;
+		}
 	}
 
-	int mappediVal = ((iVal - g_dimmerRangeMin) * 255) / (g_dimmerRangeMax - g_dimmerRangeMin);
+	const int range = (g_dimmerRangeMax - g_dimmerRangeMin);
+	if (range <= 0) {
+		addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "GirierMCU: invalid dimmer range min=%d max=%d\n", g_dimmerRangeMin, g_dimmerRangeMax);
+		return;
+	}
+
+	// Clamp to the configured OpenBK dimmer range before mapping.
+	iVal = GirierMCU_ClampInt(iVal, g_dimmerRangeMin, g_dimmerRangeMax);
+
+	int mappediVal;
+	{
+		const int64_t num = ((int64_t)(iVal - g_dimmerRangeMin) * 255LL);
+		mappediVal = (int)(num / (int64_t)range);
+	}
+	mappediVal = GirierMCU_ClampInt(mappediVal, 0, 255);
 
 	addLogAdv(
 		LOG_DEBUG, LOG_FEATURE_TUYAMCU,
@@ -526,7 +644,7 @@ void GirierMCU_Shutdown() {
 	// free the mutex
 	if (g_mutex) {
 		//vSemaphoreDelete(g_mutex);
-		g_mutex = NULL;
+		g_mutex = (SemaphoreHandle_t)0;
 	}
 }
 
