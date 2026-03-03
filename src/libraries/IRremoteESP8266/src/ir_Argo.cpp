@@ -65,12 +65,11 @@ using irutils::addTimerModeToString;
 /// @note Consider removing this param (default to true) if WREM-2 works w/ it
 void IRsend::sendArgo(const unsigned char data[], const uint16_t nbytes,
                       const uint16_t repeat, bool sendFooter /*= false*/) {
-  if (nbytes < ::min({kArgo3AcControlStateLength,
-                         kArgo3ConfigStateLength,
-                         kArgo3iFeelReportStateLength,
-                         kArgo3TimerStateLength,
-                         kArgoStateLength,
-                         kArgoShortStateLength})) {
+  const uint16_t kArgoMinStateLength =
+      ::min(::min(kArgo3AcControlStateLength, kArgo3ConfigStateLength),
+            ::min(::min(kArgo3iFeelReportStateLength, kArgo3TimerStateLength),
+                  ::min(kArgoStateLength, kArgoShortStateLength)));
+  if (nbytes < kArgoMinStateLength) {
     return;  // Not enough bytes to send a proper message.
   }
 

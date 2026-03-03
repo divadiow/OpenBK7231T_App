@@ -1560,22 +1560,6 @@ extern "C" {
 #define DPRINTLN(x)
 #endif
 #endif  // DEBUG
-#if PLATFORM_REALTEK
-static inline int obk_ir_strcasecmp(const char *a, const char *b) {
-  while (*a && *b) {
-    unsigned char ca = static_cast<unsigned char>(*a);
-    unsigned char cb = static_cast<unsigned char>(*b);
-    if (ca >= 'A' && ca <= 'Z') ca = static_cast<unsigned char>(ca - 'A' + 'a');
-    if (cb >= 'A' && cb <= 'Z') cb = static_cast<unsigned char>(cb - 'A' + 'a');
-    if (ca != cb) return static_cast<int>(ca) - static_cast<int>(cb);
-    ++a;
-    ++b;
-  }
-  return static_cast<int>(static_cast<unsigned char>(*a)) -
-         static_cast<int>(static_cast<unsigned char>(*b));
-}
-#define strcasecmp obk_ir_strcasecmp
-#endif
 
 #ifdef UNIT_TEST
 #ifndef F

@@ -24,7 +24,9 @@ extern "C" int isblank(int c);
 #ifdef vsnprintf
 #undef vsnprintf
 #endif
+#ifdef UNIT_TEST
 #include <memory>
+#endif
 #if __cplusplus >= 201103L && defined(_GLIBCXX_USE_C99_MATH_TR1)
     using std::roundf;
 #else
@@ -76,8 +78,22 @@ extern "C" int isblank(int c);
 // functions to handle the strings stored in the flash address space.
 #ifndef STRCASECMP
 #if defined(ESP8266)
-#define STRCASECMP(LHS, RHS) \
-    strcasecmp_P(LHS, reinterpret_cast<const char*>(RHS))
+#define STRCASECMP(LHS, RHS)     strcasecmp_P(LHS, reinterpret_cast<const char*>(RHS))
+#elif PLATFORM_REALTEK
+static inline int obk_ir_strcasecmp_local(const char *lhs, const char *rhs) {
+  while (*lhs && *rhs) {
+    unsigned char ca = static_cast<unsigned char>(*lhs);
+    unsigned char cb = static_cast<unsigned char>(*rhs);
+    if (ca >= 'A' && ca <= 'Z') ca = static_cast<unsigned char>(ca - 'A' + 'a');
+    if (cb >= 'A' && cb <= 'Z') cb = static_cast<unsigned char>(cb - 'A' + 'a');
+    if (ca != cb) return static_cast<int>(ca) - static_cast<int>(cb);
+    ++lhs;
+    ++rhs;
+  }
+  return static_cast<int>(static_cast<unsigned char>(*lhs)) -
+         static_cast<int>(static_cast<unsigned char>(*rhs));
+}
+#define STRCASECMP(LHS, RHS) obk_ir_strcasecmp_local(LHS, RHS)
 #else  // ESP8266
 #define STRCASECMP(LHS, RHS) strcasecmp(LHS, RHS)
 #endif  // ESP8266
