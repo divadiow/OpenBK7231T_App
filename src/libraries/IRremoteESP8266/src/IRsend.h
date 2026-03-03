@@ -251,10 +251,10 @@ class IRsend {
   explicit IRsend(uint16_t IRsendPin, bool inverted = false,
                   bool use_modulation = true);
   void begin();
-  void enableIROut(uint32_t freq, uint8_t duty = kDutyDefault);
-  VIRTUAL void _delayMicroseconds(uint32_t usec);
-  VIRTUAL uint16_t mark(uint16_t usec);
-  VIRTUAL void space(uint32_t usec);
+  virtual void enableIROut(uint32_t freq, uint8_t duty = kDutyDefault);
+  virtual void _delayMicroseconds(uint32_t usec);
+  virtual uint16_t mark(uint16_t usec);
+  virtual void space(uint32_t usec);
   int8_t calibrate(uint16_t hz = 38000U);
   void sendRaw(const uint16_t buf[], const uint16_t len, const uint16_t hz);
   void sendData(uint16_t onemark, uint32_t onespace, uint16_t zeromark,

@@ -148,6 +148,7 @@
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Amcor.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Argo.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Arris.cpp" />
+    <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_BluestarHeavy.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Bosch.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Bose.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Carrier.cpp" />
@@ -162,6 +163,7 @@
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Ecoclim.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Electra.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_EliteScreens.cpp" />
+    <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Eurom.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Epson.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Fujitsu.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_GICable.cpp" />
@@ -218,6 +220,7 @@
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Whynter.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Wowwee.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Xmp.cpp" />
+    <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_York.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\ir_Zepeal.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\itoa.cpp" />
     <ClCompile Include="src\libraries\IRremoteESP8266\src\String.cpp" />
@@ -498,6 +501,8 @@
     <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Delonghi.h" />
     <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Ecoclim.h" />
     <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Electra.h" />
+    <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Eurom.h" />
+    <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_York.h" />
     <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Fujitsu.h" />
     <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Goodweather.h" />
     <ClInclude Include="src\libraries\IRremoteESP8266\src\ir_Gree.h" />
