@@ -13,6 +13,17 @@
 //#include <string>
 #endif
 #include <cmath>
+// Some older/newlib-based embedded toolchains used by OpenBeken do not expose
+// a global ::isblank declaration even though <cctype> expects one.
+extern "C" int isblank(int c);
+// Realtek SDK headers can macro-remap snprintf/vsnprintf to rtl_* names, which
+// breaks libstdc++ headers when they try to reference std::snprintf/std::vsnprintf.
+#ifdef snprintf
+#undef snprintf
+#endif
+#ifdef vsnprintf
+#undef vsnprintf
+#endif
 #include <memory>
 #if __cplusplus >= 201103L && defined(_GLIBCXX_USE_C99_MATH_TR1)
     using std::roundf;
@@ -3991,7 +4002,7 @@ int16_t IRac::strToModel(const char *str, const int16_t def) {
   } else if (!STRCASECMP(str, kArgoWrem3Str)) {
     return argo_ac_remote_model_t::SAC_WREM3;
   } else {
-    int16_t number = atoi(str);
+    int16_t number = static_cast<int16_t>(strtol(str, nullptr, 10));
     if (number > 0)
       return number;
     else

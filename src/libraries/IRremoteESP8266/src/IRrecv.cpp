@@ -176,6 +176,7 @@ using _IRrecv::params;
 using _IRrecv::params_save;
 
 #ifndef UNIT_TEST
+#if defined(ESP8266) || defined(ESP32)
 #if defined(ESP8266)
 /// Interrupt handler for when the timer runs out.
 /// It signals to the library that capturing of IR data has stopped.
@@ -273,6 +274,7 @@ static void USE_IRAM_ATTR gpio_intr() {
 #endif  // _ESP32_ARDUINO_CORE_V2PLUS
 #endif  // ESP32
 }
+#endif  // ESP8266 || ESP32
 #endif  // UNIT_TEST
 
 // Start of IRrecv class -------------------
