@@ -15,6 +15,7 @@
 #include "IRutils.h"
 #include "minmax.h"
 
+
 // Constants
 const uint16_t kLegoPfBitMark = 158;
 const uint16_t kLegoPfHdrSpace = 1026;
@@ -38,7 +39,7 @@ void IRsend::sendLegoPf(const uint64_t data, const uint16_t nbits,
     // Spec says a pause before transmittion.
     if (channelid < 4) space((4 - channelid) * kLegoPfMinCommandLength);
     // Spec says there are a minimum of 5 message repeats.
-    for (uint16_t r = 0; r < ::max(repeat, (uint16_t)5); r++) {
+    for (uint16_t r = 0; r < ::max(repeat, static_cast<uint16_t>(5)); r++) {
       // Lego has a special repeat mode which repeats a message with varying
       // start to start times.
       sendGeneric(kLegoPfBitMark, kLegoPfHdrSpace,

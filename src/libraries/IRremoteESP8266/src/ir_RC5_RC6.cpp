@@ -24,6 +24,7 @@
 #include "IRtimer.h"
 #include "IRutils.h"
 #include "minmax.h"
+
 // Constants
 // RC-5/RC-5X
 const uint16_t kRc5T1 = 889;
@@ -129,7 +130,7 @@ uint16_t IRsend::encodeRC5X(const uint8_t address, const uint8_t command,
   // The 2nd start/field bit (MSB of the return value) is the value of the 7th
   // command bit.
   bool s2 = (command >> 6) & 1;
-  return ((uint16_t)s2 << (kRC5XBits - 1)) |
+  return (static_cast<uint16_t>(s2) << (kRC5XBits - 1)) |
          encodeRC5(address, command, key_released);
 }
 
@@ -174,7 +175,8 @@ uint64_t IRsend::encodeRC6(const uint32_t address, const uint8_t command,
     case kRC6Mode0Bits:
       return ((address & 0xFFF) << 8) | (command & 0xFF);
     case kRC6_36Bits:
-      return ((uint64_t)(address & 0xFFFFFFF) << 8) | (command & 0xFF);
+      return (static_cast<uint64_t>(address & 0xFFFFFFF) << 8) |
+         (command & 0xFF);
     default:
       return 0;
   }
@@ -245,9 +247,9 @@ int16_t IRrecv::getRClevel(decode_results *results, uint16_t *offset,
                            const uint8_t tolerance, const int16_t excess,
                            const uint16_t delta, const uint8_t maxwidth) {
   DPRINT("DEBUG: getRClevel: offset = ");
-  DPRINTLN(uint64ToString(*offset).c_str());
+  DPRINTLN(uint64ToString(*offset));
   DPRINT("DEBUG: getRClevel: rawlen = ");
-  DPRINTLN(uint64ToString(results->rawlen).c_str());
+  DPRINTLN(uint64ToString(results->rawlen));
   if (*offset >= results->rawlen) {
     DPRINTLN("DEBUG: getRClevel: SPACE, past end of rawbuf");
     return kSpace;  // After end of recorded buffer, assume SPACE.
@@ -360,7 +362,7 @@ bool IRrecv::decodeRC5(decode_results *results, uint16_t offset,
   results->repeat = false;
   if (is_rc5x) {
     results->decode_type = RC5X;
-    results->command |= ((uint32_t)is_rc5x) << 6;
+    results->command |= (static_cast<uint32_t>(is_rc5x)) << 6;
   } else {
     results->decode_type = RC5;
     actual_bits--;  // RC5 doesn't count the field bit as data.

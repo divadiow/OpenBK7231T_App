@@ -5,11 +5,10 @@
 
 #include "ir_Tcl.h"
 // #include <algorithm>
-// #include <string.h>
+#include <string.h>
 #ifndef ARDUINO
 //#include <string>
 #endif
-#include "string.h"
 #include "IRremoteESP8266.h"
 #include "IRtext.h"
 #include "IRutils.h"

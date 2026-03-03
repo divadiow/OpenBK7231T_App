@@ -10,8 +10,11 @@
 /// @see https://github.com/crankyoldgit/IRremoteESP8266/issues/1538 (Checksum)
 
 #include "ir_Samsung.h"
-//// #include <algorithm>
+// #include <algorithm>
 #include <string.h>
+#ifndef ARDUINO
+//#include <string>
+#endif
 #include "IRrecv.h"
 #include "IRsend.h"
 #include "IRtext.h"
@@ -80,7 +83,8 @@ using irutils::addTempToString;
 using irutils::addToggleToString;
 using irutils::minsToString;
 
-#if SEND_SAMSUNG
+// This sending protocol is used by some other protocols. e.g. LG.
+#if (SEND_SAMSUNG || SEND_LG)
 /// Send a 32-bit Samsung formatted message.
 /// Status: STABLE / Should be working.
 /// @param[in] data The message to be sent.
@@ -110,7 +114,7 @@ uint32_t IRsend::encodeSAMSUNG(const uint8_t customer, const uint8_t command) {
   return ((revcommand ^ 0xFF) | (revcommand << 8) | (revcustomer << 16) |
           (revcustomer << 24));
 }
-#endif
+#endif  // (SEND_SAMSUNG || SEND_LG)
 
 #if DECODE_SAMSUNG
 /// Decode the supplied Samsung 32-bit message.
@@ -772,7 +776,7 @@ uint16_t IRSamsungAc::getSleepTimer(void) const {
 }
 
 #define TIMER_RESOLUTION(mins) \
-    (((::min((mins), (uint16_t)(24 * 60))) / 10) * 10)
+    (((::min((mins), static_cast<uint16_t>(24 * 60))) / 10) * 10)
 
 /// Set the On Timer value of the A/C.
 /// @param[in] nr_of_mins The number of minutes the timer should be.

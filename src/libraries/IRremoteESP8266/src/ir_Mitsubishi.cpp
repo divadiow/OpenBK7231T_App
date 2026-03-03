@@ -28,8 +28,8 @@
 #include "IRsend.h"
 #include "IRtext.h"
 #include "IRutils.h"
-#include "ir_Tcl.h"
 #include "minmax.h"
+#include "ir_Tcl.h"
 
 // Constants
 // Mitsubishi TV

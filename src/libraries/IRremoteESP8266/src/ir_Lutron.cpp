@@ -24,6 +24,7 @@
 #include "IRutils.h"
 #include "minmax.h"
 
+
 // Constants
 const uint16_t kLutronTick = 2288;
 const uint32_t kLutronGap = 150000;  // Completely made up value.
@@ -73,8 +74,6 @@ bool IRrecv::decodeLutron(decode_results *results, uint16_t offset,
   uint64_t data = 0;
   int16_t bitsSoFar = -1;
 
-  char tmp[24];//DEBUG
-
   if (nbits > sizeof(data) * 8) return false;  // To large to store the data.
   for (; bitsSoFar < nbits && offset < results->rawlen; offset++) {
     uint16_t entry = results->rawbuf[offset];
@@ -87,7 +86,7 @@ bool IRrecv::decodeLutron(decode_results *results, uint16_t offset,
     while (entry != 0 && matchAtLeast(entry, kLutronTick, 0, kLutronDelta)) {
       bitsSoFar++;
       DPRINT("Bit: ");
-      DPRINT(itoa(bitsSoFar,tmp,10));
+      DPRINT(bitsSoFar);
       if (offset % 2) {          // Is Odd?
         data = (data << 1) + 1;  // Append a '1'.
         DPRINTLN(" is a 1.");
@@ -98,27 +97,27 @@ bool IRrecv::decodeLutron(decode_results *results, uint16_t offset,
           break;  // We've likely reached the end of a message.
       }
       // Remove a bit length from the current entry.
-      entry = ::max(entry, (uint16_t)(kLutronTick / kRawTick)) -
+      entry = ::max(entry, static_cast<uint16_t>(kLutronTick / kRawTick)) -
               kLutronTick / kRawTick;
     }
     if (offset % 2 && !match(entry, kLutronDelta, 0, kLutronDelta)) {
       DPRINT("offset = ");
-      DPRINTLN(itoa(offset,tmp,10));
+      DPRINTLN(offset);
       DPRINT("rawlen = ");
-      DPRINTLN(itoa(results->rawlen,tmp,10));
+      DPRINTLN(results->rawlen);
       DPRINT("entry = ");
-      DPRINTLN(itoa(entry,tmp,10));
+      DPRINTLN(entry);
       DPRINTLN("Odd Entry has too much left over. Aborting.");
       return false;  // Too much left over to be a good value. Reject it.
     }
     if (offset % 2 == 0 && offset <= results->rawlen - 1 &&
         !matchAtLeast(entry, kLutronDelta, 0, kLutronDelta)) {
       DPRINT("offset = ");
-      DPRINTLN(itoa(offset,tmp,10));
+      DPRINTLN(offset);
       DPRINT("rawlen = ");
-      DPRINTLN(itoa(results->rawlen,tmp,10));
+      DPRINTLN(results->rawlen);
       DPRINT("entry = ");
-      DPRINTLN(itoa(entry,tmp,10));
+      DPRINTLN(entry);
       DPRINTLN("Entry has too much left over. Aborting.");
       return false;  // Too much left over to be a good value. Reject it.
     }

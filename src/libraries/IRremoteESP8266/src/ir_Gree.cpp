@@ -17,8 +17,8 @@
 #include "IRsend.h"
 #include "IRtext.h"
 #include "IRutils.h"
-#include "ir_Kelvinator.h"
 #include "minmax.h"
+#include "ir_Kelvinator.h"
 
 // Constants
 const uint16_t kGreeHdrMark = 9000;
@@ -376,6 +376,7 @@ void IRGreeAC::setSwingVertical(const bool automatic, const uint8_t position) {
   uint8_t new_position = position;
   if (!automatic) {
     switch (position) {
+      case kGreeSwingLastPos:
       case kGreeSwingUp:
       case kGreeSwingMiddleUp:
       case kGreeSwingMiddle:
@@ -504,6 +505,7 @@ uint8_t IRGreeAC::convertFan(const stdAc::fanspeed_t speed) {
 /// @return The native equivalent of the enum.
 uint8_t IRGreeAC::convertSwingV(const stdAc::swingv_t swingv) {
   switch (swingv) {
+    case stdAc::swingv_t::kOff:     return kGreeSwingLastPos;
     case stdAc::swingv_t::kHighest: return kGreeSwingUp;
     case stdAc::swingv_t::kHigh:    return kGreeSwingMiddleUp;
     case stdAc::swingv_t::kMiddle:  return kGreeSwingMiddle;
@@ -563,7 +565,7 @@ stdAc::swingv_t IRGreeAC::toCommonSwingV(const uint8_t pos) {
     case kGreeSwingMiddle:     return stdAc::swingv_t::kMiddle;
     case kGreeSwingMiddleDown: return stdAc::swingv_t::kLow;
     case kGreeSwingDown:       return stdAc::swingv_t::kLowest;
-    default:                   return stdAc::swingv_t::kAuto;
+    default:                   return stdAc::swingv_t::kOff;
   }
 }
 

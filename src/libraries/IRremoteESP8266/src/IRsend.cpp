@@ -1,15 +1,15 @@
-// Copyright 2009 Ken Shirriff
-// Copyright 2015 Mark Szabo
-// Copyright 2017,2019 David Conran
-
 #include "../../../obk_config.h"
 
 #if ENABLE_DRIVER_IRREMOTEESP
 
+// Copyright 2009 Ken Shirriff
+// Copyright 2015 Mark Szabo
+// Copyright 2017,2019 David Conran
+
 #include "IRsend.h"
+#include "minmax.h"
 #ifndef UNIT_TEST
 #include "String.h"
-#include "minmax.h"
 #else
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
@@ -19,9 +19,7 @@
 #include <cmath>
 #endif
 #include "IRtimer.h"
-
 #include "digitalWriteFast.h"
-
 
 /// Constructor for an IRsend object.
 /// @param[in] IRsendPin Which GPIO pin to use when sending an IR command.
@@ -60,7 +58,7 @@ void IRsend::begin() {
 /// Turn off the IR LED.
 void IRsend::ledOff() {
 #ifndef UNIT_TEST
- // digitalWrite(IRpin, outputOff);
+//  digitalWrite(IRpin, outputOff);
 #endif
 }
 
@@ -82,9 +80,9 @@ uint32_t IRsend::calcUSecPeriod(uint32_t hz, bool use_offset) {
       (1000000UL + hz / 2) / hz;  // The equiv of round(1000000/hz).
   // Apply the offset and ensure we don't result in a <= 0 value.
   if (use_offset)
-    return ::max((uint32_t)1, period + periodOffset);
+    return ::max(static_cast<uint32_t>(1), period + periodOffset);
   else
-    return ::max((uint32_t)1, period);
+    return ::max(static_cast<uint32_t>(1), period);
 }
 
 /// Set the output frequency modulation and duty cycle.
@@ -183,17 +181,20 @@ uint16_t IRsend::mark(uint16_t usec) {
     ledOn();
     // Calculate how long we should pulse on for.
     // e.g. Are we to close to the end of our requested mark time (usec)?
-    _delayMicroseconds(::min((uint32_t)onTimePeriod, usec - elapsed));
+    _delayMicroseconds(::min(static_cast<uint32_t>(onTimePeriod),
+                                usec - elapsed));
     ledOff();
     counter++;
     if (elapsed + onTimePeriod >= usec)
       return counter;  // LED is now off & we've passed our allotted time.
     // Wait for the lesser of the rest of the duty cycle, or the time remaining.
     _delayMicroseconds(
-        ::min(usec - elapsed - onTimePeriod, (uint32_t)offTimePeriod));
+        ::min(usec - elapsed - onTimePeriod,
+                 static_cast<uint32_t>(offTimePeriod)));
     elapsed = usecTimer.elapsed();  // Update & recache the actual elapsed time.
   }
-  #endif //0
+  return counter;
+  #endif
   return 0;
 }
 
@@ -206,7 +207,7 @@ void IRsend::space(uint32_t time) {
   ledOff();
   if (time == 0) return;
   _delayMicroseconds(time);
-  #endif 
+  #endif
 }
 
 /// Calculate & set any offsets to account for execution times during sending.
@@ -227,7 +228,7 @@ int8_t IRsend::calibrate(uint16_t hz) {
   uint32_t timeTaken = usecTimer.elapsed();  // Record the time it took.
   // While it shouldn't be necessary, assume at least 1 pulse, to avoid a
   // divide by 0 situation.
-  pulses = ::max(pulses, (uint16_t)1U);
+  pulses = ::max(pulses, static_cast<uint16_t>(1U));
   uint32_t calcPeriod = calcUSecPeriod(hz);  // e.g. @38kHz it should be 26us.
   // Assuming 38kHz for the example calculations:
   // In a 65535us pulse, we should have 2520.5769 pulses @ 26us periods.
@@ -239,12 +240,10 @@ int8_t IRsend::calibrate(uint16_t hz) {
   //
   // Calculate the actual period from the actual time & the actual pulses
   // generated.
-  double actualPeriod = (double)timeTaken / (double)pulses;
+  double_t actualPeriod = (double_t)timeTaken / (double_t)pulses;
   // Store the difference between the actual time per period vs. calculated.
-  periodOffset = (int8_t)((double)calcPeriod - actualPeriod);
+  periodOffset = (int8_t)((double_t)calcPeriod - actualPeriod);
   return periodOffset;
-  #endif 
-  return 0;
 }
 
 /// Generic method for sending data that is common to most protocols.
@@ -734,6 +733,8 @@ uint16_t IRsend::defaultBits(const decode_type_t protocol) {
       return kDaikin64Bits;
     case ELECTRA_AC:
       return kElectraAcBits;
+    case EUROM:
+      return kEuromBits;
     case GREE:
       return kGreeBits;
     case HAIER_AC:
@@ -811,6 +812,10 @@ uint16_t IRsend::defaultBits(const decode_type_t protocol) {
       return kWhirlpoolAcBits;
     case XMP:
       return kXmpBits;
+    case YORK:
+      return kYorkBits;
+    case BLUESTARHEAVY:
+      return kBluestarHeavyBits;
     // No default amount of bits.
     case FUJITSU_AC:
     case MWM:
@@ -1254,6 +1259,11 @@ bool IRsend::send(const decode_type_t type, const uint8_t *state,
       sendElectraAC(state, nbytes);
       break;
 #endif  // SEND_ELECTRA_AC
+#if SEND_EUROM
+    case EUROM:
+      sendEurom(state, nbytes);
+      break;
+#endif  // SEND_EUROM
 #if SEND_FUJITSU_AC
     case FUJITSU_AC:
       sendFujitsuAC(state, nbytes);
@@ -1442,11 +1452,20 @@ bool IRsend::send(const decode_type_t type, const uint8_t *state,
       sendWhirlpoolAC(state, nbytes);
       break;
 #endif  // SEND_WHIRLPOOL_AC
+#if SEND_YORK
+    case YORK:
+      sendYork(state, nbytes);
+      break;
+#endif  // SEND_YORK
+#if SEND_BLUESTARHEAVY
+    case BLUESTARHEAVY:
+      sendBluestarHeavy(state, nbytes);
+      break;
+#endif  // SEND_BLUESTARHEAVY
     default:
       return false;
   }
   return true;
 }
-
 
 #endif
