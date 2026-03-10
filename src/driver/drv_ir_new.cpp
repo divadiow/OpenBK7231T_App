@@ -177,6 +177,13 @@ SpoofIrReceiver IrReceiver;
 // we simply note the numbers into a rolling buffer, assume the first is a mark()
 // and then every 50us service the rolling buffer, changing the PWM from 0 duty to 50% duty
 // appropriately.
+// Queue size for the interrupt-driven IR send buffer.
+// Each IR frame is encoded as a sequence of mark/space durations; each
+// duration occupies one slot.  A rough upper bound is 2 * bits + overhead:
+//   - NEC 32-bit:        ~68 slots
+//   - Fujitsu AC 128-bit: ~270 slots
+//   - Daikin 312-bit:    ~640 slots
+// 1024 slots gives comfortable headroom for even the longest known protocols.
 #define SEND_QUEUE_ITEMS 1024
 
 class myIRsend : public IRsend {
@@ -251,7 +258,7 @@ public:
 		currentbitval = 0;
 		timecounttotal = 0;
 	}
-	int32_t times[SEND_QUEUE_ITEMS]; // enough for 128 bits
+	int32_t times[SEND_QUEUE_ITEMS]; // mark/space duration queue; see SEND_QUEUE_ITEMS above
 	unsigned short timein;
 	unsigned short timeout;
 	unsigned short timecount;
@@ -379,6 +386,9 @@ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, u
 	}
 	if (!nibbleCount) return false;
 	uint16_t maxNibbles = nbytes * 2;
+	// Allow extra leading zeros beyond the requested bit-length.
+	// This keeps older command strings working (e.g. bits=56 but payload has 16 nibbles with leading 00).
+	while (nibbleCount > maxNibbles && hex[0] == '0') { hex++; nibbleCount--; }
 	if (nibbleCount > maxNibbles) return false;
 	uint16_t nibbleOffset = maxNibbles - nibbleCount;
 	for (uint16_t i = 0; i < nibbleCount; i++) {
@@ -432,31 +442,17 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 				{
 					int repeats=0;
 					char *_data=p;
-					if(bits<=64)
-					{
-						uint64_t data = strtoull(_data,&p,16);
-						if(*p==',')
-							repeats=strtol(p+1,NULL,10);
-						if( pIRsend->send(protocol,data,bits,repeats) )
-						{
-							pIRsend->delay(100);
-							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
-							return CMD_RES_OK;
-						}
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits data 0x%llX repeats %d", args, (int)protocol, (long long int)data, (int)repeats);
+					uint8_t state[64];
+					uint16_t nbytes = 0;
+					const char *payloadEnd = NULL;
+					if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
 						return CMD_RES_BAD_ARGUMENT;
 					}
-					else
+					if(payloadEnd && *payloadEnd==',')
+						repeats=strtol(payloadEnd+1,NULL,10);
+					if (bits > 64 || hasACState(protocol))
 					{
-						uint8_t state[64];
-						uint16_t nbytes = 0;
-						const char *payloadEnd = NULL;
-						if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
-							ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid >64-bit payload for %s", args);
-							return CMD_RES_BAD_ARGUMENT;
-						}
-						if(payloadEnd && *payloadEnd==',')
-							repeats=strtol(payloadEnd+1,NULL,10);
 						bool sent = true;
 						for (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
 							if (!pIRsend->send(protocol,state,nbytes)) {
@@ -474,6 +470,21 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 							return CMD_RES_OK;
 						}
 						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
+						return CMD_RES_BAD_ARGUMENT;
+					}
+					else
+					{
+						uint64_t data = 0;
+						for (uint16_t bi = 0; bi < nbytes; bi++) {
+							data = (data << 8) | state[bi];
+						}
+						if( pIRsend->send(protocol,data,bits,repeats) )
+						{
+							pIRsend->delay(100);
+							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
+							return CMD_RES_OK;
+						}
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
 						return CMD_RES_BAD_ARGUMENT;
 					}
 				}

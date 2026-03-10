@@ -176,33 +176,23 @@ using _IRrecv::params;
 using _IRrecv::params_save;
 
 #ifndef UNIT_TEST
-#if defined(ESP8266) || defined(ESP32)
-#if defined(ESP8266)
+
 /// Interrupt handler for when the timer runs out.
 /// It signals to the library that capturing of IR data has stopped.
-/// @param[in] arg Unused. (ESP8266 Only)
-static void USE_IRAM_ATTR read_timeout(void *arg __attribute__((unused))) {
-  os_intr_lock();
-#endif  // ESP8266
-/// @cond IGNORE
-#if defined(ESP32)
-/// Interrupt handler for when the timer runs out.
-/// It signals to the library that capturing of IR data has stopped.
-/// @note ESP32 version
+/// @note OpenBeken uses an external timer ISR for IR receiving, so keep this minimal.
 static void USE_IRAM_ATTR read_timeout(void) {
-/// @endcond
-  portENTER_CRITICAL(&mux);
-#endif  // ESP32
+  // portENTER_CRITICAL(&mux);
   if (params.rawlen) params.rcvstate = kStopState;
 #if defined(ESP8266)
   os_intr_unlock();
 #endif  // ESP8266
 #if defined(ESP32)
-  portEXIT_CRITICAL(&mux);
+  // portEXIT_CRITICAL(&mux);
 #endif  // ESP32
 }
 
 /// Interrupt handler for changes on the GPIO pin handling incoming IR messages.
+#if 0
 static void USE_IRAM_ATTR gpio_intr() {
   uint32_t now = micros();
   static uint32_t start = 0;
@@ -274,10 +264,9 @@ static void USE_IRAM_ATTR gpio_intr() {
 #endif  // _ESP32_ARDUINO_CORE_V2PLUS
 #endif  // ESP32
 }
-#endif  // ESP8266 || ESP32
-#endif  // UNIT_TEST
+#endif  // 0
 
-// Start of IRrecv class -------------------
+#endif  // UNIT_TEST
 
 /// Class constructor
 /// Args:
