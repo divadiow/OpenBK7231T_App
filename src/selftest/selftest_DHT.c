@@ -24,6 +24,7 @@ void Test_DHT() {
 	// They must remain at the last values sampled while the DHT11 role was active.
 	SELFTEST_ASSERT_CHANNEL(1, 190);
 	SELFTEST_ASSERT_CHANNEL(2, 67);
+}
 
 
 #endif
