@@ -2,6 +2,7 @@
 
 #include "selftest_local.h"
 
+extern void TCL_UART_TryToGetNextPacket(void);
 
 void Test_Driver_TCL_AC() {
 	// reset whole device
@@ -26,13 +27,13 @@ void Test_Driver_TCL_AC() {
 	SELFTEST_ASSERT_HAS_SOME_DATA_IN_UART();
 	SIM_ClearUART();
 
-	// Feed a valid 49-byte get-response packet into the simulated UART receive buffer.
-	// TCL_UART_RunEverySecond calls TCL_UART_TryToGetNextPacket which parses this packet
-	// and updates MQTT state (ACMode/FANMode/temperature).
+	// Feed a valid get-response packet into the driver UART buffer and parse it directly.
+	// Then run the normal every-second path once to publish the parsed state to MQTT.
 	CMD_ExecuteCommand("uartFakeHex BB 01 00 04 2D 04 00 00 00 00 00 00 FF 00 00 00 00 00 FF FF 00 00 00 00 00 00 F0 FF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 6A", 0);
+	TCL_UART_TryToGetNextPacket();
+	SIM_ClearMQTTHistory();
 	TCL_UART_RunEverySecond();
-	// After parsing the incoming packet, the AC is reported as off (power=0x01 in packet -> COOL)
-	// Verify by checking the MQTT state was published
+	// This now proves the incoming packet changed the internal state before publish.
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/ACMode", "cool", false);
 }
 

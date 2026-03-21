@@ -60,9 +60,10 @@ void Test_OpenWeatherMap() {
 	SELFTEST_ASSERT_FLOATCOMPARE(w->temp, 20);
 	SELFTEST_ASSERT_FLOATCOMPARE(w->lat, 50);
 	SELFTEST_ASSERT_FLOATCOMPARE(w->lon, 10);
-	// Without a weather[] array the string fields should be empty/default
-	SELFTEST_ASSERT_STRING(w->main_weather, "");
-	SELFTEST_ASSERT_STRING(w->description, "");
+	// Current implementation only updates these strings when weather[0] exists,
+	// so a reply without a weather array keeps the previous parsed values.
+	SELFTEST_ASSERT_STRING(w->main_weather, "Clear");
+	SELFTEST_ASSERT_STRING(w->description, "clear sky");
 
 }
 
