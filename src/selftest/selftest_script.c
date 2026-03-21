@@ -129,13 +129,15 @@ void Test_Scripting_Loop3() {
 		SELFTEST_ASSERT_INTEGER(CMD_GetCountActiveScriptThreads(), 1);
 		SELFTEST_ASSERT_CHANNEL(0, 1);
 	}
-	// Second 15: the script delay counts down to 0 and exits during this second.
-	// The thread may finish at any point within this second, so we assert
-	// it is still alive at the start but do not assert mid-second.
+	// Second 15: the script delay counts down to 0, but the final if/setChannel
+	// pair does not run until the following scheduler tick.
 	Sim_RunSeconds(1, false);
-	// After second 15 (the 15th delay_s 1 has elapsed) the script must have ended.
+	SELFTEST_ASSERT_INTEGER(CMD_GetCountActiveScriptThreads(), 1);
+	SELFTEST_ASSERT_CHANNEL(0, 1);
+	// After second 16 the final loop body has resumed and the script must have ended.
+	Sim_RunSeconds(1, false);
 	SELFTEST_ASSERT_INTEGER(CMD_GetCountActiveScriptThreads(), 0);
-	// Channel 0 should now be 0 (the script's final command sets it to 0)
+	// Channel 0 should now be 0 because the script's final command has run.
 	SELFTEST_ASSERT_CHANNEL(0, 0);
 	// Run a couple more seconds to confirm nothing changes again
 	for (int i = 0; i < 3; i++) {

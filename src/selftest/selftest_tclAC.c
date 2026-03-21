@@ -33,8 +33,9 @@ void Test_Driver_TCL_AC() {
 	TCL_UART_TryToGetNextPacket();
 	SIM_ClearMQTTHistory();
 	TCL_UART_RunEverySecond();
-	// This now proves the incoming packet changed the internal state before publish.
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/ACMode", "cool", false);
+	// This proves the incoming packet changed the internal state before publish.
+	// The injected reply has power == 0, so the parser should publish "off".
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/ACMode", "off", false);
 }
 
 
