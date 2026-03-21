@@ -51,6 +51,18 @@ void Test_OpenWeatherMap() {
 	SELFTEST_ASSERT_FLOATCOMPARE(w->lat, 50);
 	SELFTEST_ASSERT_FLOATCOMPARE(w->lon, 10);
 
+	// Test with a response that has no "weather" array (edge case)
+	Weather_SetReply(reply_no_weather);
+	w = Weather_GetData();
+	// Numeric fields from "main" and "coord" must still parse
+	SELFTEST_ASSERT_FLOATCOMPARE(w->humidity, 60);
+	SELFTEST_ASSERT_FLOATCOMPARE(w->pressure, 900);
+	SELFTEST_ASSERT_FLOATCOMPARE(w->temp, 20);
+	SELFTEST_ASSERT_FLOATCOMPARE(w->lat, 50);
+	SELFTEST_ASSERT_FLOATCOMPARE(w->lon, 10);
+	// Without a weather[] array the string fields should be empty/default
+	SELFTEST_ASSERT_STRING(w->main_weather, "");
+	SELFTEST_ASSERT_STRING(w->description, "");
 
 }
 
