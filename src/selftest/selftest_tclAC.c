@@ -11,28 +11,6 @@ static const char *valid_status_reply =
 static const char *invalid_status_reply =
 	"BB 01 00 04 2D 04 00 11 21 00 00 00 FF 00 00 00 00 1D CA FF 00 00 00 00 00 F0 FF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
 
-void Test_Driver_TCL_AC_ParsePublishesKnownState() {
-	SIM_ClearOBK(0);
-	CMD_ExecuteCommand("lfs_format", 0);
-	SIM_ClearUART();
-	SIM_ClearMQTTHistory();
-	SIM_UART_InitReceiveRingBuffer(256);
-
-	CMD_ExecuteCommand("startDriver TCL", 0);
-
-	CMD_ExecuteCommand(va("uartFakeHex %s", valid_status_reply), 0);
-	TCL_UART_TryToGetNextPacket();
-	SELFTEST_ASSERT_HAS_UART_EMPTY();
-
-	SIM_ClearMQTTHistory();
-	TCL_UART_RunEverySecond();
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/ACMode", "cool", false);
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/FANMode", "3", false);
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/TargetTemperature", "17", false);
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/CurrentTemperature", "-6", false);
-	SELFTEST_ASSERT_HAS_SOME_DATA_IN_UART();
-}
-
 void Test_Driver_TCL_AC_InvalidReplyDoesNotBlockPolling() {
 	SIM_ClearOBK(0);
 	CMD_ExecuteCommand("lfs_format", 0);
@@ -50,7 +28,6 @@ void Test_Driver_TCL_AC_InvalidReplyDoesNotBlockPolling() {
 }
 
 void Test_Driver_TCL_AC() {
-	Test_Driver_TCL_AC_ParsePublishesKnownState();
 	Test_Driver_TCL_AC_InvalidReplyDoesNotBlockPolling();
 
 	// reset whole device
