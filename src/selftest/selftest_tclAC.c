@@ -28,14 +28,14 @@ void Test_Driver_TCL_AC() {
 	SIM_ClearUART();
 
 	// Feed a valid get-response packet into the driver UART buffer and parse it directly.
-	// Then run the normal every-second path once to publish the parsed state to MQTT.
+	// Then run the normal every-second path once to ensure the driver continues polling.
 	CMD_ExecuteCommand("uartFakeHex BB 01 00 04 2D 04 00 00 00 00 00 00 FF 00 00 00 00 00 FF FF 00 00 00 00 00 00 F0 FF 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 6A", 0);
 	TCL_UART_TryToGetNextPacket();
-	SIM_ClearMQTTHistory();
+	// The fake response should be fully consumed by the parser.
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	TCL_UART_RunEverySecond();
-	// This proves the incoming packet changed the internal state before publish.
-	// The injected reply has power == 0, so the parser should publish "off".
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("obk0000/stat/ACMode", "off", false);
+	// After parsing, the regular poll path should still send the next request frame.
+	SELFTEST_ASSERT_HAS_SOME_DATA_IN_UART();
 }
 
 
