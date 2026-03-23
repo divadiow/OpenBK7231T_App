@@ -26,6 +26,14 @@ CCFLAGS += -DPLATFORM_BK7252N
 CCFLAGS += -DENABLE_DRIVER_MDNS=1 -DLWIP_MDNS_RESPONDER=1 -DLWIP_NUM_NETIF_CLIENT_DATA=1
 endif
 
+ifndef OBK_ENABLE_BERRY_BUILD
+ifneq ($(filter 1 2 3 4,$(OBK_VARIANT)),)
+OBK_ENABLE_BERRY_BUILD := 1
+else
+OBK_ENABLE_BERRY_BUILD := 0
+endif
+endif
+
 SRC_C += ./fixes/blank.c
 APP_C += $(OBK_DIR)/../platforms/BK723x/ps.c
 
@@ -54,8 +62,10 @@ APP_C += $(OBK_DIR)/../libraries/easyflash/src/ef_env.c
 APP_C += $(OBK_DIR)/../libraries/easyflash/src/ef_utils.c
 INCLUDES += -I$(OBK_DIR)/../libraries/easyflash/inc
 
+ifeq ($(OBK_ENABLE_BERRY_BUILD),1)
 BERRY_MODULEPATH = $(OBK_DIR)/berry/modules
 BERRY_SRCPATH = $(OBK_DIR)/../libraries/berry/src
 include $(OBK_DIR)/../libraries/berry.mk
 
 APP_C += $(BERRY_SRC_C)
+endif

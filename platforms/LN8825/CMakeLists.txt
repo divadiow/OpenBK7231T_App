@@ -26,6 +26,17 @@ include_directories(${BERRY_SRCPATH})
 include_directories(app/include)
 include(app/libraries/berry.cmake)
 
+if(DEFINED ENV{OBK_ENABLE_BERRY_BUILD})
+    set(OBK_ENABLE_BERRY_BUILD "$ENV{OBK_ENABLE_BERRY_BUILD}")
+else()
+    set(OBK_ENABLE_BERRY_BUILD "0")
+endif()
+
+set(OBK_BERRY_SRC)
+if(OBK_ENABLE_BERRY_BUILD)
+    list(APPEND OBK_BERRY_SRC ${BERRY_SRC_C})
+endif()
+
 set(PROJ_ALL_SRC
 	${OBK_SRCS}hal/ln882h/hal_adc_ln882h.c
 	${OBK_SRCS}hal/ln882h/hal_flashConfig_ln882h.c
@@ -38,7 +49,7 @@ set(PROJ_ALL_SRC
 	${OBK_SRCS}hal/ln882h/hal_ota_ln882h.c
 	${OBKM_SRC}
 	${OBKM_SRC_CXX}
-	${BERRY_SRC_C}
+	${OBK_BERRY_SRC}
 	${PRO_DIR}/main.c
 	${PRO_DIR}/bsp/serial_hw.c
 	${PRO_DIR}/bsp/drv_adc_measure.c

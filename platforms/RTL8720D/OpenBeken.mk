@@ -1,5 +1,9 @@
 MODULE_IFLAGS +=  -DPLATFORM_RTL8720D -DPLATFORM_REALTEK -Wno-strict-prototypes -Wno-unused-parameter
 
+ifndef OBK_ENABLE_BERRY_BUILD
+OBK_ENABLE_BERRY_BUILD := 0
+endif
+
 MODULE_IFLAGS += -I$(EFDIR)/easyflash/inc
 
 CSRC  += $(PLDIR)/main.c
@@ -34,6 +38,7 @@ CSRC += libraries/easyflash/ef_log.c
 CSRC += libraries/easyflash/ef_utils.c
 
 MODULE_IFLAGS += -I$(EFDIR)/../include
+ifeq ($(OBK_ENABLE_BERRY_BUILD),1)
 BERRY_MODULEPATH = berry/modules
 BERRY_SRCPATH = libraries/berry/src
 MODULE_IFLAGS += -I$(EFDIR)/berry/src
@@ -41,3 +46,4 @@ MODULE_IFLAGS += -I$(EFDIR)/berry/src
 include $(EFDIR)/berry.mk
 
 CSRC += $(BERRY_SRC_C)
+endif
