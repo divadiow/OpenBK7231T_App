@@ -25,4 +25,4 @@ idf_build_set_property(COMPILE_OPTIONS "-Wno-error=incompatible-pointer-types" A
 idf_build_set_property(COMPILE_OPTIONS "-ffunction-sections" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-fdata-sections" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-fmerge-constants" APPEND)
-target_link_libraries(${project_elf} "-Wl,--gc-sections")
+idf_build_set_property(LINK_OPTIONS "-Wl,--gc-sections" APPEND)

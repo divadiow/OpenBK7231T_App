@@ -19,4 +19,4 @@ idf_build_set_property(COMPILE_OPTIONS "-ffile-prefix-map=$ENV{IDF_PATH}/=" APPE
 idf_build_set_property(COMPILE_OPTIONS "-ffunction-sections" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-fdata-sections" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-fmerge-constants" APPEND)
-target_link_libraries(${project_elf} "-Wl,--print-memory-usage -Wl,--gc-sections -u _printf_float")
+target_link_libraries(${project_elf} "-Wl,--print-memory-usage -Wl,--gc-sections -u _printf_float -u _scanf_float")

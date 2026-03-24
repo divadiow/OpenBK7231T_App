@@ -29,7 +29,8 @@ include $(OBK_DIR)/platforms/obk_main.mk
 SRC_C += $(OBKM_SRC)
 SRC_CPP += $(OBKM_SRC_CXX)
 CFLAGS += $(OBK_CFLAGS) -D__FILE__=\"\" -Wno-builtin-macro-redefined
-CPPFLAGS += $(INCLUDES) $(OBK_CFLAGS) -fpermissive
+CXXFLAGS += $(OBK_CFLAGS)
+CPPFLAGS += $(INCLUDES) -fpermissive
 
 SRC_C += $(OBK_DIR)/libraries/easyflash/ports/ef_port.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/easyflash.c

@@ -28,13 +28,13 @@ endif()
 
 target_compile_options(
 	${CURRENT_LIB_NAME} PRIVATE
+	${OBK_SIZE_COMPILE_OPTIONS}
 	-Wno-undef
 	-Wno-unused-parameter
 	-Wno-unused-variable
 	-Wno-implicit-fallthrough
 	-Wno-missing-field-initializers
 	-Wno-error
-	${OBK_SIZE_COMPILE_OPTIONS}
 	"$<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>"
 )
 
