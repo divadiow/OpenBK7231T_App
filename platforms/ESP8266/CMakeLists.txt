@@ -16,4 +16,7 @@ idf_build_set_property(COMPILE_OPTIONS "-Wno-error=incompatible-pointer-types" A
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=pointer-sign" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-Wno-error=main" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-ffile-prefix-map=$ENV{IDF_PATH}/=" APPEND)
-target_link_libraries(${project_elf} "-Wl,--print-memory-usage -u _printf_float -u _scanf_float")
+idf_build_set_property(COMPILE_OPTIONS "-ffunction-sections" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-fdata-sections" APPEND)
+idf_build_set_property(COMPILE_OPTIONS "-fmerge-constants" APPEND)
+target_link_libraries(${project_elf} "-Wl,--print-memory-usage -Wl,--gc-sections -u _printf_float")

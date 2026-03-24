@@ -1,3 +1,13 @@
+set(OBK_SIZE_COMPILE_OPTIONS
+	-Os
+	-ffunction-sections
+	-fdata-sections
+	-fmerge-constants
+)
+set(OBK_SIZE_LINK_OPTIONS
+	-Wl,--gc-sections
+)
+
 set(OBKM_SRC
 	${OBK_SRCS}user_main.c
 

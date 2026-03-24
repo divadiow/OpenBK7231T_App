@@ -1,4 +1,5 @@
 OBK_CFLAGS =
+OBK_CFLAGS += -Os -ffunction-sections -fdata-sections -fmerge-constants
 ifdef OBK_VARIANT
 OBK_CFLAGS += -DOBK_VARIANT=${OBK_VARIANT}
 endif

@@ -14,21 +14,10 @@ include_directories(${BERRY_SRCPATH})
 include_directories(app/platforms/LN882H)
 include(app/libraries/berry.cmake)
 
-if(DEFINED ENV{OBK_ENABLE_BERRY_BUILD})
-	set(OBK_ENABLE_BERRY_BUILD "$ENV{OBK_ENABLE_BERRY_BUILD}")
-else()
-	set(OBK_ENABLE_BERRY_BUILD "0")
-endif()
-
-set(OBK_BERRY_SRC)
-if(OBK_ENABLE_BERRY_BUILD)
-	list(APPEND OBK_BERRY_SRC ${BERRY_SRC_C})
-endif()
-
 set(PROJ_ALL_SRC
 	${OBKM_SRC_CXX}
 	${OBKM_SRC}
-	${OBK_BERRY_SRC}
+	${BERRY_SRC_C}
 	${OBK_SRCS}hal/ln882h/hal_adc_ln882h.c
 	${OBK_SRCS}hal/ln882h/hal_flashConfig_ln882h.c
 	${OBK_SRCS}hal/ln882h/hal_flashVars_ln882h.c
@@ -110,6 +99,8 @@ set(TARGET_ELF_NAME                         ${USER_PROJECT})
 set(pro_executable_target                   ${TARGET_ELF_NAME}.elf)
 add_executable(${pro_executable_target}     ${PROJ_ALL_SRC})
 
+target_compile_options(${pro_executable_target} PRIVATE ${OBK_SIZE_COMPILE_OPTIONS})
+
 target_link_libraries(${pro_executable_target}
     PUBLIC
     ln::dhcpd
@@ -121,6 +112,7 @@ target_link_libraries(${pro_executable_target}
     PRIVATE
     -T${LINKER_SCRIPT}
     ${EXTRA_LINK_FLAGS}
+    ${OBK_SIZE_LINK_OPTIONS}
 )
 
 target_link_directories(${pro_executable_target}

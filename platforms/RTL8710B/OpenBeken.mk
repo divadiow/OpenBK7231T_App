@@ -3,10 +3,6 @@ OBK_DIR = ../../../../..
 CFLAGS += -DPLATFORM_RTL8710B -DPLATFORM_REALTEK
 CXXFLAGS += -DPLATFORM_RTL8710B -DPLATFORM_REALTEK
 
-ifndef OBK_ENABLE_BERRY_BUILD
-OBK_ENABLE_BERRY_BUILD := 0
-endif
-
 INCLUDES += -I$(OBK_DIR)/libraries/easyflash/inc
 
 #gcc wrap
@@ -33,6 +29,7 @@ include $(OBK_DIR)/platforms/obk_main.mk
 SRC_C += $(OBKM_SRC)
 SRC_CPP += $(OBKM_SRC_CXX)
 CFLAGS += $(OBK_CFLAGS)
+CXXFLAGS += $(OBK_CFLAGS)
 
 SRC_C += $(OBK_DIR)/libraries/easyflash/ports/ef_port.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/easyflash.c
@@ -45,11 +42,9 @@ SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_log.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_utils.c
 
 INCLUDES += -I$(OBK_DIR)/include
-ifeq ($(OBK_ENABLE_BERRY_BUILD),1)
 BERRY_MODULEPATH = $(OBK_DIR)/src/berry/modules
 BERRY_SRCPATH = $(OBK_DIR)/libraries/berry/src
 
 include $(OBK_DIR)/libraries/berry.mk
 
 SRC_C += $(BERRY_SRC_C)
-endif

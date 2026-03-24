@@ -3,10 +3,6 @@ OBK_DIR = ../../../../..
 CFLAGS += -DPLATFORM_RTL87X0C -DPLATFORM_REALTEK
 CFLAGS += -DENABLE_DRIVER_MDNS=1 -DLWIP_MDNS_RESPONDER=1
 
-ifndef OBK_ENABLE_BERRY_BUILD
-OBK_ENABLE_BERRY_BUILD := 0
-endif
-
 # Ensure our lwIP option wrapper is picked before SDK lwipopts.h.
 INCLUDES := -I$(OBK_DIR)/platforms/RTL87X0C $(INCLUDES)
 
@@ -33,7 +29,7 @@ include $(OBK_DIR)/platforms/obk_main.mk
 SRC_C += $(OBKM_SRC)
 SRC_CPP += $(OBKM_SRC_CXX)
 CFLAGS += $(OBK_CFLAGS) -D__FILE__=\"\" -Wno-builtin-macro-redefined
-CPPFLAGS += $(INCLUDES) -fpermissive
+CPPFLAGS += $(INCLUDES) $(OBK_CFLAGS) -fpermissive
 
 SRC_C += $(OBK_DIR)/libraries/easyflash/ports/ef_port.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/easyflash.c
@@ -46,11 +42,9 @@ SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_log.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_utils.c
 
 INCLUDES += -I$(OBK_DIR)/include
-ifeq ($(OBK_ENABLE_BERRY_BUILD),1)
 BERRY_MODULEPATH = $(OBK_DIR)/src/berry/modules
 BERRY_SRCPATH = $(OBK_DIR)/libraries/berry/src
 
 include $(OBK_DIR)/libraries/berry.mk
 
 SRC_C += $(BERRY_SRC_C)
-endif

@@ -26,17 +26,6 @@ include_directories(${BERRY_SRCPATH})
 include_directories(app/include)
 include(app/libraries/berry.cmake)
 
-if(DEFINED ENV{OBK_ENABLE_BERRY_BUILD})
-    set(OBK_ENABLE_BERRY_BUILD "$ENV{OBK_ENABLE_BERRY_BUILD}")
-else()
-    set(OBK_ENABLE_BERRY_BUILD "0")
-endif()
-
-set(OBK_BERRY_SRC)
-if(OBK_ENABLE_BERRY_BUILD)
-    list(APPEND OBK_BERRY_SRC ${BERRY_SRC_C})
-endif()
-
 set(PROJ_ALL_SRC
 	${OBK_SRCS}hal/ln882h/hal_adc_ln882h.c
 	${OBK_SRCS}hal/ln882h/hal_flashConfig_ln882h.c
@@ -49,7 +38,7 @@ set(PROJ_ALL_SRC
 	${OBK_SRCS}hal/ln882h/hal_ota_ln882h.c
 	${OBKM_SRC}
 	${OBKM_SRC_CXX}
-	${OBK_BERRY_SRC}
+	${BERRY_SRC_C}
 	${PRO_DIR}/main.c
 	${PRO_DIR}/bsp/serial_hw.c
 	${PRO_DIR}/bsp/drv_adc_measure.c
@@ -65,6 +54,8 @@ link_directories(${CMAKE_SOURCE_DIR}/lib/gcclib)
 set(pro_executable_target  ${TARGET_ELF_NAME})
 
 add_executable(${pro_executable_target}  ${PROJ_ALL_SRC})
+
+target_compile_options(${pro_executable_target} PRIVATE ${OBK_SIZE_COMPILE_OPTIONS})
 
 set(COMP_DHCPD_SUPPORT          ON  PARENT_SCOPE)
 set(COMP_LWIP_SUPPORT           ON  PARENT_SCOPE)
@@ -90,6 +81,7 @@ target_link_libraries(${pro_executable_target}
 	PRIVATE
 	-T${LINKER_SCRIPT}
 	${EXTRA_LINK_FLAGS}
+	${OBK_SIZE_LINK_OPTIONS}
 )
 
 target_include_directories(${pro_executable_target}

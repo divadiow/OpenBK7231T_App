@@ -34,8 +34,8 @@ LDLIBS := -lpthread -lm -lnsl
 CPPFLAGS ?= $(INCLUDES) -MMD -MP -std=gnu99 -DWINDOWS -DLINUX
 
 
-CFLAGS ?= -std=gnu99 -W -Wall -Wextra -g
-LDFLAGS ?=
+CFLAGS ?= -std=gnu99 -W -Wall -Wextra -g -Os -ffunction-sections -fdata-sections -fmerge-constants
+LDFLAGS ?= -Wl,--gc-sections
 
 # Append ASAN flags if ASAN=1
 ifeq ($(ASAN),1)

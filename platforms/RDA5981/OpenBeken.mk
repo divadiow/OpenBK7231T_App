@@ -3,10 +3,6 @@ OBK_DIR = ../../..
 CC_FLAGS += -DPLATFORM_RDA5981=1 -DMBED_HEAP_STATS_ENABLED -DWRAP_PRINTF
 CPPC_FLAGS += -DPLATFORM_RDA5981=1 -DMBED_HEAP_STATS_ENABLED -DWRAP_PRINTF
 
-ifndef OBK_ENABLE_BERRY_BUILD
-OBK_ENABLE_BERRY_BUILD := 0
-endif
-
 INCLUDE_PATHS += -I$(OBK_DIR)/libraries/easyflash/inc
 
 SRC_C  += $(OBK_DIR)/src/hal/rda5981/hal_flashConfig_rda5981.c
@@ -36,18 +32,15 @@ SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_iap.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_log.c
 SRC_C += $(OBK_DIR)/libraries/easyflash/src/ef_utils.c
 
-INCLUDE_PATHS += -I$(OBK_DIR)/include
-ifeq ($(OBK_ENABLE_BERRY_BUILD),1)
-INCLUDE_PATHS += -I$(OBK_DIR)/libraries/berry/src
+INCLUDE_PATHS += -I$(OBK_DIR)/include -I$(OBK_DIR)/libraries/berry/src
 BERRY_MODULEPATH = $(OBK_DIR)/src/berry/modules
 BERRY_SRCPATH = $(OBK_DIR)/libraries/berry/src
 
 include $(OBK_DIR)/libraries/berry.mk
 
 SRC_C += $(BERRY_SRC_C)
-endif
 
 OBJECTS += $(SRC_C:.c=.o)
 OBJECTS += $(SRC_CPP:.cpp=.o)
 
-LD_FLAGS += -Wl,--wrap,vsnprintf -Wl,--wrap,snprintf -Wl,--wrap,sprintf -Wl,--wrap,vsprintf
+LD_FLAGS += -Wl,--gc-sections -Wl,--wrap,vsnprintf -Wl,--wrap,snprintf -Wl,--wrap,sprintf -Wl,--wrap,vsprintf

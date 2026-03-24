@@ -10,17 +10,6 @@ set(BERRY_MODULEPATH "${OBK_SRCS}berry/modules")
 include(../obk_main.cmake)
 include(../../libraries/berry.cmake)
 
-if(DEFINED ENV{OBK_ENABLE_BERRY_BUILD})
-	set(OBK_ENABLE_BERRY_BUILD "$ENV{OBK_ENABLE_BERRY_BUILD}")
-else()
-	set(OBK_ENABLE_BERRY_BUILD "0")
-endif()
-
-set(OBK_BERRY_SRC)
-if(OBK_ENABLE_BERRY_BUILD)
-	list(APPEND OBK_BERRY_SRC ${BERRY_SRC_C})
-endif()
-
 ameba_list_append(public_definitions LWIP_NETIF_HOSTNAME=1 TCP_MSL=1000)
 ameba_global_define(${public_definitions})
 
@@ -45,6 +34,7 @@ target_compile_options(
 	-Wno-implicit-fallthrough
 	-Wno-missing-field-initializers
 	-Wno-error
+	${OBK_SIZE_COMPILE_OPTIONS}
 	"$<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>"
 )
 
@@ -71,6 +61,6 @@ target_sources(
 
 	${OBKM_SRC}
 	${OBKM_SRC_CXX}
-	${OBK_BERRY_SRC}
+	${BERRY_SRC_C}
 	../../libraries/mqtt_patched.c
 )
