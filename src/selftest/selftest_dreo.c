@@ -1,4 +1,3 @@
-
 #ifdef WINDOWS
 
 #include "selftest_local.h"
@@ -10,6 +9,20 @@
 // DP payload inside status message (cmd 0x07 or 0x08):
 //   [dpId] [0x01] [type] [lenH] [lenL] [value...]
 
+static void Dreo_Test_ResetAndStart(void) {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver Dreo", 0);
+	SIM_ClearUART();
+}
+
+static void Dreo_Test_FakeHexAndRun(const char *hex, int frames) {
+	CMD_ExecuteCommand(va("uartFakeHex %s", hex), 0);
+	if (frames > 0) {
+		Sim_RunFrames(frames, false);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test_Dreo_Basic
 //
@@ -20,10 +33,7 @@
 //   4. Power on/off cycle
 // ---------------------------------------------------------------------------
 void Test_Dreo_Basic() {
-	// reset whole device
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	// Map dpIds to channels
 	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);   // Power
@@ -43,8 +53,7 @@ void Test_Dreo_Basic() {
 	// sum = 01+07+00+06 + 01+01+01+00+01+01 = 0x13
 	// checksum = (0x13 - 1) & 0xFF = 0x12
 	// =====================================================================
-	CMD_ExecuteCommand("uartFakeHex 55AA000107000006010101000101 12", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00010700000601010100010112", 100);
 	SELFTEST_ASSERT_CHANNEL(1, 1);
 
 	// =====================================================================
@@ -54,8 +63,7 @@ void Test_Dreo_Basic() {
 	// sum = 00+02+07+00+00+09+07+01+02+00+04+00+00+00+19 = 0x39
 	// checksum = (0x39 - 1) & 0xFF = 0x38
 	// =====================================================================
-	CMD_ExecuteCommand("uartFakeHex 55AA00020700000907010200040000001938", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00020700000907010200040000001938", 100);
 	SELFTEST_ASSERT_CHANNEL(6, 25);
 
 	// =====================================================================
@@ -65,8 +73,7 @@ void Test_Dreo_Basic() {
 	// sum = 00+03+07+00+00+06+02+01+04+00+01+02 = 0x1A
 	// checksum = (0x1A - 1) & 0xFF = 0x19
 	// =====================================================================
-	CMD_ExecuteCommand("uartFakeHex 55AA00030700000602010400010219", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00030700000602010400010219", 100);
 	SELFTEST_ASSERT_CHANNEL(2, 2);
 
 	// =====================================================================
@@ -76,8 +83,7 @@ void Test_Dreo_Basic() {
 	// sum = 00+04+08+00+00+09+04+01+02+00+04+00+00+00+1E = 0x3E
 	// checksum = (0x3E - 1) & 0xFF = 0x3D
 	// =====================================================================
-	CMD_ExecuteCommand("uartFakeHex 55AA00040800000904010200040000001E3D", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00040800000904010200040000001E3D", 100);
 	SELFTEST_ASSERT_CHANNEL(4, 30);
 
 	// =====================================================================
@@ -94,8 +100,7 @@ void Test_Dreo_Basic() {
 	// sum = 05+07+00+06 + 01+01+01+00+01+00 = 0x16
 	// checksum = (0x16 - 1) & 0xFF = 0x15
 	// =====================================================================
-	CMD_ExecuteCommand("uartFakeHex 55AA000507000006010101000100 15", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00050700000601010100010015", 100);
 	SELFTEST_ASSERT_CHANNEL(1, 0);
 
 	SIM_ClearUART();
@@ -107,9 +112,7 @@ void Test_Dreo_Basic() {
 // Verifies receiving a status packet containing multiple DPs in one message.
 // ---------------------------------------------------------------------------
 void Test_Dreo_MultiDP() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
 	CMD_ExecuteCommand("linkDreoOutputToChannel 2 val 2", 0);
@@ -135,8 +138,7 @@ void Test_Dreo_MultiDP() {
 	//   = 0x29 + 0x05 + 0x09 + 0x0C = 0x43
 	// checksum = (0x43 - 1) & 0xFF = 0x42
 	// =====================================================================
-	CMD_ExecuteCommand("uartFakeHex 55AA00100700001201010100010102010400010103010400010342", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00100700001201010100010102010400010103010400010342", 100);
 
 	SELFTEST_ASSERT_CHANNEL(1, 1);
 	SELFTEST_ASSERT_CHANNEL(2, 1);
@@ -146,15 +148,103 @@ void Test_Dreo_MultiDP() {
 }
 
 // ---------------------------------------------------------------------------
+// Test_Dreo_FragmentedPacket
+//
+// Verifies that partial UART arrival does not update channels early, and that
+// a packet split across many chunks is parsed correctly once complete.
+// ---------------------------------------------------------------------------
+void Test_Dreo_FragmentedPacket() {
+	const char *chunks[] = {
+		"55",
+		"AA0001",
+		"07000006",
+		"0101",
+		"010001",
+		"0112"
+	};
+	int i;
+
+	Dreo_Test_ResetAndStart();
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+
+	for (i = 0; i < (int)(sizeof(chunks) / sizeof(chunks[0])) - 1; i++) {
+		Dreo_Test_FakeHexAndRun(chunks[i], 1);
+		SELFTEST_ASSERT_CHANNEL(1, 0);
+		SELFTEST_ASSERT_HAS_UART_EMPTY();
+	}
+
+	Dreo_Test_FakeHexAndRun(chunks[i], 1);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+// ---------------------------------------------------------------------------
+// Test_Dreo_GarbagePrefixResync
+//
+// Verifies that garbage bytes before a valid header are skipped and the next
+// packet still parses correctly.
+// ---------------------------------------------------------------------------
+void Test_Dreo_GarbagePrefixResync() {
+	Dreo_Test_ResetAndStart();
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+
+	Dreo_Test_FakeHexAndRun("DEADBEEF55AA00010700000601010100010112", 1);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+// ---------------------------------------------------------------------------
+// Test_Dreo_ChecksumMismatchThenRecovery
+//
+// Verifies that a bad packet is ignored and that parsing resynchronizes onto a
+// later good packet already sitting in the same UART buffer.
+// ---------------------------------------------------------------------------
+void Test_Dreo_ChecksumMismatchThenRecovery() {
+	Dreo_Test_ResetAndStart();
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);
+
+	// First packet has a bad checksum (0x13 instead of 0x12). The second packet
+	// is valid and should still be parsed after resynchronization.
+	Dreo_Test_FakeHexAndRun(
+		"55AA00010700000601010100010113"
+		"55AA00040800000904010200040000001E3D",
+		1);
+
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(4, 30);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+// ---------------------------------------------------------------------------
+// Test_Dreo_BackToBackPackets
+//
+// Verifies that two full packets arriving back-to-back in the UART buffer are
+// both consumed during the same driver run.
+// ---------------------------------------------------------------------------
+void Test_Dreo_BackToBackPackets() {
+	Dreo_Test_ResetAndStart();
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);
+
+	Dreo_Test_FakeHexAndRun(
+		"55AA00010700000601010100010112"
+		"55AA00040800000904010200040000001E3D",
+		1);
+
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(4, 30);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+// ---------------------------------------------------------------------------
 // Test_Dreo_ChannelToDP
 //
 // Verifies that changing a channel value sends the correct DP packet to MCU.
 // Checks exact packet bytes including checksum.
 // ---------------------------------------------------------------------------
 void Test_Dreo_ChannelToDP() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
 
@@ -193,9 +283,7 @@ void Test_Dreo_ChannelToDP() {
 // Verifies sending a Value-type DP (4-byte big-endian) when channel changes.
 // ---------------------------------------------------------------------------
 void Test_Dreo_ChannelToDP_Value() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);  // Target Temp
 
@@ -224,9 +312,7 @@ void Test_Dreo_ChannelToDP_Value() {
 // and that mapping them later works correctly.
 // ---------------------------------------------------------------------------
 void Test_Dreo_AutoStore() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	// Don't map dpId=19 — inject a packet for it
 	// dpId=19 (0x13), bool, value=1
@@ -234,8 +320,7 @@ void Test_Dreo_AutoStore() {
 	// 55 AA 00 20 07 00 00 06 13 01 01 00 01 01 checksum
 	// sum = 20+07+00+06 + 13+01+01+00+01+01 = 0x44
 	// checksum = (0x44 - 1) & 0xFF = 0x43
-	CMD_ExecuteCommand("uartFakeHex 55AA00200700000613010100010143", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00200700000613010100010143", 100);
 
 	// Channel 1 should still be 0 (dpId=19 is not mapped to any channel)
 	SELFTEST_ASSERT_CHANNEL(1, 0);
@@ -248,8 +333,7 @@ void Test_Dreo_AutoStore() {
 	// 55 AA 00 21 07 00 00 06 13 01 01 00 01 01 checksum
 	// sum = 21+07+00+06 + 13+01+01+00+01+01 = 0x45
 	// checksum = (0x45 - 1) & 0xFF = 0x44
-	CMD_ExecuteCommand("uartFakeHex 55AA00210700000613010100010144", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00210700000613010100010144", 100);
 
 	// Now channel 12 should be 1
 	SELFTEST_ASSERT_CHANNEL(12, 1);
@@ -263,9 +347,7 @@ void Test_Dreo_AutoStore() {
 // Verifies the dreo_sendState command sends correct packets via UART.
 // ---------------------------------------------------------------------------
 void Test_Dreo_SendState() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	SIM_ClearUART();
 
@@ -301,14 +383,12 @@ void Test_Dreo_SendState() {
 // ---------------------------------------------------------------------------
 // Test_Dreo_NoEcho
 //
-// Verifies that when a DP is received from MCU and sets a channel,
-// the driver does NOT echo the value back to the MCU.
+// Verifies that when a DP is received from MCU and sets a channel, the driver
+// does not immediately echo the same value back to the MCU, and that setting
+// the same channel value again still produces no packet.
 // ---------------------------------------------------------------------------
 void Test_Dreo_NoEcho() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
-
+	Dreo_Test_ResetAndStart();
 	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
 
 	SIM_ClearUART();
@@ -317,26 +397,14 @@ void Test_Dreo_NoEcho() {
 	// 55 AA 00 01 07 00 00 06 01 01 01 00 01 01 checksum
 	// sum = 01+07+00+06+01+01+01+00+01+01 = 0x13
 	// checksum = (0x13 - 1) = 0x12
-	CMD_ExecuteCommand("uartFakeHex 55AA00010700000601010100010112", 0);
-	Sim_RunFrames(100, false);
+	Dreo_Test_FakeHexAndRun("55AA00010700000601010100010112", 1);
 
-	// Channel should be set
+	// Channel should be set, but no UART packet should have been sent.
 	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
-	// But driver should NOT have sent anything back (no echo)
-	// The UART send buffer may have init heartbeat data from RunEverySecond,
-	// so let's consume any heartbeat if present and check no DP set packet
-	// Actually, the heartbeat goes out cmd=0x00, and any DP set would be cmd=0x06.
-	// We just need to verify there's no 0x06 set-DP packet.
-	// Simple approach: clear UART before inject, consume only heartbeat after.
-	// But the SIM_ClearUART() was called before inject, and heartbeat may have
-	// been sent during Sim_RunFrames. The key assertion is: no 0x06 DP was sent
-	// for dpId=1 as echo.
-	// Let's just verify that if we now set channel 1 to the same value again,
-	// nothing is sent (echo prevention)
-	SIM_ClearUART();
+	// Re-setting to the same value should still remain silent.
 	CMD_ExecuteCommand("setChannel 1 1", 0);
-	// lastValue is already 1, so OnChannelChanged should skip
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	SIM_ClearUART();
@@ -374,9 +442,7 @@ void Test_Dreo_NoEcho() {
 //   dpId=22 enum  val=2  (temp_unit=C)
 // ---------------------------------------------------------------------------
 void Test_Dreo_RealCapture() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver Dreo", 0);
+	Dreo_Test_ResetAndStart();
 
 	// Map all known dpIds to channels (same as suggested autoexec.bat)
 	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);    // Power
@@ -398,7 +464,7 @@ void Test_Dreo_RealCapture() {
 	// Header: 55 AA 00 06 07 00 00 7E
 	// 18 DP entries, 126 bytes payload
 	// Checksum: 0x49
-	CMD_ExecuteCommand("uartFakeHex "
+	Dreo_Test_FakeHexAndRun(
 		"55AA00060700007E"
 		"010001000100"     // dpId=1  bool  val=0
 		"020004000103"     // dpId=2  enum  val=3
@@ -418,8 +484,8 @@ void Test_Dreo_RealCapture() {
 		"140001000100"     // dpId=20 bool  val=0
 		"150004000100"     // dpId=21 enum  val=0
 		"160004000102"     // dpId=22 enum  val=2
-		"49", 0);
-	Sim_RunFrames(100, false);
+		"49",
+		100);
 
 	// Verify mapped channels
 	SELFTEST_ASSERT_CHANNEL(1, 0);    // dpId=1  power=off
@@ -446,6 +512,10 @@ void Test_Dreo_RealCapture() {
 void Test_Dreo() {
 	Test_Dreo_Basic();
 	Test_Dreo_MultiDP();
+	Test_Dreo_FragmentedPacket();
+	Test_Dreo_GarbagePrefixResync();
+	Test_Dreo_ChecksumMismatchThenRecovery();
+	Test_Dreo_BackToBackPackets();
 	Test_Dreo_ChannelToDP();
 	Test_Dreo_ChannelToDP_Value();
 	Test_Dreo_AutoStore();
