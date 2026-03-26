@@ -1,6 +1,7 @@
 #ifdef WINDOWS
 
 #include "selftest_local.h"
+#include "../driver/drv_uart.h"
 
 void Test_Events() {
 	// reset whole device
@@ -187,6 +188,32 @@ static void Test_UART_OverflowKeepsNewestBytes() {
 	}
 }
 
+static void Test_UART_ReportedSizeAndRetainedOrder() {
+	const int USED_BUFFER_SIZE = 123;
+	const int UART_CAPACITY = USED_BUFFER_SIZE - 1;
+	byte next = 0;
+
+	// Reinitialize explicitly so this test does not inherit the smaller buffer
+	// size used by the earlier wraparound/overflow-focused helpers.
+	UART_InitReceiveRingBuffer(USED_BUFFER_SIZE);
+	for (int i = 0; i < USED_BUFFER_SIZE * 2; i++) {
+		int expectedSize = i + 1;
+
+		UART_AppendByteToReceiveRingBuffer(next);
+		if (expectedSize > UART_CAPACITY) {
+			expectedSize = UART_CAPACITY;
+		}
+		SELFTEST_ASSERT(UART_GetDataSize() == expectedSize);
+		next++;
+	}
+
+	SELFTEST_ASSERT(UART_GetDataSize() == UART_CAPACITY);
+	for (int i = 0; i < UART_CAPACITY; i++) {
+		byte expected = (byte)(next - UART_CAPACITY + i);
+		SELFTEST_ASSERT(UART_GetByte(i) == expected);
+	}
+}
+
 void Test_UART() {
 	int USED_BUFFER_SIZE = 123;
 	UART_InitReceiveRingBuffer(USED_BUFFER_SIZE);
@@ -222,20 +249,7 @@ void Test_UART() {
 	}
 	Test_UART_WrapAndPreserveOrder();
 	Test_UART_OverflowKeepsNewestBytes();
-
-	for (int i = 0; i < USED_BUFFER_SIZE * 2; i++) {
-		UART_AppendByteToReceiveRingBuffer(next);
-
-		int reportedSize = (i+1);
-		// detect overflow
-		if (reportedSize > (USED_BUFFER_SIZE-1)) {
-			reportedSize = (USED_BUFFER_SIZE-1);
-		}
-		int realSize = UART_GetDataSize();
-		// is data size correctly reported?
-		SELFTEST_ASSERT(realSize == reportedSize);
-		next++;
-	}
+	Test_UART_ReportedSizeAndRetainedOrder();
 }
 
 void Test_PinMutex() {
