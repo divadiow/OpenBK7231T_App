@@ -196,8 +196,12 @@ void Test_Dreo_GarbagePrefixResync() {
 // ---------------------------------------------------------------------------
 // Test_Dreo_ChecksumMismatchThenRecovery
 //
-// Verifies that a bad packet is ignored and that parsing resynchronizes onto a
+// Verifies that a bad packet is ignored and that parsing recovers onto a
 // later good packet already sitting in the same UART buffer.
+//
+// Current Dreo parser behavior on checksum failure is to consume only one byte
+// and return. That means recovery requires a later driver pass to skip forward
+// to the next 55 AA header and then parse the following valid packet.
 // ---------------------------------------------------------------------------
 void Test_Dreo_ChecksumMismatchThenRecovery() {
 	Dreo_Test_ResetAndStart();
@@ -205,12 +209,20 @@ void Test_Dreo_ChecksumMismatchThenRecovery() {
 	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);
 
 	// First packet has a bad checksum (0x13 instead of 0x12). The second packet
-	// is valid and should still be parsed after resynchronization.
+	// is valid and should still be parsed after the next resync pass.
 	Dreo_Test_FakeHexAndRun(
 		"55AA00010700000601010100010113"
 		"55AA00040800000904010200040000001E3D",
-		1);
+		0);
 
+	// First pass should notice the checksum mismatch, consume a byte and stop.
+	Sim_RunFrames(1, false);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(4, 0);
+
+	// Second pass should skip forward to the next header and parse the valid
+	// packet that was already waiting in the buffer.
+	Sim_RunFrames(1, false);
 	SELFTEST_ASSERT_CHANNEL(1, 0);
 	SELFTEST_ASSERT_CHANNEL(4, 30);
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
@@ -232,6 +244,41 @@ void Test_Dreo_BackToBackPackets() {
 		"55AA00040800000904010200040000001E3D",
 		1);
 
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(4, 30);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+
+// ---------------------------------------------------------------------------
+// Test_Dreo_FragmentedBackToBackPackets
+//
+// Verifies that two adjacent packets split across awkward UART chunk boundaries
+// do not update channels early and are both parsed once the final bytes arrive.
+// This mirrors the sort of short-frame + longer status-frame burst that was
+// suspected in the ESP32/Dreo thread.
+// ---------------------------------------------------------------------------
+void Test_Dreo_FragmentedBackToBackPackets() {
+	const char *chunks[] = {
+		"55AA000107",
+		"000006010101000101",
+		"1255AA0004080000090401",
+		"0200040000001E3D"
+	};
+	int i;
+
+	Dreo_Test_ResetAndStart();
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);
+
+	for (i = 0; i < (int)(sizeof(chunks) / sizeof(chunks[0])) - 1; i++) {
+		Dreo_Test_FakeHexAndRun(chunks[i], 1);
+		SELFTEST_ASSERT_CHANNEL(1, 0);
+		SELFTEST_ASSERT_CHANNEL(4, 0);
+		SELFTEST_ASSERT_HAS_UART_EMPTY();
+	}
+
+	Dreo_Test_FakeHexAndRun(chunks[i], 1);
 	SELFTEST_ASSERT_CHANNEL(1, 1);
 	SELFTEST_ASSERT_CHANNEL(4, 30);
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
@@ -516,6 +563,7 @@ void Test_Dreo() {
 	Test_Dreo_GarbagePrefixResync();
 	Test_Dreo_ChecksumMismatchThenRecovery();
 	Test_Dreo_BackToBackPackets();
+	Test_Dreo_FragmentedBackToBackPackets();
 	Test_Dreo_ChannelToDP();
 	Test_Dreo_ChannelToDP_Value();
 	Test_Dreo_AutoStore();

@@ -130,6 +130,57 @@ void Test_Events() {
 	SELFTEST_ASSERT_CHANNEL(10, 4);
 }
 
+static void Test_UART_WrapAndPreserveOrder() {
+	UART_InitReceiveRingBuffer(8);
+
+	for (int i = 0; i <= 4; i++) {
+		UART_AppendByteToReceiveRingBuffer(i);
+	}
+	SELFTEST_ASSERT(UART_GetDataSize() == 5);
+
+	UART_ConsumeBytes(3);
+	SELFTEST_ASSERT(UART_GetDataSize() == 2);
+	SELFTEST_ASSERT(UART_GetByte(0) == 3);
+	SELFTEST_ASSERT(UART_GetByte(1) == 4);
+
+	for (int i = 5; i <= 8; i++) {
+		UART_AppendByteToReceiveRingBuffer(i);
+	}
+	SELFTEST_ASSERT(UART_GetDataSize() == 6);
+	for (int i = 0; i < 6; i++) {
+		SELFTEST_ASSERT(UART_GetByte(i) == (3 + i));
+	}
+}
+
+static void Test_UART_OverflowKeepsNewestBytes() {
+	UART_InitReceiveRingBuffer(8);
+
+	for (int i = 0; i <= 9; i++) {
+		UART_AppendByteToReceiveRingBuffer(i);
+	}
+
+	// Ring buffer is size 8, so usable payload is 7 bytes. After writing 0..9,
+	// the implementation should keep the newest bytes: 3..9.
+	SELFTEST_ASSERT(UART_GetDataSize() == 7);
+	for (int i = 0; i < 7; i++) {
+		SELFTEST_ASSERT(UART_GetByte(i) == (3 + i));
+	}
+
+	UART_ConsumeBytes(4);
+	SELFTEST_ASSERT(UART_GetDataSize() == 3);
+	SELFTEST_ASSERT(UART_GetByte(0) == 7);
+	SELFTEST_ASSERT(UART_GetByte(1) == 8);
+	SELFTEST_ASSERT(UART_GetByte(2) == 9);
+
+	UART_AppendByteToReceiveRingBuffer(10);
+	UART_AppendByteToReceiveRingBuffer(11);
+	UART_AppendByteToReceiveRingBuffer(12);
+	SELFTEST_ASSERT(UART_GetDataSize() == 6);
+	for (int i = 0; i < 6; i++) {
+		SELFTEST_ASSERT(UART_GetByte(i) == (7 + i));
+	}
+}
+
 void Test_UART() {
 	int USED_BUFFER_SIZE = 123;
 	UART_InitReceiveRingBuffer(USED_BUFFER_SIZE);
@@ -176,6 +227,9 @@ void Test_UART() {
 		SELFTEST_ASSERT(realSize == reportedSize);
 		next++;
 	}
+
+	Test_UART_WrapAndPreserveOrder();
+	Test_UART_OverflowKeepsNewestBytes();
 }
 
 void Test_PinMutex() {
