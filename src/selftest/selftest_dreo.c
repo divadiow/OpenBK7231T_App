@@ -1,6 +1,7 @@
 #ifdef WINDOWS
 
 #include "selftest_local.h"
+#include "../driver/drv_uart.h"
 
 // Dreo protocol packet format:
 //   [55 AA] [ver=00] [seq] [cmd] [00] [lenH] [lenL] [payload] [checksum]
@@ -196,12 +197,10 @@ void Test_Dreo_GarbagePrefixResync() {
 // ---------------------------------------------------------------------------
 // Test_Dreo_ChecksumMismatchThenRecovery
 //
-// Verifies that a bad packet is ignored and that parsing recovers onto a
-// later good packet already sitting in the same UART buffer.
-//
-// Current Dreo parser behavior on checksum failure is to consume only one byte
-// and return. That means recovery requires a later driver pass to skip forward
-// to the next 55 AA header and then parse the following valid packet.
+// Verifies that a bad packet is ignored and that parsing resynchronizes onto a
+// later good packet already sitting in the same UART buffer. The current Dreo
+// parser drops only one byte on checksum failure and returns, so the recovery
+// is expected to complete on the next driver frame, not the same one.
 // ---------------------------------------------------------------------------
 void Test_Dreo_ChecksumMismatchThenRecovery() {
 	Dreo_Test_ResetAndStart();
@@ -209,22 +208,24 @@ void Test_Dreo_ChecksumMismatchThenRecovery() {
 	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);
 
 	// First packet has a bad checksum (0x13 instead of 0x12). The second packet
-	// is valid and should still be parsed after the next resync pass.
+	// is valid and should be parsed after the next frame resynchronizes.
 	Dreo_Test_FakeHexAndRun(
 		"55AA00010700000601010100010113"
 		"55AA00040800000904010200040000001E3D",
 		0);
 
-	// First pass should notice the checksum mismatch, consume a byte and stop.
-	Sim_RunFrames(1, false);
 	SELFTEST_ASSERT_CHANNEL(1, 0);
 	SELFTEST_ASSERT_CHANNEL(4, 0);
 
-	// Second pass should skip forward to the next header and parse the valid
-	// packet that was already waiting in the buffer.
+	Sim_RunFrames(1, false);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(4, 0);
+	SELFTEST_ASSERT(UART_GetDataSize() > 0);
+
 	Sim_RunFrames(1, false);
 	SELFTEST_ASSERT_CHANNEL(1, 0);
 	SELFTEST_ASSERT_CHANNEL(4, 30);
+	SELFTEST_ASSERT(UART_GetDataSize() == 0);
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 
@@ -246,41 +247,36 @@ void Test_Dreo_BackToBackPackets() {
 
 	SELFTEST_ASSERT_CHANNEL(1, 1);
 	SELFTEST_ASSERT_CHANNEL(4, 30);
+	SELFTEST_ASSERT(UART_GetDataSize() == 0);
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
-
 
 // ---------------------------------------------------------------------------
 // Test_Dreo_FragmentedBackToBackPackets
 //
-// Verifies that two adjacent packets split across awkward UART chunk boundaries
-// do not update channels early and are both parsed once the final bytes arrive.
-// This mirrors the sort of short-frame + longer status-frame burst that was
-// suspected in the ESP32/Dreo thread.
+// Verifies a more realistic UART arrival pattern: the first packet completes,
+// while a second packet is already partially buffered but still incomplete.
+// The second packet should only be applied after its final fragment arrives.
 // ---------------------------------------------------------------------------
 void Test_Dreo_FragmentedBackToBackPackets() {
-	const char *chunks[] = {
-		"55AA000107",
-		"000006010101000101",
-		"1255AA0004080000090401",
-		"0200040000001E3D"
-	};
-	int i;
-
 	Dreo_Test_ResetAndStart();
 	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
 	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);
 
-	for (i = 0; i < (int)(sizeof(chunks) / sizeof(chunks[0])) - 1; i++) {
-		Dreo_Test_FakeHexAndRun(chunks[i], 1);
-		SELFTEST_ASSERT_CHANNEL(1, 0);
-		SELFTEST_ASSERT_CHANNEL(4, 0);
-		SELFTEST_ASSERT_HAS_UART_EMPTY();
-	}
+	Dreo_Test_FakeHexAndRun("55AA0001070000", 1);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(4, 0);
+	SELFTEST_ASSERT(UART_GetDataSize() > 0);
 
-	Dreo_Test_FakeHexAndRun(chunks[i], 1);
+	Dreo_Test_FakeHexAndRun("060101010001011255AA0004", 1);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(4, 0);
+	SELFTEST_ASSERT(UART_GetDataSize() > 0);
+
+	Dreo_Test_FakeHexAndRun("0800000904010200040000001E3D", 1);
 	SELFTEST_ASSERT_CHANNEL(1, 1);
 	SELFTEST_ASSERT_CHANNEL(4, 30);
+	SELFTEST_ASSERT(UART_GetDataSize() == 0);
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 
