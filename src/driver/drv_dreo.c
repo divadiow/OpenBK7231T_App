@@ -125,14 +125,16 @@ static dreoMapping_t *Dreo_AutoStore(int dpId, int dpType) {
 // -----------------------------------------------------------------------
 
 // Send a raw Dreo packet:  55 AA [ver=0x00] [seq] [cmd] [0x00] [lenH] [lenL] [payload] [checksum]
-// Checksum = (sum(bytes from seq to last payload byte) - 1) & 0xFF
+// Checksum = (sum(bytes from ver to last payload byte) - 1) & 0xFF
 static void Dreo_SendRaw(byte cmd, const byte *payload, int payloadLen) {
 	int i;
 	uint32_t sum = 0;
 
 	UART_SendByte(0x55);
 	UART_SendByte(0xAA);
-	UART_SendByte(0x00);           // version
+	byte ver = 0x00;
+	UART_SendByte(ver);           // version
+	sum += ver;
 
 	byte seq = g_dreoSeq++;
 	UART_SendByte(seq);            // sequence
@@ -141,7 +143,9 @@ static void Dreo_SendRaw(byte cmd, const byte *payload, int payloadLen) {
 	UART_SendByte(cmd);            // command
 	sum += cmd;
 
-	UART_SendByte(0x00);           // reserved zero
+	byte reserved = 0x00;
+	UART_SendByte(reserved);       // reserved zero
+	sum += reserved;
 
 	byte lenH = (payloadLen >> 8) & 0xFF;
 	byte lenL = payloadLen & 0xFF;
@@ -209,90 +213,117 @@ static void Dreo_SendEnum(byte dpId, uint32_t value) {
 // Minimum packet: 8 header + 1 checksum = 9 bytes
 #define DREO_MIN_PACKET_SIZE 9
 
-// Try to extract the next complete Dreo packet from the UART ring buffer.
-// Returns total packet length if a valid packet was extracted into 'out', or 0 if not ready.
+// Persistent partial-packet buffer so we can correctly assemble large messages
+// (e.g. 126-byte status packets) that arrive across multiple Dreo_RunFrame calls.
+static byte g_dreoPartial[512];
+static int  g_dreoPartialLen = 0;
+
+// Temporary working buffer for snapshot + partial
+static byte g_dreoWorkBuf[1024];
+
 static int Dreo_TryGetPacket(byte *out, int maxSize) {
-	int cs;
-	int c_garbage = 0;
+	int cs = UART_GetDataSize();
 
-	cs = UART_GetDataSize();
-	if (cs < DREO_MIN_PACKET_SIZE)
+	// Nothing new and no leftover → nothing to do
+	if (cs == 0 && g_dreoPartialLen == 0)
 		return 0;
 
-	// Skip non-header bytes — collect hex for diagnostics (max 32 bytes)
-	char skipHex[128];
-	int skipPos = 0;
-	while (cs > 1) {
-		if (UART_GetByte(0) == 0x55 && UART_GetByte(1) == 0xAA)
-			break;
-		byte b = UART_GetByte(0);
-		if (skipPos < 32) {
-			skipPos += snprintf(skipHex + skipPos, sizeof(skipHex) - skipPos, "%02X ", b);
+	// Build a contiguous view: leftover from last frame + new bytes from ring buffer
+	int total = g_dreoPartialLen + cs;
+	if (total > (int)sizeof(g_dreoWorkBuf)) {
+		// Extremely rare safety net – drop oldest data
+		int drop = total - (int)sizeof(g_dreoWorkBuf) + 64;
+		if (g_dreoPartialLen >= drop) {
+			g_dreoPartialLen -= drop;
+			memmove(g_dreoPartial, g_dreoPartial + drop, g_dreoPartialLen);
+		} else {
+			g_dreoPartialLen = 0;
 		}
-		UART_ConsumeBytes(1);
-		c_garbage++;
-		cs--;
+		total = g_dreoPartialLen + cs;
 	}
-	if (c_garbage > 0) {
-		g_dreoBytesInvalid += c_garbage;
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: skipped %i garbage bytes: %s", c_garbage, skipHex);
+
+	// Copy partial + new data into work buffer
+	if (g_dreoPartialLen > 0)
+		memcpy(g_dreoWorkBuf, g_dreoPartial, g_dreoPartialLen);
+	for (int i = 0; i < cs; i++) {
+		g_dreoWorkBuf[g_dreoPartialLen + i] = UART_GetByte(i);
 	}
-	if (cs < DREO_MIN_PACKET_SIZE)
-		return 0;
 
-	// Verify header
-	if (UART_GetByte(0) != 0x55 || UART_GetByte(1) != 0xAA)
-		return 0;
+	// Scan the combined buffer for the FIRST complete valid packet
+	for (int ofs = 0; ofs <= total - DREO_MIN_PACKET_SIZE; ofs++) {
+		if (g_dreoWorkBuf[ofs] != 0x55 || g_dreoWorkBuf[ofs + 1] != 0xAA)
+			continue;
 
-	// Parse lengths: bytes [6] and [7] are lenH and lenL
-	byte lenH = UART_GetByte(6);
-	byte lenL = UART_GetByte(7);
-	int payloadLen = (lenH << 8) | lenL;
-	int packetLen = 8 + payloadLen + 1;  // header(8) + payload + checksum(1)
+		// Possible header at ofs
+		byte lenH = g_dreoWorkBuf[ofs + 6];
+		byte lenL = g_dreoWorkBuf[ofs + 7];
+		int payloadLen = ((int)lenH << 8) | lenL;
+		int packetLen = 8 + payloadLen + 1;
 
-	if (cs < packetLen)
-		return 0;  // incomplete
+		// Not enough data yet for this packet → continue scanning
+		if (packetLen > total - ofs)
+			continue;
 
-	// Verify checksum – exact ESPHome-style formula (sum from byte 2 to end-1, then -1)
-	uint32_t calcSum = 0;
-	for (int i = 2; i < packetLen - 1; i++) {
-		calcSum += UART_GetByte(i);
-	}
-	byte expectedChecksum = (byte)((calcSum - 1) & 0xFF);
-	byte receivedChecksum = UART_GetByte(packetLen - 1);
-
-	if (receivedChecksum != expectedChecksum) {
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,
-			"Dreo: checksum mismatch, got 0x%02X expected 0x%02X (seq=0x%02X cmd=0x%02X), dropping packet",
-			receivedChecksum, expectedChecksum, UART_GetByte(3), UART_GetByte(4));
-
-		// DEBUG: dump the entire raw packet so we can see exactly what the MCU sent
-		char hex[512];
-		int pos = 0;
-		pos += snprintf(hex, sizeof(hex), "Dreo: full packet bytes (len=%d): ", packetLen);
-		for (int j = 0; j < packetLen && pos < (int)sizeof(hex)-4; j++) {
-			pos += snprintf(hex + pos, sizeof(hex) - pos, "%02X ", UART_GetByte(j));
+		// Checksum verification
+		uint32_t calcSum = 0;
+		for (int i = 2; i < packetLen - 1; i++) {
+			calcSum += g_dreoWorkBuf[ofs + i];
 		}
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "%s", hex);
+		byte expected = (byte)((calcSum - 1) & 0xFF);
+		if (g_dreoWorkBuf[ofs + packetLen - 1] == expected) {
+			// VALID PACKET FOUND
+			if (packetLen > maxSize) {
+				addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: packet too large (%i > %i)", packetLen, maxSize);
+				// still consume correctly so we don't get stuck
+				int consume = (ofs + packetLen > g_dreoPartialLen) ? (ofs + packetLen - g_dreoPartialLen) : 0;
+				UART_ConsumeBytes(consume);
+				g_dreoPartialLen = 0;
+				return 0;
+			}
 
-		g_dreoBytesInvalid++;
-		UART_ConsumeBytes(1);   // only drop 1 byte on failure – this is what fixes the large garbage skips
-		return 0;
+			memcpy(out, g_dreoWorkBuf + ofs, packetLen);
+
+			// === FIXED CONSUMPTION ===
+			int packetEnd = ofs + packetLen;
+			int bytesToConsumeFromUART = (packetEnd > g_dreoPartialLen) ? (packetEnd - g_dreoPartialLen) : 0;
+			UART_ConsumeBytes(bytesToConsumeFromUART);
+
+			g_dreoBytesReceived += packetLen;
+
+			if (ofs > 0) {
+				g_dreoBytesInvalid += ofs;   // keep original behaviour for stats
+			}
+
+			// Any data AFTER this packet stays in the partial buffer
+			int remaining = total - packetEnd;
+			if (remaining > 0) {
+				memcpy(g_dreoPartial, g_dreoWorkBuf + packetEnd, remaining);
+				g_dreoPartialLen = remaining;
+			} else {
+				g_dreoPartialLen = 0;
+			}
+
+			addLogAdv(LOG_DEBUG, LOG_FEATURE_GENERAL,
+				"Dreo: received cmd=0x%02X payload=%i bytes (valid packet)", g_dreoWorkBuf[ofs+4], payloadLen);
+
+			return packetLen;
+		}
+		// Bad checksum on a 55 AA → treat as false header, skip only this byte and continue scanning
 	}
 
-	// Valid packet — copy to output buffer
-	if (packetLen > maxSize) {
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: packet too large (%i > %i)", packetLen, maxSize);
-		UART_ConsumeBytes(packetLen);
-		return 0;
+	// No complete valid packet found – keep everything for next frame
+	if (total > (int)sizeof(g_dreoPartial)) {
+		// Safety: keep only the last 400 bytes
+		int keep = 400;
+		memmove(g_dreoPartial, g_dreoWorkBuf + total - keep, keep);
+		g_dreoPartialLen = keep;
+	} else {
+		memcpy(g_dreoPartial, g_dreoWorkBuf, total);
+		g_dreoPartialLen = total;
 	}
 
-	for (int i = 0; i < packetLen; i++) {
-		out[i] = UART_GetByte(i);
-	}
-	UART_ConsumeBytes(packetLen);
-	g_dreoBytesReceived += packetLen;
-	return packetLen;
+	// Do NOT consume anything from the ring buffer yet
+	return 0;
 }
 
 // -----------------------------------------------------------------------
@@ -479,7 +510,7 @@ void Dreo_Init(void) {
 	g_dreoInitTimer = 0;
 
 	UART_InitUART(115200, 0, false);
-	UART_InitReceiveRingBuffer(512);
+	UART_InitReceiveRingBuffer(1024);   // increased from 512 to prevent buffer overflow / desync on ESP-IDF
 
 	//cmddetail:{"name":"linkDreoOutputToChannel","args":"[dpId][varType][channelID]",
 	//cmddetail:"descr":"Map a Dreo dpId to an OBK channel. VarTypes: bool, val, enum, str, raw. Syntax is same as linkTuyaMCUOutputToChannel.",
