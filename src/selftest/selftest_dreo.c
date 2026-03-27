@@ -755,6 +755,118 @@ void Test_Dreo_ModeTransitionCapture() {
 }
 
 // ---------------------------------------------------------------------------
+// Test_Dreo_BootNoiseRecoveryCapture
+//
+// Real capture from:
+//   LSB_plugging_mains_in_no_command_sent (1).csv
+//
+// The original capture contains UART break/frame errors before traffic settles.
+// The simulator cannot reproduce those line conditions directly, so this test
+// injects the surviving garbage bytes seen before the first valid packet and
+// then replays the captured startup/status sequence.
+// ---------------------------------------------------------------------------
+void Test_Dreo_BootNoiseRecoveryCapture() {
+	char cmd[1024];
+	const char *bootSequence =
+		"0000C0"
+		"55AA00000700007E"
+		"010001000100"
+		"020004000103"
+		"030004000103"
+		"040002000156"
+		"050001000100"
+		"060001000100"
+		"07000200040000004D"
+		"080001000101"
+		"090002000400000000"
+		"110002000400000000"
+		"0D0002000400000000"
+		"0E0002000400000000"
+		"0F0002000400000000"
+		"100001000100"
+		"130001000100"
+		"140001000100"
+		"150004000100"
+		"160004000102"
+		"43"
+		"55AA0000000000010000"
+		"55AA00010300000003"
+		"55AA0002010000173030312B534339354638363133422F45552B302E312E371B"
+		"55AA00030300000005"
+		"55AA00040300000006"
+		"55AA00050300000007"
+		"55AA00060700007E"
+		"010001000100"
+		"020004000103"
+		"030004000103"
+		"040002000156"
+		"050001000100"
+		"060001000100"
+		"07000200040000004D"
+		"080001000101"
+		"090002000400000000"
+		"110002000400000000"
+		"0D0002000400000000"
+		"0E0002000400000000"
+		"0F0002000400000000"
+		"100001000100"
+		"130001000100"
+		"140001000100"
+		"150004000100"
+		"160004000102"
+		"49"
+		"55AA00010700007E"
+		"010001000100"
+		"020004000103"
+		"030004000103"
+		"040002000156"
+		"050001000100"
+		"060001000100"
+		"070002000400000049"
+		"080001000101"
+		"090002000400000000"
+		"110002000400000000"
+		"0D0002000400000000"
+		"0E0002000400000000"
+		"0F0002000400000000"
+		"100001000100"
+		"130001000100"
+		"140001000100"
+		"150004000100"
+		"160004000102"
+		"40";
+
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver Dreo", 0);
+
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);    // Power
+	CMD_ExecuteCommand("linkDreoOutputToChannel 2 val 2", 0);     // Mode
+	CMD_ExecuteCommand("linkDreoOutputToChannel 3 val 3", 0);     // Heat Level
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);     // Target Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 7 val 6", 0);     // Current Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 8 bool 7", 0);    // Screen Display
+	CMD_ExecuteCommand("linkDreoOutputToChannel 19 bool 12", 0);  // Heating Status
+	CMD_ExecuteCommand("linkDreoOutputToChannel 22 val 14", 0);   // Temp Unit
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", bootSequence);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(200, false);
+
+	// Final state from the later boot capture packets.
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(2, 3);
+	SELFTEST_ASSERT_CHANNEL(3, 3);
+	SELFTEST_ASSERT_CHANNEL(4, 86);
+	SELFTEST_ASSERT_CHANNEL(6, 73);
+	SELFTEST_ASSERT_CHANNEL(7, 1);
+	SELFTEST_ASSERT_CHANNEL(12, 0);
+	SELFTEST_ASSERT_CHANNEL(14, 2);
+
+	SIM_ClearUART();
+}
+
+// ---------------------------------------------------------------------------
 // Test_Dreo — Main entry point, calls all sub-tests.
 // ---------------------------------------------------------------------------
 void Test_Dreo() {
@@ -769,6 +881,7 @@ void Test_Dreo() {
 	Test_Dreo_ButtonPanelBackToBackCapture();
 	Test_Dreo_ButtonPanelFragmentedCapture();
 	Test_Dreo_ModeTransitionCapture();
+	Test_Dreo_BootNoiseRecoveryCapture();
 }
 
 #endif
