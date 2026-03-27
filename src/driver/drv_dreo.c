@@ -322,7 +322,12 @@ static int Dreo_TryGetPacket(byte *out, int maxSize) {
 		g_dreoPartialLen = total;
 	}
 
-	// Do NOT consume anything from the ring buffer yet
+	// The current UART snapshot is now persisted in g_dreoPartial, so consume
+	// it from the ring buffer to avoid duplicating the same bytes next frame.
+	if (cs > 0) {
+		UART_ConsumeBytes(cs);
+	}
+
 	return 0;
 }
 
