@@ -223,13 +223,15 @@ static byte g_dreoWorkBuf[1024];
 
 static int Dreo_TryGetPacket(byte *out, int maxSize) {
 	int cs = UART_GetDataSize();
+	int total;
+	int start;
 
 	// Nothing new and no leftover → nothing to do
 	if (cs == 0 && g_dreoPartialLen == 0)
 		return 0;
 
 	// Build a contiguous view: leftover from last frame + new bytes from ring buffer
-	int total = g_dreoPartialLen + cs;
+	total = g_dreoPartialLen + cs;
 	if (total > (int)sizeof(g_dreoWorkBuf)) {
 		// Extremely rare safety net – drop oldest data
 		int drop = total - (int)sizeof(g_dreoWorkBuf) + 64;
@@ -249,53 +251,56 @@ static int Dreo_TryGetPacket(byte *out, int maxSize) {
 		g_dreoWorkBuf[g_dreoPartialLen + i] = UART_GetByte(i);
 	}
 
-	// Scan the combined buffer for the FIRST complete valid packet
-	for (int ofs = 0; ofs <= total - DREO_MIN_PACKET_SIZE; ofs++) {
-		if (g_dreoWorkBuf[ofs] != 0x55 || g_dreoWorkBuf[ofs + 1] != 0xAA)
-			continue;
+	// The current UART snapshot now lives in g_dreoWorkBuf, so we can clear the
+	// ring buffer portion immediately and finish parsing from memory.
+	if (cs > 0) {
+		UART_ConsumeBytes(cs);
+	}
 
-		// Possible header at ofs
-		byte lenH = g_dreoWorkBuf[ofs + 6];
-		byte lenL = g_dreoWorkBuf[ofs + 7];
+	start = 0;
+	while (total - start >= 2) {
+		if (g_dreoWorkBuf[start] != 0x55 || g_dreoWorkBuf[start + 1] != 0xAA) {
+			start++;
+			continue;
+		}
+
+		if (total - start < DREO_MIN_PACKET_SIZE) {
+			break;
+		}
+
+		byte lenH = g_dreoWorkBuf[start + 6];
+		byte lenL = g_dreoWorkBuf[start + 7];
 		int payloadLen = ((int)lenH << 8) | lenL;
 		int packetLen = 8 + payloadLen + 1;
 
-		// Not enough data yet for this packet → continue scanning
-		if (packetLen > total - ofs)
+		// Treat absurd lengths as a false header so we don't get stuck forever.
+		if (packetLen > (int)sizeof(g_dreoWorkBuf) || packetLen > maxSize) {
+			addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: ignoring invalid packet length %i", packetLen);
+			start++;
 			continue;
+		}
+
+		// Valid header, but packet still incomplete. Keep it for next frame.
+		if (packetLen > total - start) {
+			break;
+		}
 
 		// Checksum verification
 		uint32_t calcSum = 0;
 		for (int i = 2; i < packetLen - 1; i++) {
-			calcSum += g_dreoWorkBuf[ofs + i];
+			calcSum += g_dreoWorkBuf[start + i];
 		}
 		byte expected = (byte)((calcSum - 1) & 0xFF);
-		if (g_dreoWorkBuf[ofs + packetLen - 1] == expected) {
-			// VALID PACKET FOUND
-			if (packetLen > maxSize) {
-				addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: packet too large (%i > %i)", packetLen, maxSize);
-				// still consume correctly so we don't get stuck
-				int consume = (ofs + packetLen > g_dreoPartialLen) ? (ofs + packetLen - g_dreoPartialLen) : 0;
-				UART_ConsumeBytes(consume);
-				g_dreoPartialLen = 0;
-				return 0;
-			}
-
-			memcpy(out, g_dreoWorkBuf + ofs, packetLen);
-
-			// === FIXED CONSUMPTION ===
-			int packetEnd = ofs + packetLen;
-			int bytesToConsumeFromUART = (packetEnd > g_dreoPartialLen) ? (packetEnd - g_dreoPartialLen) : 0;
-			UART_ConsumeBytes(bytesToConsumeFromUART);
-
-			g_dreoBytesReceived += packetLen;
-
-			if (ofs > 0) {
-				g_dreoBytesInvalid += ofs;   // keep original behaviour for stats
-			}
-
-			// Any data AFTER this packet stays in the partial buffer
+		if (g_dreoWorkBuf[start + packetLen - 1] == expected) {
+			int packetEnd = start + packetLen;
 			int remaining = total - packetEnd;
+
+			memcpy(out, g_dreoWorkBuf + start, packetLen);
+			g_dreoBytesReceived += packetLen;
+			if (start > 0) {
+				g_dreoBytesInvalid += start;
+			}
+
 			if (remaining > 0) {
 				memcpy(g_dreoPartial, g_dreoWorkBuf + packetEnd, remaining);
 				g_dreoPartialLen = remaining;
@@ -304,28 +309,30 @@ static int Dreo_TryGetPacket(byte *out, int maxSize) {
 			}
 
 			addLogAdv(LOG_DEBUG, LOG_FEATURE_GENERAL,
-				"Dreo: received cmd=0x%02X payload=%i bytes (valid packet)", g_dreoWorkBuf[ofs+4], payloadLen);
+				"Dreo: received cmd=0x%02X payload=%i bytes (valid packet)", g_dreoWorkBuf[start + 4], payloadLen);
 
 			return packetLen;
 		}
-		// Bad checksum on a 55 AA → treat as false header, skip only this byte and continue scanning
+
+		// Bad checksum on a candidate header – skip one byte and keep scanning.
+		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,
+			"Dreo: checksum mismatch, got 0x%02X expected 0x%02X (seq=0x%02X cmd=0x%02X)",
+			g_dreoWorkBuf[start + packetLen - 1], expected, g_dreoWorkBuf[start + 3], g_dreoWorkBuf[start + 4]);
+		g_dreoBytesInvalid++;
+		start++;
 	}
 
-	// No complete valid packet found – keep everything for next frame
-	if (total > (int)sizeof(g_dreoPartial)) {
-		// Safety: keep only the last 400 bytes
-		int keep = 400;
-		memmove(g_dreoPartial, g_dreoWorkBuf + total - keep, keep);
-		g_dreoPartialLen = keep;
+	// No complete valid packet found – keep only the unresolved tail.
+	if (start >= total) {
+		g_dreoPartialLen = 0;
 	} else {
-		memcpy(g_dreoPartial, g_dreoWorkBuf, total);
-		g_dreoPartialLen = total;
-	}
-
-	// The current UART snapshot is now persisted in g_dreoPartial, so consume
-	// it from the ring buffer to avoid duplicating the same bytes next frame.
-	if (cs > 0) {
-		UART_ConsumeBytes(cs);
+		int keep = total - start;
+		if (keep > (int)sizeof(g_dreoPartial)) {
+			start = total - (int)sizeof(g_dreoPartial);
+			keep = total - start;
+		}
+		memmove(g_dreoPartial, g_dreoWorkBuf + start, keep);
+		g_dreoPartialLen = keep;
 	}
 
 	return 0;
