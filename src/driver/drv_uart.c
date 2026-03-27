@@ -7,6 +7,16 @@
 #include "../logging/logging.h"
 #include "../hal/hal_uart.h"
 
+#ifdef PLATFORM_ESPIDF
+#include "freertos/portmacro.h"
+static portMUX_TYPE uartRingMux = portMUX_INITIALIZER_UNLOCKED;
+#define UART_ENTER_CRITICAL() portENTER_CRITICAL(&uartRingMux)
+#define UART_EXIT_CRITICAL() portEXIT_CRITICAL(&uartRingMux)
+#else
+#define UART_ENTER_CRITICAL()
+#define UART_EXIT_CRITICAL()
+#endif
+
 //#define UART_ALWAYSFIRSTBYTES 
 #define UART_DEFAULT_BUFIZE 512
 #ifdef UART_2_UARTS_CONCURRENT
@@ -90,9 +100,13 @@ int UART_GetReceiveRingBufferSize() {
 
 int UART_GetDataSizeEx(int auartindex) {
   uartbuf_t* fuartbuf = UART_GetBufFromPort(auartindex);
-  return (fuartbuf->g_recvBufIn >= fuartbuf->g_recvBufOut
+  int size;
+  UART_ENTER_CRITICAL();
+  size = (fuartbuf->g_recvBufIn >= fuartbuf->g_recvBufOut
                 ? fuartbuf->g_recvBufIn - fuartbuf->g_recvBufOut
                 : fuartbuf->g_recvBufIn + (fuartbuf->g_recvBufSize - fuartbuf->g_recvBufOut)); //XJIKKA 20241122 fixed buffer size calculation on ring bufferroverflow
+  UART_EXIT_CRITICAL();
+  return size;
 }
 
 int UART_GetDataSize() {
@@ -102,7 +116,11 @@ int UART_GetDataSize() {
 
 byte UART_GetByteEx(int auartindex, int idx) {
   uartbuf_t* fuartbuf = UART_GetBufFromPort(auartindex);
-  return fuartbuf->g_recvBuf[(fuartbuf->g_recvBufOut + idx) % fuartbuf->g_recvBufSize];
+  byte b;
+  UART_ENTER_CRITICAL();
+  b = fuartbuf->g_recvBuf[(fuartbuf->g_recvBufOut + idx) % fuartbuf->g_recvBufSize];
+  UART_EXIT_CRITICAL();
+  return b;
 }
 
 byte UART_GetByte(int idx) {
@@ -112,8 +130,10 @@ byte UART_GetByte(int idx) {
 
 void UART_ConsumeBytesEx(int auartindex, int idx) {
   uartbuf_t* fuartbuf = UART_GetBufFromPort(auartindex);
+  UART_ENTER_CRITICAL();
   fuartbuf->g_recvBufOut += idx;
   fuartbuf->g_recvBufOut %= fuartbuf->g_recvBufSize;
+  UART_EXIT_CRITICAL();
 }
 
 void UART_ConsumeBytes(int idx) {
@@ -129,6 +149,7 @@ void UART_AppendByteToReceiveRingBufferEx(int auartindex, int rc) {
       //return;
       UART_InitReceiveRingBufferEx(auartindex,UART_DEFAULT_BUFIZE);
     }
+  UART_ENTER_CRITICAL();
 #ifdef UART_ALWAYSFIRSTBYTES
     //20250119 old style, if g_recvBufSize-1 is reached, received byte was ignored
     if (UART_GetDataSizeEx(auartindex) < (fuartbuf->g_recvBufSize - 1)) {
@@ -148,6 +169,7 @@ void UART_AppendByteToReceiveRingBufferEx(int auartindex, int rc) {
       fuartbuf->g_recvBufOut++;
       fuartbuf->g_recvBufOut %= fuartbuf->g_recvBufSize;
     }
+  UART_EXIT_CRITICAL();
 }
 
 void UART_AppendByteToReceiveRingBuffer(int rc) {
