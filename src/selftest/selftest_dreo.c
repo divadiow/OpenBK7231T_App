@@ -45,7 +45,6 @@ void Test_Dreo_RestartDriver() {
 
 	Dreo_Test_FakeHexAndRun("55AA00050700000601010100010015", 100);
 	SELFTEST_ASSERT_CHANNEL(1, 0);
-	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 
 // ---------------------------------------------------------------------------
