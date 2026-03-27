@@ -25,6 +25,30 @@ static void Dreo_Test_FakeHexAndRun(const char *hex, int frames) {
 }
 
 // ---------------------------------------------------------------------------
+// Test_Dreo_RestartDriver
+//
+// Regression coverage for repeated Dreo/UART initialization. This does not
+// exercise the ESP-IDF HAL directly in simulator, but it verifies that a
+// driver stop/start cycle can reinitialize UART-backed parsing cleanly.
+// ---------------------------------------------------------------------------
+void Test_Dreo_RestartDriver() {
+	Dreo_Test_ResetAndStart();
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+
+	Dreo_Test_FakeHexAndRun("55AA00010700000601010100010112", 100);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+
+	CMD_ExecuteCommand("stopDriver Dreo", 0);
+	CMD_ExecuteCommand("startDriver Dreo", 0);
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);
+	SIM_ClearUART();
+
+	Dreo_Test_FakeHexAndRun("55AA00050700000601010100010015", 100);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+// ---------------------------------------------------------------------------
 // Test_Dreo_Basic
 //
 // Verifies:
@@ -553,6 +577,7 @@ void Test_Dreo_RealCapture() {
 // Test_Dreo — Main entry point, calls all sub-tests.
 // ---------------------------------------------------------------------------
 void Test_Dreo() {
+	Test_Dreo_RestartDriver();
 	Test_Dreo_Basic();
 	Test_Dreo_MultiDP();
 	Test_Dreo_FragmentedPacket();

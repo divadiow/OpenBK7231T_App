@@ -24,6 +24,10 @@
 #endif
 
 uart_port_t uartnum = UART_NUM_0;
+static TaskHandle_t g_uartEventTaskHandle = NULL;
+static uart_port_t g_uartEventTaskPort = UART_NUM_0;
+static int g_uartDriverInstalled = 0;
+static uart_port_t g_uartDriverPort = UART_NUM_0;
 
 #if 0//PLATFORM_ESPIDF
 
@@ -87,10 +91,12 @@ static void uart_event_task(void* pvParameters)
 
 static void uart_event_task(void* pvParameters)
 {
-	uint8_t* data = (uint8_t*)malloc(512);
+	(void)pvParameters;
+	uart_port_t task_uartnum = g_uartEventTaskPort;
+	uint8_t data[512];
 	while (1)
 	{
-		int len = uart_read_bytes(uartnum, data, 512, 20 / portTICK_RATE_MS);
+		int len = uart_read_bytes(task_uartnum, data, sizeof(data), pdMS_TO_TICKS(20));
 		if (len)
 		{
 			for (int i = 0; i < len; i++)
@@ -98,6 +104,22 @@ static void uart_event_task(void* pvParameters)
 				UART_AppendByteToReceiveRingBuffer(data[i]);
 			}
 		}
+	}
+}
+
+static void HAL_UART_StopReaderTask(void)
+{
+	if (g_uartEventTaskHandle != NULL) {
+		vTaskDelete(g_uartEventTaskHandle);
+		g_uartEventTaskHandle = NULL;
+	}
+}
+
+static void HAL_UART_DeleteDriver(uart_port_t port)
+{
+	if (uart_is_driver_installed(port)) {
+		uart_disable_rx_intr(port);
+		uart_driver_delete(port);
 	}
 }
 
@@ -116,25 +138,33 @@ void HAL_SetBaud(uint32_t baud)
 }
 int HAL_UART_Init(int baud, int parity, bool hwflowc, int txOverride, int rxOverride)
 {
+	uart_port_t target_uartnum;
+
 	if (CFG_HasFlag(OBK_FLAG_USE_SECONDARY_UART))
 	{
 		#ifdef CONFIG_IDF_TARGET_ESP32
-		uartnum = UART_NUM_2;
+		target_uartnum = UART_NUM_2;
 		#else
-		uartnum = UART_NUM_1;
+		target_uartnum = UART_NUM_1;
 		#endif
 		esp_log_level_set("*", ESP_LOG_INFO);
 	}
 	else
 	{
-		uartnum = UART_NUM_0;
+		target_uartnum = UART_NUM_0;
 		esp_log_level_set("*", ESP_LOG_NONE);
 	}
-	if (uart_is_driver_installed(uartnum))
-	{
-		uart_disable_rx_intr(uartnum);
-		uart_driver_delete(uartnum);
+
+	HAL_UART_StopReaderTask();
+	if (g_uartDriverInstalled) {
+		HAL_UART_DeleteDriver(g_uartDriverPort);
+		g_uartDriverInstalled = 0;
 	}
+	if (target_uartnum != g_uartDriverPort) {
+		HAL_UART_DeleteDriver(target_uartnum);
+	}
+
+	uartnum = target_uartnum;
 	uart_config_t uart_config =
 	{
 		.baud_rate = baud,
@@ -178,7 +208,10 @@ int HAL_UART_Init(int baud, int parity, bool hwflowc, int txOverride, int rxOver
 #else
 	//uart_isr_register(uartnum, uart_intr_handle, &uartnum);
 #endif
-	xTaskCreate(uart_event_task, "uart_event_task", 1024, NULL, 16, NULL);
+	g_uartDriverInstalled = 1;
+	g_uartDriverPort = uartnum;
+	g_uartEventTaskPort = uartnum;
+	xTaskCreate(uart_event_task, "uart_event_task", 1024, NULL, 16, &g_uartEventTaskHandle);
 	return 1;
 }
 
