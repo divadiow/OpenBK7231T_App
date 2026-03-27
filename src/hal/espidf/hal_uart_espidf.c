@@ -24,8 +24,6 @@
 #endif
 
 uart_port_t uartnum = UART_NUM_0;
-static TaskHandle_t g_uartEventTaskHandle = NULL;
-static uart_port_t g_uartEventTaskPort = UART_NUM_0;
 
 #if 0//PLATFORM_ESPIDF
 
@@ -89,12 +87,10 @@ static void uart_event_task(void* pvParameters)
 
 static void uart_event_task(void* pvParameters)
 {
-	(void)pvParameters;
-	uart_port_t task_uartnum = g_uartEventTaskPort;
-	uint8_t data[512];
+	uint8_t* data = (uint8_t*)malloc(512);
 	while (1)
 	{
-		int len = uart_read_bytes(task_uartnum, data, sizeof(data), pdMS_TO_TICKS(20));
+		int len = uart_read_bytes(uartnum, data, 512, 20 / portTICK_RATE_MS);
 		if (len)
 		{
 			for (int i = 0; i < len; i++)
@@ -102,14 +98,6 @@ static void uart_event_task(void* pvParameters)
 				UART_AppendByteToReceiveRingBuffer(data[i]);
 			}
 		}
-	}
-}
-
-static void HAL_UART_StopReaderTask(void)
-{
-	if (g_uartEventTaskHandle != NULL) {
-		vTaskDelete(g_uartEventTaskHandle);
-		g_uartEventTaskHandle = NULL;
 	}
 }
 
@@ -128,23 +116,20 @@ void HAL_SetBaud(uint32_t baud)
 }
 int HAL_UART_Init(int baud, int parity, bool hwflowc, int txOverride, int rxOverride)
 {
-	uart_port_t target_uartnum;
 	if (CFG_HasFlag(OBK_FLAG_USE_SECONDARY_UART))
 	{
 		#ifdef CONFIG_IDF_TARGET_ESP32
-		target_uartnum = UART_NUM_2;
+		uartnum = UART_NUM_2;
 		#else
-		target_uartnum = UART_NUM_1;
+		uartnum = UART_NUM_1;
 		#endif
 		esp_log_level_set("*", ESP_LOG_INFO);
 	}
 	else
 	{
-		target_uartnum = UART_NUM_0;
+		uartnum = UART_NUM_0;
 		esp_log_level_set("*", ESP_LOG_NONE);
 	}
-	HAL_UART_StopReaderTask();
-	uartnum = target_uartnum;
 	if (uart_is_driver_installed(uartnum))
 	{
 		uart_disable_rx_intr(uartnum);
@@ -193,8 +178,7 @@ int HAL_UART_Init(int baud, int parity, bool hwflowc, int txOverride, int rxOver
 #else
 	//uart_isr_register(uartnum, uart_intr_handle, &uartnum);
 #endif
-	g_uartEventTaskPort = uartnum;
-	xTaskCreate(uart_event_task, "uart_event_task", 1024, NULL, 16, &g_uartEventTaskHandle);
+	xTaskCreate(uart_event_task, "uart_event_task", 1024, NULL, 16, NULL);
 	return 1;
 }
 

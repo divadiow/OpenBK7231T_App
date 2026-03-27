@@ -208,91 +208,141 @@ static void Dreo_SendEnum(byte dpId, uint32_t value) {
 // Dreo packet format: 55 AA [ver] [seq] [cmd] [00] [lenH] [lenL] [payload...] [checksum]
 // Minimum packet: 8 header + 1 checksum = 9 bytes
 #define DREO_MIN_PACKET_SIZE 9
+#define DREO_RX_BUFFER_SIZE 512
 
-// Try to extract the next complete Dreo packet from the UART ring buffer.
-// Returns total packet length if a valid packet was extracted into 'out', or 0 if not ready.
-static int Dreo_TryGetPacket(byte *out, int maxSize) {
-	int cs;
-	int c_garbage = 0;
+static byte g_dreoRxBuffer[DREO_RX_BUFFER_SIZE];
+static int g_dreoRxBufferLen = 0;
+static void Dreo_ProcessPacket(const byte *data, int len);
 
-	cs = UART_GetDataSize();
-	if (cs < DREO_MIN_PACKET_SIZE)
-		return 0;
-
-	// Skip non-header bytes — collect hex for diagnostics (max 32 bytes)
+static void Dreo_LogSkippedBytes(const byte *data, int count) {
+	if (count <= 0) {
+		return;
+	}
 	char skipHex[128];
 	int skipPos = 0;
-	while (cs > 1) {
-		if (UART_GetByte(0) == 0x55 && UART_GetByte(1) == 0xAA)
-			break;
-		byte b = UART_GetByte(0);
+	for (int i = 0; i < count; i++) {
 		if (skipPos < 32) {
-			skipPos += snprintf(skipHex + skipPos, sizeof(skipHex) - skipPos, "%02X ", b);
+			skipPos += snprintf(skipHex + skipPos, sizeof(skipHex) - skipPos, "%02X ", data[i]);
 		}
-		UART_ConsumeBytes(1);
-		c_garbage++;
-		cs--;
 	}
-	if (c_garbage > 0) {
-		g_dreoBytesInvalid += c_garbage;
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: skipped %i garbage bytes: %s", c_garbage, skipHex);
+	addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: skipped %i garbage bytes: %s", count, skipHex);
+}
+
+static void Dreo_DiscardBufferedBytes(int count) {
+	if (count <= 0) {
+		return;
 	}
-	if (cs < DREO_MIN_PACKET_SIZE)
-		return 0;
-
-	// Verify header
-	if (UART_GetByte(0) != 0x55 || UART_GetByte(1) != 0xAA)
-		return 0;
-
-	// Parse lengths: bytes [6] and [7] are lenH and lenL
-	byte lenH = UART_GetByte(6);
-	byte lenL = UART_GetByte(7);
-	int payloadLen = (lenH << 8) | lenL;
-	int packetLen = 8 + payloadLen + 1;  // header(8) + payload + checksum(1)
-
-	if (cs < packetLen)
-		return 0;  // incomplete
-
-	// Verify checksum – exact ESPHome-style formula (sum from byte 2 to end-1, then -1)
-	uint32_t calcSum = 0;
-	for (int i = 2; i < packetLen - 1; i++) {
-		calcSum += UART_GetByte(i);
+	if (count >= g_dreoRxBufferLen) {
+		g_dreoRxBufferLen = 0;
+		return;
 	}
-	byte expectedChecksum = (byte)((calcSum - 1) & 0xFF);
-	byte receivedChecksum = UART_GetByte(packetLen - 1);
+	memmove(g_dreoRxBuffer, g_dreoRxBuffer + count, g_dreoRxBufferLen - count);
+	g_dreoRxBufferLen -= count;
+}
 
-	if (receivedChecksum != expectedChecksum) {
+static void Dreo_BufferIncomingUARTBytes(void) {
+	int ringSize = UART_GetDataSize();
+	int startOfs = 0;
+	int appendLen;
+
+	if (ringSize <= 0) {
+		return;
+	}
+
+	if (ringSize > DREO_RX_BUFFER_SIZE) {
+		startOfs = ringSize - DREO_RX_BUFFER_SIZE;
+		g_dreoBytesInvalid += startOfs;
 		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,
-			"Dreo: checksum mismatch, got 0x%02X expected 0x%02X (seq=0x%02X cmd=0x%02X), dropping packet",
-			receivedChecksum, expectedChecksum, UART_GetByte(3), UART_GetByte(4));
+			"Dreo: dropping %i oldest UART bytes before snapshot", startOfs);
+	}
 
-		// DEBUG: dump the entire raw packet so we can see exactly what the MCU sent
-		char hex[512];
-		int pos = 0;
-		pos += snprintf(hex, sizeof(hex), "Dreo: full packet bytes (len=%d): ", packetLen);
-		for (int j = 0; j < packetLen && pos < (int)sizeof(hex)-4; j++) {
-			pos += snprintf(hex + pos, sizeof(hex) - pos, "%02X ", UART_GetByte(j));
+	appendLen = ringSize - startOfs;
+	if (g_dreoRxBufferLen + appendLen > DREO_RX_BUFFER_SIZE) {
+		int overflow = g_dreoRxBufferLen + appendLen - DREO_RX_BUFFER_SIZE;
+		g_dreoBytesInvalid += overflow;
+		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,
+			"Dreo: dropping %i buffered bytes to make room for new UART data", overflow);
+		Dreo_DiscardBufferedBytes(overflow);
+	}
+
+	for (int i = 0; i < appendLen; i++) {
+		g_dreoRxBuffer[g_dreoRxBufferLen + i] = UART_GetByte(startOfs + i);
+	}
+	g_dreoRxBufferLen += appendLen;
+	UART_ConsumeBytes(ringSize);
+}
+
+static void Dreo_ParseBufferedPackets(void) {
+	while (g_dreoRxBufferLen >= DREO_MIN_PACKET_SIZE) {
+		if (g_dreoRxBuffer[0] != 0x55 || g_dreoRxBuffer[1] != 0xAA) {
+			int start = -1;
+			for (int i = 0; i < g_dreoRxBufferLen - 1; i++) {
+				if (g_dreoRxBuffer[i] == 0x55 && g_dreoRxBuffer[i + 1] == 0xAA) {
+					start = i;
+					break;
+				}
+			}
+			if (start < 0) {
+				Dreo_LogSkippedBytes(g_dreoRxBuffer, g_dreoRxBufferLen);
+				g_dreoBytesInvalid += g_dreoRxBufferLen;
+				g_dreoRxBufferLen = 0;
+				return;
+			}
+			Dreo_LogSkippedBytes(g_dreoRxBuffer, start);
+			g_dreoBytesInvalid += start;
+			Dreo_DiscardBufferedBytes(start);
+			if (g_dreoRxBufferLen < DREO_MIN_PACKET_SIZE) {
+				return;
+			}
 		}
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "%s", hex);
 
-		g_dreoBytesInvalid++;
-		UART_ConsumeBytes(1);   // only drop 1 byte on failure – this is what fixes the large garbage skips
-		return 0;
-	}
+		// Parse packet length from the buffered copy so we do not race the UART writer.
+		byte lenH = g_dreoRxBuffer[6];
+		byte lenL = g_dreoRxBuffer[7];
+		int payloadLen = (lenH << 8) | lenL;
+		int packetLen = 8 + payloadLen + 1;
 
-	// Valid packet — copy to output buffer
-	if (packetLen > maxSize) {
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: packet too large (%i > %i)", packetLen, maxSize);
-		UART_ConsumeBytes(packetLen);
-		return 0;
-	}
+		if (packetLen < DREO_MIN_PACKET_SIZE || packetLen > DREO_RX_BUFFER_SIZE) {
+			addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,
+				"Dreo: invalid packet length %i while searching for sync", packetLen);
+			g_dreoBytesInvalid++;
+			Dreo_DiscardBufferedBytes(1);
+			continue;
+		}
 
-	for (int i = 0; i < packetLen; i++) {
-		out[i] = UART_GetByte(i);
+		if (g_dreoRxBufferLen < packetLen) {
+			return;
+		}
+
+		uint32_t calcSum = 0;
+		for (int i = 2; i < packetLen - 1; i++) {
+			calcSum += g_dreoRxBuffer[i];
+		}
+		byte expectedChecksum = (byte)((calcSum - 1) & 0xFF);
+		byte receivedChecksum = g_dreoRxBuffer[packetLen - 1];
+
+		if (receivedChecksum != expectedChecksum) {
+			addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,
+				"Dreo: checksum mismatch, got 0x%02X expected 0x%02X (seq=0x%02X cmd=0x%02X), dropping one byte",
+				receivedChecksum, expectedChecksum, g_dreoRxBuffer[3], g_dreoRxBuffer[4]);
+
+			char hex[512];
+			int pos = 0;
+			pos += snprintf(hex, sizeof(hex), "Dreo: full packet bytes (len=%d): ", packetLen);
+			for (int j = 0; j < packetLen && pos < (int)sizeof(hex) - 4; j++) {
+				pos += snprintf(hex + pos, sizeof(hex) - pos, "%02X ", g_dreoRxBuffer[j]);
+			}
+			addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "%s", hex);
+
+			g_dreoBytesInvalid++;
+			Dreo_DiscardBufferedBytes(1);
+			continue;
+		}
+
+		g_dreoBytesReceived += packetLen;
+		Dreo_ProcessPacket(g_dreoRxBuffer, packetLen);
+		Dreo_DiscardBufferedBytes(packetLen);
 	}
-	UART_ConsumeBytes(packetLen);
-	g_dreoBytesReceived += packetLen;
-	return packetLen;
 }
 
 // -----------------------------------------------------------------------
@@ -477,6 +527,7 @@ void Dreo_Init(void) {
 	g_dreoHeartbeatTimer = 0;
 	g_dreoInitState = 0;
 	g_dreoInitTimer = 0;
+	g_dreoRxBufferLen = 0;
 
 	UART_InitUART(115200, 0, false);
 	UART_InitReceiveRingBuffer(512);
@@ -504,6 +555,7 @@ void Dreo_Shutdown(void) {
 		cur = nxt;
 	}
 	g_dreoMappings = NULL;
+	g_dreoRxBufferLen = 0;
 	addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Dreo: driver shut down");
 }
 
@@ -547,17 +599,8 @@ void Dreo_RunEverySecond(void) {
 }
 
 void Dreo_RunFrame(void) {
-	byte pkt[192];
-	int len;
-
-	while (1) {
-		len = Dreo_TryGetPacket(pkt, sizeof(pkt));
-		if (len > 0) {
-			Dreo_ProcessPacket(pkt, len);
-		} else {
-			break;
-		}
-	}
+	Dreo_BufferIncomingUARTBytes();
+	Dreo_ParseBufferedPackets();
 }
 
 void Dreo_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState) {
