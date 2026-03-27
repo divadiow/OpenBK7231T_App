@@ -441,6 +441,136 @@ void Test_Dreo_RealCapture() {
 }
 
 // ---------------------------------------------------------------------------
+// Test_Dreo_ButtonPanelBackToBackCapture
+//
+// Real capture from:
+//   LSB_buttonpanel_onoff_modes_temp_countdowntimer (1).csv
+//
+// Verifies that a short 0x0E front-panel event packet immediately followed by
+// a full 0x07 state packet is parsed correctly when both arrive in one burst.
+// This mirrors the back-to-back traffic Markus has been seeing on ESP.
+// ---------------------------------------------------------------------------
+void Test_Dreo_ButtonPanelBackToBackCapture() {
+	char cmd[512];
+	const char *eventPacket = "55AA003F0E00000301010657";
+	const char *statePacket =
+		"55AA00400700007E"
+		"010001000101"
+		"020004000102"
+		"030004000101"
+		"040002000144"
+		"050001000100"
+		"060001000100"
+		"070002000400000044"
+		"080001000101"
+		"090002000400000000"
+		"110002000400000000"
+		"0D0002000400000000"
+		"0E0002000400000000"
+		"0F0002000400000000"
+		"100001000100"
+		"130001000101"
+		"140001000100"
+		"150004000100"
+		"160004000102"
+		"67";
+
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver Dreo", 0);
+
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);    // Power
+	CMD_ExecuteCommand("linkDreoOutputToChannel 2 val 2", 0);     // Mode
+	CMD_ExecuteCommand("linkDreoOutputToChannel 3 val 3", 0);     // Heat Level
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);     // Target Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 7 val 6", 0);     // Current Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 19 bool 12", 0);  // Heating Status
+	CMD_ExecuteCommand("linkDreoOutputToChannel 22 val 14", 0);   // Temp Unit
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s%s", eventPacket, statePacket);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(2, 2);
+	SELFTEST_ASSERT_CHANNEL(3, 1);
+	SELFTEST_ASSERT_CHANNEL(4, 68);
+	SELFTEST_ASSERT_CHANNEL(6, 68);
+	SELFTEST_ASSERT_CHANNEL(12, 1);
+	SELFTEST_ASSERT_CHANNEL(14, 2);
+
+	SIM_ClearUART();
+}
+
+// ---------------------------------------------------------------------------
+// Test_Dreo_ButtonPanelFragmentedCapture
+//
+// Same real capture as above, but split mid-packet across frames. This checks
+// that the driver keeps a partial 0x07 packet buffered after already consuming
+// the preceding 0x0E event packet.
+// ---------------------------------------------------------------------------
+void Test_Dreo_ButtonPanelFragmentedCapture() {
+	char cmd[512];
+	const char *eventPacket = "55AA003F0E00000301010657";
+	const char *statePacketPart1 =
+		"55AA00400700007E"
+		"010001000101"
+		"020004000102"
+		"030004000101";
+	const char *statePacketPart2 =
+		"040002000144"
+		"050001000100"
+		"060001000100"
+		"070002000400000044"
+		"080001000101"
+		"090002000400000000"
+		"110002000400000000"
+		"0D0002000400000000"
+		"0E0002000400000000"
+		"0F0002000400000000"
+		"100001000100"
+		"130001000101"
+		"140001000100"
+		"150004000100"
+		"160004000102"
+		"67";
+
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver Dreo", 0);
+
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);    // Power
+	CMD_ExecuteCommand("linkDreoOutputToChannel 2 val 2", 0);     // Mode
+	CMD_ExecuteCommand("linkDreoOutputToChannel 3 val 3", 0);     // Heat Level
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);     // Target Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 7 val 6", 0);     // Current Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 19 bool 12", 0);  // Heating Status
+	CMD_ExecuteCommand("linkDreoOutputToChannel 22 val 14", 0);   // Temp Unit
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s%s", eventPacket, statePacketPart1);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(1, false);
+
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(2, 0);
+	SELFTEST_ASSERT_CHANNEL(12, 0);
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", statePacketPart2);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(2, 2);
+	SELFTEST_ASSERT_CHANNEL(3, 1);
+	SELFTEST_ASSERT_CHANNEL(4, 68);
+	SELFTEST_ASSERT_CHANNEL(6, 68);
+	SELFTEST_ASSERT_CHANNEL(12, 1);
+	SELFTEST_ASSERT_CHANNEL(14, 2);
+
+	SIM_ClearUART();
+}
+
+// ---------------------------------------------------------------------------
 // Test_Dreo — Main entry point, calls all sub-tests.
 // ---------------------------------------------------------------------------
 void Test_Dreo() {
@@ -452,6 +582,8 @@ void Test_Dreo() {
 	Test_Dreo_SendState();
 	Test_Dreo_NoEcho();
 	Test_Dreo_RealCapture();
+	Test_Dreo_ButtonPanelBackToBackCapture();
+	Test_Dreo_ButtonPanelFragmentedCapture();
 }
 
 #endif
