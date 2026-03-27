@@ -571,6 +571,190 @@ void Test_Dreo_ButtonPanelFragmentedCapture() {
 }
 
 // ---------------------------------------------------------------------------
+// Test_Dreo_ModeTransitionCapture
+//
+// Real capture from:
+//   LSB_On_H3_H2_H1_H2_H3_Fanonly_Off (1).csv
+//
+// Verifies that a short 0x06 packet immediately followed by a full 0x07 state
+// packet is parsed correctly, and that a sequence of captured mode changes
+// updates the mapped channels as expected.
+// ---------------------------------------------------------------------------
+void Test_Dreo_ModeTransitionCapture() {
+	char cmd[512];
+	const char *burstH3 =
+		"55AA00B406000000B9"
+		"55AA00660700007E"
+		"010101000101"
+		"020104000101"
+		"030104000103"
+		"040102000156"
+		"050101000100"
+		"060101000100"
+		"070102000400000049"
+		"080101000101"
+		"090102000400000000"
+		"110102000400000000"
+		"0D0102000400000000"
+		"0E0102000400000000"
+		"0F0102000400000000"
+		"100101000100"
+		"130101000101"
+		"140101000100"
+		"150104000100"
+		"160104000102"
+		"B7";
+	const char *burstH2 =
+		"55AA00B506000000BA"
+		"55AA00670700007E"
+		"010101000101"
+		"020104000101"
+		"030104000102"
+		"040102000156"
+		"050101000100"
+		"060101000100"
+		"070102000400000049"
+		"080101000101"
+		"090102000400000000"
+		"110102000400000000"
+		"0D0102000400000000"
+		"0E0102000400000000"
+		"0F0102000400000000"
+		"100101000100"
+		"130101000101"
+		"140101000100"
+		"150104000100"
+		"160104000102"
+		"B7";
+	const char *burstH1 =
+		"55AA00B606000000BB"
+		"55AA00680700007E"
+		"010101000101"
+		"020104000101"
+		"030104000101"
+		"040102000156"
+		"050101000100"
+		"060101000100"
+		"070102000400000049"
+		"080101000101"
+		"090102000400000000"
+		"110102000400000000"
+		"0D0102000400000000"
+		"0E0102000400000000"
+		"0F0102000400000000"
+		"100101000100"
+		"130101000101"
+		"140101000100"
+		"150104000100"
+		"160104000102"
+		"B7";
+	const char *burstFanOnly =
+		"55AA00BA06000000BF"
+		"55AA006B0700007E"
+		"010101000101"
+		"020104000103"
+		"030104000103"
+		"040102000156"
+		"050101000100"
+		"060101000100"
+		"070102000400000049"
+		"080101000101"
+		"090102000400000000"
+		"110102000400000000"
+		"0D0102000400000000"
+		"0E0102000400000000"
+		"0F0102000400000000"
+		"100101000100"
+		"130101000100"
+		"140101000100"
+		"150104000100"
+		"160104000102"
+		"BD";
+	const char *burstOff =
+		"55AA00BC06000000C1"
+		"55AA006C0700007E"
+		"010101000100"
+		"020104000103"
+		"030104000103"
+		"040102000156"
+		"050101000100"
+		"060101000100"
+		"070102000400000049"
+		"080101000101"
+		"090102000400000000"
+		"110102000400000000"
+		"0D0102000400000000"
+		"0E010200040000001E"
+		"0F0102000400000000"
+		"100101000100"
+		"130101000100"
+		"140101000100"
+		"150104000100"
+		"160104000102"
+		"DB";
+
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver Dreo", 0);
+
+	CMD_ExecuteCommand("linkDreoOutputToChannel 1 bool 1", 0);    // Power
+	CMD_ExecuteCommand("linkDreoOutputToChannel 2 val 2", 0);     // Mode
+	CMD_ExecuteCommand("linkDreoOutputToChannel 3 val 3", 0);     // Heat Level
+	CMD_ExecuteCommand("linkDreoOutputToChannel 4 val 4", 0);     // Target Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 7 val 6", 0);     // Current Temp
+	CMD_ExecuteCommand("linkDreoOutputToChannel 19 bool 12", 0);  // Heating Status
+	CMD_ExecuteCommand("linkDreoOutputToChannel 22 val 14", 0);   // Temp Unit
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", burstH3);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(2, 1);
+	SELFTEST_ASSERT_CHANNEL(3, 3);
+	SELFTEST_ASSERT_CHANNEL(4, 86);
+	SELFTEST_ASSERT_CHANNEL(6, 73);
+	SELFTEST_ASSERT_CHANNEL(12, 1);
+	SELFTEST_ASSERT_CHANNEL(14, 2);
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", burstH2);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(2, 1);
+	SELFTEST_ASSERT_CHANNEL(3, 2);
+	SELFTEST_ASSERT_CHANNEL(12, 1);
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", burstH1);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(2, 1);
+	SELFTEST_ASSERT_CHANNEL(3, 1);
+	SELFTEST_ASSERT_CHANNEL(12, 1);
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", burstFanOnly);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_CHANNEL(2, 3);
+	SELFTEST_ASSERT_CHANNEL(3, 3);
+	SELFTEST_ASSERT_CHANNEL(12, 0);
+
+	snprintf(cmd, sizeof(cmd), "uartFakeHex %s", burstOff);
+	CMD_ExecuteCommand(cmd, 0);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_CHANNEL(2, 3);
+	SELFTEST_ASSERT_CHANNEL(3, 3);
+	SELFTEST_ASSERT_CHANNEL(4, 86);
+	SELFTEST_ASSERT_CHANNEL(6, 73);
+	SELFTEST_ASSERT_CHANNEL(12, 0);
+	SELFTEST_ASSERT_CHANNEL(14, 2);
+
+	SIM_ClearUART();
+}
+
+// ---------------------------------------------------------------------------
 // Test_Dreo — Main entry point, calls all sub-tests.
 // ---------------------------------------------------------------------------
 void Test_Dreo() {
@@ -584,6 +768,7 @@ void Test_Dreo() {
 	Test_Dreo_RealCapture();
 	Test_Dreo_ButtonPanelBackToBackCapture();
 	Test_Dreo_ButtonPanelFragmentedCapture();
+	Test_Dreo_ModeTransitionCapture();
 }
 
 #endif
