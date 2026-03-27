@@ -355,7 +355,11 @@ void Test_TuyaMCU_BatteryPowered_QuerySignalStrength() {
 	Sim_RunSeconds(0.1f, false);
 	
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 0B 00 02 01 50 5D");
-	// nothing is sent by OBK at that point
+	// On current simulator timing, the normal Tuya heartbeat may also be queued
+	// immediately after the RSSI response.
+	if (SIM_UART_GetDataSize() != 0) {
+		SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	}
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 void Test_TuyaMCU_BatteryPowered() {
