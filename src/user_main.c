@@ -727,6 +727,22 @@ float g_wifi_temperature = 0;
 #endif
 
 static byte g_secondsSpentInLowMemoryWarning = 0;
+#if PLATFORM_BL602
+static int g_runDeferredAutoRunScripts = 0;
+#endif
+
+static void Main_RunAutoRunScripts() {
+#if ENABLE_OBK_SCRIPTING
+	SVM_RunStartupCommandAsScript();
+#else
+	CMD_ExecuteCommand(CFG_GetShortStartupCommand(), COMMAND_FLAG_SOURCE_SCRIPT);
+#endif
+	CMD_ExecuteCommand("startScript autoexec.bat", COMMAND_FLAG_SOURCE_SCRIPT);
+#if ENABLE_OBK_BERRY
+	CMD_ExecuteCommand("berry import autoexec", COMMAND_FLAG_SOURCE_SCRIPT);
+#endif
+}
+
 void Main_OnEverySecond()
 {
 #if PLATFORM_W600 || PLATFORM_W800
@@ -741,6 +757,16 @@ void Main_OnEverySecond()
 
 #ifdef WINDOWS
 	g_bHasWiFiConnected = 1;
+#endif
+
+#if PLATFORM_BL602
+	if (g_runDeferredAutoRunScripts) {
+		HAL_Run_WDT();
+		g_runDeferredAutoRunScripts = 0;
+		ADDLOGF_INFO("Running deferred startup command phase on BL602");
+		Main_RunAutoRunScripts();
+		HAL_Run_WDT();
+	}
 #endif
 
 	// display temperature - thanks to giedriuslt
@@ -1304,14 +1330,11 @@ void Main_Init_AfterDelay_Unsafe(bool bStartAutoRunScripts) {
 
 		// NOTE: this will try to read autoexec.bat,
 		// so ALL commands expected in autoexec.bat should have been registered by now...
-#if ENABLE_OBK_SCRIPTING
-		SVM_RunStartupCommandAsScript();
+#if PLATFORM_BL602
+		g_runDeferredAutoRunScripts = 1;
+		ADDLOGF_INFO("Deferring startup command phase until BL602 main loop is alive");
 #else
-		CMD_ExecuteCommand(CFG_GetShortStartupCommand(), COMMAND_FLAG_SOURCE_SCRIPT);
-#endif
-		CMD_ExecuteCommand("startScript autoexec.bat", COMMAND_FLAG_SOURCE_SCRIPT);
-#if ENABLE_OBK_BERRY
-		CMD_ExecuteCommand("berry import autoexec", COMMAND_FLAG_SOURCE_SCRIPT);
+		Main_RunAutoRunScripts();
 #endif
 	}
 }
