@@ -110,6 +110,12 @@ int DRV_MDNS_Active = 0;
 #define LOG_FEATURE LOG_FEATURE_MAIN
 
 void Main_ForceUnsafeInit();
+void Main_RunDeferredStartupPhase();
+
+static void Main_ExecuteStartupCommandPhase();
+#if PLATFORM_BL602
+static int g_bl602DeferredStartupPhasePending = 0;
+#endif
 
 #if PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800
 #define DEF_USE_WFI 1
@@ -727,22 +733,6 @@ float g_wifi_temperature = 0;
 #endif
 
 static byte g_secondsSpentInLowMemoryWarning = 0;
-#if PLATFORM_BL602
-static int g_runDeferredAutoRunScripts = 0;
-#endif
-
-static void Main_RunAutoRunScripts() {
-#if ENABLE_OBK_SCRIPTING
-	SVM_RunStartupCommandAsScript();
-#else
-	CMD_ExecuteCommand(CFG_GetShortStartupCommand(), COMMAND_FLAG_SOURCE_SCRIPT);
-#endif
-	CMD_ExecuteCommand("startScript autoexec.bat", COMMAND_FLAG_SOURCE_SCRIPT);
-#if ENABLE_OBK_BERRY
-	CMD_ExecuteCommand("berry import autoexec", COMMAND_FLAG_SOURCE_SCRIPT);
-#endif
-}
-
 void Main_OnEverySecond()
 {
 #if PLATFORM_W600 || PLATFORM_W800
@@ -757,16 +747,6 @@ void Main_OnEverySecond()
 
 #ifdef WINDOWS
 	g_bHasWiFiConnected = 1;
-#endif
-
-#if PLATFORM_BL602
-	if (g_runDeferredAutoRunScripts) {
-		HAL_Run_WDT();
-		g_runDeferredAutoRunScripts = 0;
-		ADDLOGF_INFO("Running deferred startup command phase on BL602");
-		Main_RunAutoRunScripts();
-		HAL_Run_WDT();
-	}
 #endif
 
 	// display temperature - thanks to giedriuslt
@@ -1307,6 +1287,33 @@ void isidle() {
 
 bool g_unsafeInitDone = false;
 
+static void Main_ExecuteStartupCommandPhase() {
+	// NOTE: this will try to read autoexec.bat,
+	// so ALL commands expected in autoexec.bat should have been registered by now...
+#if ENABLE_OBK_SCRIPTING
+	SVM_RunStartupCommandAsScript();
+#else
+	CMD_ExecuteCommand(CFG_GetShortStartupCommand(), COMMAND_FLAG_SOURCE_SCRIPT);
+#endif
+	CMD_ExecuteCommand("startScript autoexec.bat", COMMAND_FLAG_SOURCE_SCRIPT);
+#if ENABLE_OBK_BERRY
+	CMD_ExecuteCommand("berry import autoexec", COMMAND_FLAG_SOURCE_SCRIPT);
+#endif
+}
+
+void Main_RunDeferredStartupPhase() {
+#if PLATFORM_BL602
+	if (!g_bl602DeferredStartupPhasePending) {
+		return;
+	}
+	g_bl602DeferredStartupPhasePending = 0;
+	ADDLOGF_INFO("Running deferred startup command phase on BL602");
+	HAL_Run_WDT();
+	Main_ExecuteStartupCommandPhase();
+	HAL_Run_WDT();
+#endif
+}
+
 void Main_Init_AfterDelay_Unsafe(bool bStartAutoRunScripts) {
 
 	// initialise MQTT - just sets up variables.
@@ -1328,13 +1335,11 @@ void Main_Init_AfterDelay_Unsafe(bool bStartAutoRunScripts) {
 #endif
 		}
 
-		// NOTE: this will try to read autoexec.bat,
-		// so ALL commands expected in autoexec.bat should have been registered by now...
 #if PLATFORM_BL602
-		g_runDeferredAutoRunScripts = 1;
-		ADDLOGF_INFO("Deferring startup command phase until BL602 main loop is alive");
+		g_bl602DeferredStartupPhasePending = 1;
+		ADDLOGF_INFO("Deferring startup command phase until BL602 post-init callback");
 #else
-		Main_RunAutoRunScripts();
+		Main_ExecuteStartupCommandPhase();
 #endif
 	}
 }
