@@ -53,7 +53,6 @@
 // It sets the multipler for converting 0-255 range RGB to 0-100 channel value
 
 int parsePowerArgument(const char *s);
-int shouldSendRGB();
 
 
 // Those are base colors, normalized, without brightness applied
@@ -189,89 +188,6 @@ int isCWMode() {
 	return 0;
 }
 
-typedef struct led_hw_topology_s {
-	int firstChannelIndex;
-	int pwmCount;
-	int whitePwmCount;
-	bool hasAddressableRGB;
-	bool hasCoolPwm;
-	bool hasWarmPwm;
-	int singleWhiteComponentIndex;
-} led_hw_topology_t;
-
-static void LED_GetHWTopology(led_hw_topology_t *topology) {
-	memset(topology, 0, sizeof(*topology));
-	topology->firstChannelIndex = LED_GetFirstChannelIndex();
-	PIN_get_Relay_PWM_Count(0, &topology->pwmCount, 0);
-#if	ENABLE_DRIVER_SM16703P
-	topology->hasAddressableRGB = (pixel_count > 0);
-#else
-	topology->hasAddressableRGB = false;
-#endif
-	topology->hasCoolPwm = CHANNEL_HasChannelPinWithRoleOrRole(3, IOR_PWM, IOR_PWM_n) != 0;
-	topology->hasWarmPwm = CHANNEL_HasChannelPinWithRoleOrRole(4, IOR_PWM, IOR_PWM_n) != 0;
-	topology->whitePwmCount = (topology->hasCoolPwm ? 1 : 0) + (topology->hasWarmPwm ? 1 : 0);
-	if (topology->hasCoolPwm && !topology->hasWarmPwm) {
-		topology->singleWhiteComponentIndex = 3;
-	}
-	else {
-		// Warm is both the default explicit single-white mapping and
-		// the legacy fallback for pixel RGB + one generic PWM output.
-		topology->singleWhiteComponentIndex = 4;
-	}
-}
-
-static bool LED_ShouldUsePixelHybridWhiteOutput(const led_hw_topology_t *topology) {
-	return topology->hasAddressableRGB && topology->pwmCount > 0;
-}
-
-static void LED_WritePixelHybridWhiteOutput(const led_hw_topology_t *topology, float coolVal, float warmVal, int flags) {
-	if (topology->pwmCount <= 0) {
-		return;
-	}
-	if (topology->whitePwmCount >= 2) {
-		CHANNEL_Set_FloatPWM(topology->firstChannelIndex + 0, coolVal, flags);
-		CHANNEL_Set_FloatPWM(topology->firstChannelIndex + 1, warmVal, flags);
-		return;
-	}
-	CHANNEL_Set_FloatPWM(topology->firstChannelIndex + 0,
-		(topology->singleWhiteComponentIndex == 3) ? coolVal : warmVal, flags);
-}
-
-bool LED_HasAddressableRGBPixels() {
-	led_hw_topology_t topology;
-	LED_GetHWTopology(&topology);
-	return topology.hasAddressableRGB;
-}
-
-bool LED_HasRGBControls() {
-	return shouldSendRGB() != 0;
-}
-
-bool LED_HasTemperatureControls() {
-	led_hw_topology_t topology;
-	int pwmCount;
-	int remapCount;
-
-	LED_GetHWTopology(&topology);
-	PIN_get_Relay_PWM_Count(0, &pwmCount, 0);
-	remapCount = CFG_CountLEDRemapChannels();
-
-	if (LED_ShouldUsePixelHybridWhiteOutput(&topology)) {
-		return true;
-	}
-	if (pwmCount == 2 || pwmCount >= 5) {
-		return true;
-	}
-	if (CFG_HasFlag(OBK_FLAG_LED_EMULATE_COOL_WITH_RGB)) {
-		return true;
-	}
-	if (LED_IsLedDriverChipRunning() && remapCount >= 5) {
-		return true;
-	}
-	return false;
-}
-
 int shouldSendRGB() {
 	int pwmCount;
 
@@ -297,6 +213,77 @@ int shouldSendRGB() {
 	return 1;
 }
 
+static int LED_HasPWMRoleOnChannel(int channel) {
+	if (channel < 0 || channel >= CHANNEL_MAX) {
+		return 0;
+	}
+	return CHANNEL_HasChannelPinWithRoleOrRole(channel, IOR_PWM, IOR_PWM_n) ? 1 : 0;
+}
+
+static int LED_IsPixelDriverRunning() {
+	return pixel_count > 0;
+}
+
+static int LED_GetHybridPixelPWMWhiteBaseIndex() {
+	// Hybrid strips are treated explicitly as RGB pixels plus optional global white PWMs
+	// on logical channels 3 (cool) and 4 (warm). This avoids broad auto-detection that
+	// incorrectly turns plain RGB strips into RGB+CCT devices.
+	if (!LED_IsPixelDriverRunning()) {
+		return -1;
+	}
+	if (LED_HasPWMRoleOnChannel(3) || LED_HasPWMRoleOnChannel(4)) {
+		return 0;
+	}
+	return -1;
+}
+
+static int LED_HasHybridPixelCoolWhite() {
+	return LED_GetHybridPixelPWMWhiteBaseIndex() >= 0 && LED_HasPWMRoleOnChannel(3);
+}
+
+static int LED_HasHybridPixelWarmWhite() {
+	return LED_GetHybridPixelPWMWhiteBaseIndex() >= 0 && LED_HasPWMRoleOnChannel(4);
+}
+
+static int LED_IsHybridPixelPWMWhite() {
+	return LED_HasHybridPixelCoolWhite() || LED_HasHybridPixelWarmWhite();
+}
+
+void LED_GetCapabilities(LEDCapabilities* caps) {
+	int pwmCount;
+
+	if (caps == NULL) {
+		return;
+	}
+	memset(caps, 0, sizeof(*caps));
+
+	caps->hasBrightness = LED_IsLEDRunning() ? 1 : 0;
+	caps->hasPixelRGB = LED_IsPixelDriverRunning() ? 1 : 0;
+	caps->hasHybridCoolWhite = LED_HasHybridPixelCoolWhite();
+	caps->hasHybridWarmWhite = LED_HasHybridPixelWarmWhite();
+	caps->hasHybridPixelPWMWhite = (caps->hasHybridCoolWhite || caps->hasHybridWarmWhite) ? 1 : 0;
+
+	if (caps->hasHybridPixelPWMWhite) {
+		caps->hasRGB = 1;
+		caps->hasTemperature = 1;
+		return;
+	}
+
+	if (caps->hasPixelRGB) {
+		caps->hasRGB = 1;
+		return;
+	}
+
+	caps->hasRGB = shouldSendRGB() ? 1 : 0;
+
+	PIN_get_Relay_PWM_Count(0, &pwmCount, 0);
+	if (LED_IsLedDriverChipRunning()) {
+		pwmCount = CFG_CountLEDRemapChannels();
+	}
+	if (pwmCount == 2 || pwmCount >= 4) {
+		caps->hasTemperature = 1;
+	}
+}
 
 
 float led_rawLerpCurrent[5] = { 0 };
@@ -399,7 +386,6 @@ void LED_RunQuickColorLerp(int deltaMS) {
 	int firstChannelIndex;
 	float deltaSeconds;
 	byte finalRGBCW[5];
-	led_hw_topology_t topology;
 	int maxPossibleIndexToSet;
 	int emulatedCool = -1;
 	int target_value_brightness = 0;
@@ -416,8 +402,7 @@ void LED_RunQuickColorLerp(int deltaMS) {
 
 	deltaSeconds = deltaMS * 0.001f;
 
-	LED_GetHWTopology(&topology);
-	firstChannelIndex = topology.firstChannelIndex;
+	firstChannelIndex = LED_GetFirstChannelIndex();
 
 	if (CFG_HasFlag(OBK_FLAG_LED_EMULATE_COOL_WITH_RGB)) {
 		emulatedCool = firstChannelIndex + 3;
@@ -447,23 +432,35 @@ void LED_RunQuickColorLerp(int deltaMS) {
 	led_current_value_cold_or_warm = Mathf_MoveTowards(led_current_value_cold_or_warm, target_value_cold_or_warm, deltaSeconds * led_lerpSpeedUnitsPerSecond );
 
 	// OBK_FLAG_LED_ALTERNATE_CW_MODE means we have a driver that takes one PWM for brightness and second for temperature
-	if (LED_ShouldUsePixelHybridWhiteOutput(&topology) && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
-		LED_WritePixelHybridWhiteOutput(&topology,
-			led_rawLerpCurrent[3] * g_cfg_colorScaleToChannel,
-			led_rawLerpCurrent[4] * g_cfg_colorScaleToChannel,
-			CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
-	}
-	else if(isCWMode() && CFG_HasFlag(OBK_FLAG_LED_ALTERNATE_CW_MODE)) {
+	int hybridPixelWhite = LED_IsHybridPixelPWMWhite();
+	int pureCWMode = isCWMode() && !hybridPixelWhite;
+	if(pureCWMode && CFG_HasFlag(OBK_FLAG_LED_ALTERNATE_CW_MODE)) {
 		CHANNEL_Set_FloatPWM(firstChannelIndex, led_current_value_cold_or_warm, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 		CHANNEL_Set_FloatPWM(firstChannelIndex+1, led_current_value_brightness, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 	} else {
-		if(isCWMode()) { 
+		if(pureCWMode) { 
 			// In CW mode, user sets just two PWMs. So we have: PWM0 and PWM1 (or maybe PWM1 and PWM2)
 			// But we still have RGBCW internally
 			// So, we need to map. Map component 3 of RGBCW to first channel, and component 4 to second.
 			CHANNEL_Set_FloatPWM(firstChannelIndex + 0, led_rawLerpCurrent[3] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 			CHANNEL_Set_FloatPWM(firstChannelIndex + 1, led_rawLerpCurrent[4] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 		}
+#if	ENABLE_DRIVER_SM16703P
+		else if (hybridPixelWhite && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
+			if (LED_HasHybridPixelCoolWhite()) {
+				CHANNEL_Set_FloatPWM(3, led_rawLerpCurrent[3] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
+			}
+			if (LED_HasHybridPixelWarmWhite()) {
+				CHANNEL_Set_FloatPWM(4, led_rawLerpCurrent[4] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
+			}
+		}
+		else if (pixel_count > 0 && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
+			// Legacy fallback for unusual pixel + single PWM mappings that do not use the
+			// explicit hybrid topology on channels 3/4.
+			CHANNEL_Set_FloatPWM(firstChannelIndex + 0, 
+				led_rawLerpCurrent[4] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
+		}
+#endif
 		else {
 			// This should work for both RGB and RGBCW
 			// This also could work for a SINGLE COLOR strips
@@ -639,18 +636,16 @@ void apply_smart_light() {
 	int firstChannelIndex;
 	int channelToUse;
 	byte finalRGBCW[5];
-	led_hw_topology_t topology;
-	bool bPixelHybridWhiteOutput;
 	byte baseRGBCW[5];
 	int maxPossibleIndexToSet;
 	int emulatedCool = -1;
 	int value_brightness = 0;
 	int value_cold_or_warm = 0;
+	int hybridPixelWhite;
+	int pureCWMode;
 
 
-	LED_GetHWTopology(&topology);
-	firstChannelIndex = topology.firstChannelIndex;
-	bPixelHybridWhiteOutput = LED_ShouldUsePixelHybridWhiteOutput(&topology) && (g_lightMode != Light_Anim || g_lightEnableAll == 0);
+	firstChannelIndex = LED_GetFirstChannelIndex();
 
 	if (CFG_HasFlag(OBK_FLAG_LED_EMULATE_COOL_WITH_RGB)) {
 		emulatedCool = firstChannelIndex + 3;
@@ -673,7 +668,10 @@ void apply_smart_light() {
 		}
 	}
 
-	if(!bPixelHybridWhiteOutput && isCWMode() && CFG_HasFlag(OBK_FLAG_LED_ALTERNATE_CW_MODE)) {
+	hybridPixelWhite = LED_IsHybridPixelPWMWhite();
+	pureCWMode = isCWMode() && !hybridPixelWhite;
+
+	if(pureCWMode && CFG_HasFlag(OBK_FLAG_LED_ALTERNATE_CW_MODE)) {
 		for(i = 0; i < 5; i++) {
 			finalColors[i] = 0;
 			baseRGBCW[i] = 0;
@@ -736,11 +734,7 @@ void apply_smart_light() {
 			//	channelToUse,raw,g_brightness,final,g_lightEnableAll);
 
 			if(CFG_HasFlag(OBK_FLAG_LED_SMOOTH_TRANSITIONS) == false) {
-				if (bPixelHybridWhiteOutput) {
-					// Pixel RGB is pushed as a strip update below.
-					// Any shared white PWM output is handled once after the loop.
-				}
-				else if (isCWMode()) {
+				if (pureCWMode) {
 					// in CW mode, we have only set two channels
 					// We don't have RGB channels
 					// so, do simple mapping
@@ -752,8 +746,17 @@ void apply_smart_light() {
 					}
 				}
 #if	ENABLE_DRIVER_SM16703P
+				else if (hybridPixelWhite && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
+					if (i == 3 && LED_HasHybridPixelCoolWhite()) {
+						CHANNEL_Set_FloatPWM(3, chVal, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
+					}
+					else if (i == 4 && LED_HasHybridPixelWarmWhite()) {
+						CHANNEL_Set_FloatPWM(4, chVal, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
+					}
+				}
 				else if (pixel_count > 0 && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
-					// Not CW mode (not WS2812+ CW), but WS2812 + single PWM
+					// Legacy fallback for unusual pixel + single PWM mappings that do not use the
+					// explicit hybrid topology on channels 3/4.
 					if (i == 4) {
 						CHANNEL_Set_FloatPWM(firstChannelIndex + 0, chVal, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 					}
@@ -781,12 +784,6 @@ void apply_smart_light() {
 		}
 	}
 	if(CFG_HasFlag(OBK_FLAG_LED_SMOOTH_TRANSITIONS) == false) {
-		if (bPixelHybridWhiteOutput) {
-			LED_WritePixelHybridWhiteOutput(&topology,
-				finalColors[3] * g_cfg_colorScaleToChannel,
-				finalColors[4] * g_cfg_colorScaleToChannel,
-				CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
-		}
 		LED_I2CDriver_WriteRGBCW(finalColors);
 	}
 
@@ -1849,12 +1846,17 @@ void NewLED_InitCommands(){
 
 	PIN_get_Relay_PWM_Count(0, &pwmCount, 0);
 
+	// Explicit hybrid strips keep RGB as the default mode so pixel color remains usable
+	// even when additional global white PWM channels are present.
+	if (LED_IsHybridPixelPWMWhite()) {
+		g_lightMode = Light_RGB;
+	}
 	// if this is CW, switch from default RGB to CW
-	if (isCWMode() && !LED_HasAddressableRGBPixels()) {
+	else if (isCWMode()) {
 		g_lightMode = Light_Temperature;
 	}
-	else if (pwmCount == 1 || pwmCount == 3 || LED_HasAddressableRGBPixels()) {
-		// if single color, RGB, or addressable RGB hybrid, force RGB
+	else if (pwmCount == 1 || pwmCount == 3 || LED_IsPixelDriverRunning()) {
+		// if single color, RGB or addressable pixel RGB, force RGB
 		g_lightMode = Light_RGB;
 	}
 

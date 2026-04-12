@@ -124,17 +124,12 @@ void Test_HassDiscovery_LED_RGB() {
 }
 
 void Test_HassDiscovery_LED_WS2812B_RGB() {
-	const char *shortName = "PixRGBtest";
-	const char *fullName = "Windows Fake Pixel RGB";
 	const char *mqttName = "testPixRGB";
 
-	SIM_ClearOBK(shortName);
+	SIM_ClearOBK(0);
 	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
-	CFG_SetShortDeviceName(shortName);
-	CFG_SetDeviceName(fullName);
-
 	CMD_ExecuteCommand("startDriver SM16703P", 0);
-	CMD_ExecuteCommand("SM16703P_Init 8", 0);
+	CMD_ExecuteCommand("SM16703P_Init 3", 0);
 
 	SIM_ClearMQTTHistory();
 	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
@@ -144,28 +139,42 @@ void Test_HassDiscovery_LED_WS2812B_RGB() {
 	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testPixRGB/led_temperature");
 }
 
-void Test_HassDiscovery_LED_WS2812B_RGBCW() {
-	const char *shortName = "PixCWtest";
-	const char *fullName = "Windows Fake Pixel RGBCW";
-	const char *mqttName = "testPixCW";
+void Test_HassDiscovery_LED_WS2812B_RGB_CoolOnly() {
+	const char *mqttName = "testPixRGBCool";
 
-	SIM_ClearOBK(shortName);
+	SIM_ClearOBK(0);
 	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
-	CFG_SetShortDeviceName(shortName);
-	CFG_SetDeviceName(fullName);
-
 	PIN_SetPinRoleForPinIndex(24, IOR_PWM);
 	PIN_SetPinChannelForPinIndex(24, 3);
-
 	CMD_ExecuteCommand("startDriver SM16703P", 0);
-	CMD_ExecuteCommand("SM16703P_Init 8", 0);
+	CMD_ExecuteCommand("SM16703P_Init 3", 0);
 
 	SIM_ClearMQTTHistory();
 	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
 	Sim_RunSeconds(5, false);
 
-	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testPixCW/led_basecolor_rgb");
-	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testPixCW/led_temperature");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testPixRGBCool/led_basecolor_rgb");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testPixRGBCool/led_temperature");
+}
+
+void Test_HassDiscovery_LED_WS2812B_RGB_CW_Hybrid() {
+	const char *mqttName = "testPixRGBCW";
+
+	SIM_ClearOBK(0);
+	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
+	PIN_SetPinRoleForPinIndex(24, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(24, 3);
+	PIN_SetPinRoleForPinIndex(26, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(26, 4);
+	CMD_ExecuteCommand("startDriver SM16703P", 0);
+	CMD_ExecuteCommand("SM16703P_Init 3", 0);
+
+	SIM_ClearMQTTHistory();
+	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
+	Sim_RunSeconds(5, false);
+
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testPixRGBCW/led_basecolor_rgb");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testPixRGBCW/led_temperature");
 }
 
 void Test_HassDiscovery_LED_RGBCW() {
@@ -583,7 +592,8 @@ void Test_HassDiscovery() {
 	Test_HassDiscovery_LED_CW();
 	Test_HassDiscovery_LED_RGB();
 	Test_HassDiscovery_LED_WS2812B_RGB();
-	Test_HassDiscovery_LED_WS2812B_RGBCW();
+	Test_HassDiscovery_LED_WS2812B_RGB_CoolOnly();
+	Test_HassDiscovery_LED_WS2812B_RGB_CW_Hybrid();
 	Test_HassDiscovery_LED_RGBCW();
 	Test_HassDiscovery_LED_SingleColor();
 	Test_HassDiscovery_LED_RGBW();

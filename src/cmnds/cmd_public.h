@@ -277,12 +277,20 @@ void LED_GetFinalRGBCW(byte* rgbcw);
 void LED_SetColorByIndex(int index);
 void LED_NextColor();
 void LED_NextColorTemperature();
+typedef struct LEDCapabilities_s {
+	int hasBrightness;
+	int hasRGB;
+	int hasTemperature;
+	int hasPixelRGB;
+	int hasHybridPixelPWMWhite;
+	int hasHybridCoolWhite;
+	int hasHybridWarmWhite;
+} LEDCapabilities;
+
 void LED_ToggleEnabled();
 bool LED_IsLedDriverChipRunning();
 bool LED_IsLEDRunning();
-bool LED_HasAddressableRGBPixels();
-bool LED_HasRGBControls();
-bool LED_HasTemperatureControls();
+void LED_GetCapabilities(LEDCapabilities* caps);
 void LED_SetEnableAll(int bEnable);
 void LED_SetStripStateOutputs();
 int LED_GetEnableAll();
