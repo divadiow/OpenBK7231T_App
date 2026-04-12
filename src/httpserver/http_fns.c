@@ -755,6 +755,8 @@ int http_fn_index(http_request_t* request) {
 		int c_pwms;
 		int lm;
 		int c_realPwms = 0;
+		bool bShowRGBControl;
+		bool bShowTemperatureControl;
 
 		lm = LED_GetMode();
 
@@ -777,7 +779,17 @@ int http_fn_index(http_request_t* request) {
 			c_pwms = 3;
 		}
 
-		if (c_pwms > 0) {
+		bShowRGBControl = (c_pwms >= 3) || LED_HasAddressableRGBPixels() || LED_HasRGBControls();
+		bShowTemperatureControl = (c_pwms == 2 || c_pwms >= 4) || LED_HasTemperatureControls();
+		if (bForceShowRGBCW) {
+			bShowRGBControl = true;
+			bShowTemperatureControl = true;
+		}
+		else if (bForceShowRGB) {
+			bShowRGBControl = true;
+		}
+
+		if (c_pwms > 0 || bShowRGBControl || bShowTemperatureControl) {
 			const char* c;
 			if (CHANNEL_Check(SPECIAL_CHANNEL_LEDPOWER)) {
 				c = "bgrn";
@@ -792,7 +804,7 @@ int http_fn_index(http_request_t* request) {
 			poststr(request, "</td></tr>");
 		}
 
-		if (c_pwms > 0) {
+		if (c_pwms > 0 || bShowRGBControl || bShowTemperatureControl) {
 			int pwmValue;
 
 			inputName = "dim";
@@ -807,7 +819,7 @@ int http_fn_index(http_request_t* request) {
 			hprintf255(request, "<input  type=\"submit\" class='disp-none' value=\"Toggle %i\"/></form>", SPECIAL_CHANNEL_BRIGHTNESS);
 			poststr(request, "</td></tr>");
 		}
-		if (c_pwms >= 3) {
+		if (bShowRGBControl) {
 			char colorValue[16];
 			inputName = "rgb";
 			const char* activeStr = "";
@@ -834,7 +846,7 @@ int http_fn_index(http_request_t* request) {
 			PixelAnim_CreatePanel(request);
 		}
 #endif
-		if (c_pwms == 2 || c_pwms >= 4 || bShowCWForPixelAnim) {
+		if (bShowTemperatureControl || bShowCWForPixelAnim) {
 			// TODO: temperature slider
 			int pwmValue;
 			const char* activeStr = "";
@@ -2110,32 +2122,26 @@ void doHomeAssistantDiscovery(const char* topic, http_request_t* request) {
 
 
 #if ENABLE_LED_BASIC
-	if (ledDriverChipRunning) {
-		pwmCount = CFG_CountLEDRemapChannels();
-	}
-	if (pwmCount == 5 || (pwmCount == 4 && CFG_HasFlag(OBK_FLAG_LED_EMULATE_COOL_WITH_RGB))) {
-		if (dev_info == NULL) {
-			dev_info = hass_init_light_device_info(LIGHT_RGBCW);
+	{
+		bool hasRGBControl = LED_HasRGBControls();
+		bool hasTemperatureControl = LED_HasTemperatureControls();
+
+		if (hasRGBControl && hasTemperatureControl) {
+			if (dev_info == NULL) {
+				dev_info = hass_init_light_device_info(LIGHT_RGBCW);
+			}
+			MQTT_QueuePublish(topic, dev_info->channel, hass_build_discovery_json(dev_info), OBK_PUBLISH_FLAG_RETAIN);
+			hass_free_device_info(dev_info);
+			dev_info = NULL;
+			discoveryQueued = true;
 		}
-		// Enable + RGB control + CW control
-		MQTT_QueuePublish(topic, dev_info->channel, hass_build_discovery_json(dev_info), OBK_PUBLISH_FLAG_RETAIN);
-		hass_free_device_info(dev_info);
-		dev_info = NULL;
-		discoveryQueued = true;
-	}
-	else if (pwmCount > 0) {
-		if (pwmCount == 4) {
-			addLogAdv(LOG_ERROR, LOG_FEATURE_HTTP, "4 PWM device not yet handled");
-		}
-		else if (pwmCount == 3) {
-			// Enable + RGB control
+		else if (hasRGBControl) {
 			dev_info = hass_init_light_device_info(LIGHT_RGB);
 		}
-		else if (pwmCount == 2) {
-			// PWM + Temperature (https://github.com/openshwprojects/OpenBK7231T_App/issues/279)
+		else if (hasTemperatureControl) {
 			dev_info = hass_init_light_device_info(LIGHT_PWMCW);
 		}
-		else {
+		else if (pwmCount > 0) {
 			dev_info = hass_init_light_device_info(LIGHT_PWM);
 		}
 
@@ -2711,7 +2717,7 @@ int http_fn_ha_cfg(http_request_t* request) {
 		}
 	}
 #if ENABLE_LED_BASIC
-	if (pwmCount == 5 || LED_IsLedDriverChipRunning()) {
+	if (LED_HasRGBControls() && LED_HasTemperatureControls()) {
 		// Enable + RGB control + CW control
 		if (mqttAdded == 0) {
 			poststr(request, "mqtt:\n");
@@ -2730,53 +2736,37 @@ int http_fn_ha_cfg(http_request_t* request) {
 		hprintf255(request, "    color_temp_state_topic: \"%s/led_temperature/get\"\n", clientId);
 		//hprintf255(request, "    #color_temp_value_template: \"{{ value }}\"\n");
 	}
-	else
-		if (pwmCount == 3) {
-			// Enable + RGB control
-			if (mqttAdded == 0) {
-				poststr(request, "mqtt:\n");
-				mqttAdded = 1;
-			}
-			if (switchAdded == 0) {
-				poststr(request, "  light:\n");
-				switchAdded = 1;
-			}
-
-			hass_print_unique_id(request, "  - unique_id: \"%s\"\n", LIGHT_RGB, i, 0);
-			hprintf255(request, "    name: Light\n");
-			http_generate_rgb_cfg(request, clientId);
+	else if (LED_HasRGBControls()) {
+		// Enable + RGB control
+		if (mqttAdded == 0) {
+			poststr(request, "mqtt:\n");
+			mqttAdded = 1;
 		}
-		else if (pwmCount == 1) {
-			// single color
-			if (mqttAdded == 0) {
-				poststr(request, "mqtt:\n");
-				mqttAdded = 1;
-			}
-			if (switchAdded == 0) {
-				poststr(request, "  light:\n");
-				switchAdded = 1;
-			}
-
-			hass_print_unique_id(request, "  - unique_id: \"%s\"\n", LIGHT_PWM, i, 0);
-			hprintf255(request, "    name: Light\n");
-			http_generate_singleColor_cfg(request, clientId);
+		if (switchAdded == 0) {
+			poststr(request, "  light:\n");
+			switchAdded = 1;
 		}
-		else if (pwmCount == 2) {
-			// CW
-			if (mqttAdded == 0) {
-				poststr(request, "mqtt:\n");
-				mqttAdded = 1;
-			}
-			if (switchAdded == 0) {
-				poststr(request, "  light:\n");
-				switchAdded = 1;
-			}
 
-			hass_print_unique_id(request, "  - unique_id: \"%s\"\n", LIGHT_PWMCW, i, 0);
-			hprintf255(request, "    name: Light\n");
-			http_generate_cw_cfg(request, clientId);
+		hass_print_unique_id(request, "  - unique_id: \"%s\"\n", LIGHT_RGB, i, 0);
+		hprintf255(request, "    name: Light\n");
+		http_generate_rgb_cfg(request, clientId);
+	}
+	else if (LED_HasTemperatureControls()) {
+		// CW
+		if (mqttAdded == 0) {
+			poststr(request, "mqtt:\n");
+			mqttAdded = 1;
 		}
-		else if (pwmCount > 0) {
+		if (switchAdded == 0) {
+			poststr(request, "  light:\n");
+			switchAdded = 1;
+		}
+
+		hass_print_unique_id(request, "  - unique_id: \"%s\"\n", LIGHT_PWMCW, i, 0);
+		hprintf255(request, "    name: Light\n");
+		http_generate_cw_cfg(request, clientId);
+	}
+	else if (pwmCount > 0) {
 
 			for (i = 0; i < CHANNEL_MAX; i++) {
 				if (h_isChannelPWM(i)) {
