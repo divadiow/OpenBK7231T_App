@@ -253,18 +253,21 @@ int http_fn_index(http_request_t* request) {
 	float fValue;
 	int iValue;
 	bool bForceShowRGB;
+	bool bAutoForceShowRGB;
 	const char* inputName;
 	int channelType;
 
 	bRawPWMs = CFG_HasFlag(OBK_FLAG_LED_RAWCHANNELSMODE);
 	bForceShowRGBCW = CFG_HasFlag(OBK_FLAG_LED_FORCESHOWRGBCWCONTROLLER);
 	bForceShowRGB = CFG_HasFlag(OBK_FLAG_LED_FORCE_MODE_RGB);
+	bAutoForceShowRGB = false;
 
 	// user override is always stronger, so if no override set
 	if (bForceShowRGB == false && bForceShowRGBCW == false) {
 #ifndef OBK_DISABLE_ALL_DRIVERS
 		if (DRV_IsRunning("SM16703P")) {
 			bForceShowRGB = true;
+			bAutoForceShowRGB = true;
 		}
 		if (DRV_IsRunning("DMX")) {
 			bForceShowRGB = true;
@@ -777,7 +780,9 @@ int http_fn_index(http_request_t* request) {
 		else if (bForceShowRGB) {
 			ledCaps.hasBrightness = 1;
 			ledCaps.hasRGB = 1;
-			ledCaps.hasTemperature = 0;
+			if (!bAutoForceShowRGB || !ledCaps.hasHybridPixelPWMWhite) {
+				ledCaps.hasTemperature = 0;
+			}
 		}
 
 		if (ledCaps.hasBrightness) {
@@ -789,9 +794,9 @@ int http_fn_index(http_request_t* request) {
 				c = "bred";
 			}
 			poststr(request, "<tr><td>");
-			poststr(request, "<form action='index'>");
-			hprintf255(request, "<input type='hidden' name='tgl' value='%i'>", SPECIAL_CHANNEL_LEDPOWER);
-			hprintf255(request, "<input class='%s' type='submit' value='Toggle Light'/></form>", c);
+			poststr(request, "<form action=\"index\">");
+			hprintf255(request, "<input type=\"hidden\" name=\"tgl\" value=\"%i\">", SPECIAL_CHANNEL_LEDPOWER);
+			hprintf255(request, "<input class=\"%s\" type=\"submit\" value=\"Toggle Light\"/></form>", c);
 			poststr(request, "</td></tr>");
 		}
 
@@ -804,10 +809,10 @@ int http_fn_index(http_request_t* request) {
 
 			poststr(request, "<tr><td>");
 			hprintf255(request, "<h5>LED Dimmer/Brightness</h5>");
-			hprintf255(request, "<form action='index' id='form%i'>", SPECIAL_CHANNEL_BRIGHTNESS);
-			hprintf255(request, "<input type='range' min='0' max='100' name='%s' id='slider%i' value='%i' onchange='this.form.submit()'>", inputName, SPECIAL_CHANNEL_BRIGHTNESS, pwmValue);
-			hprintf255(request, "<input type='hidden' name='%sIndex' value='%i'>", inputName, SPECIAL_CHANNEL_BRIGHTNESS);
-			hprintf255(request, "<input  type='submit' class='disp-none' value='Toggle %i'/></form>", SPECIAL_CHANNEL_BRIGHTNESS);
+			hprintf255(request, "<form action=\"index\" id=\"form%i\">", SPECIAL_CHANNEL_BRIGHTNESS);
+			hprintf255(request, "<input type=\"range\" min=\"0\" max=\"100\" name=\"%s\" id=\"slider%i\" value=\"%i\" onchange=\"this.form.submit()\">", inputName, SPECIAL_CHANNEL_BRIGHTNESS, pwmValue);
+			hprintf255(request, "<input type=\"hidden\" name=\"%sIndex\" value=\"%i\">", inputName, SPECIAL_CHANNEL_BRIGHTNESS);
+			hprintf255(request, "<input  type=\"submit\" class='disp-none' value=\"Toggle %i\"/></form>", SPECIAL_CHANNEL_BRIGHTNESS);
 			poststr(request, "</td></tr>");
 		}
 		if (ledCaps.hasRGB) {
@@ -821,12 +826,12 @@ int http_fn_index(http_request_t* request) {
 			LED_GetBaseColorString(colorValue);
 			poststr(request, "<tr><td>");
 			hprintf255(request, "<h5>LED RGB Color %s</h5>", activeStr);
-			hprintf255(request, "<form action='index' id='form%i'>", SPECIAL_CHANNEL_BASECOLOR);
+			hprintf255(request, "<form action=\"index\" id=\"form%i\">", SPECIAL_CHANNEL_BASECOLOR);
 			// onchange would fire only if colour was changed
 			// onblur will fire every time
-			hprintf255(request, "<input type='color' name='%s' id='color%i' value='#%s'  oninput='this.form.submit()' >", inputName, SPECIAL_CHANNEL_BASECOLOR, colorValue);
-			hprintf255(request, "<input type='hidden' name='%sIndex' value='%i'>", inputName, SPECIAL_CHANNEL_BASECOLOR);
-			hprintf255(request, "<input  type='submit' class='disp-none' value='Toggle Light'/></form>");
+			hprintf255(request, "<input type=\"color\" name=\"%s\" id=\"color%i\" value=\"#%s\"  oninput=\"this.form.submit()\" >", inputName, SPECIAL_CHANNEL_BASECOLOR, colorValue);
+			hprintf255(request, "<input type=\"hidden\" name=\"%sIndex\" value=\"%i\">", inputName, SPECIAL_CHANNEL_BASECOLOR);
+			hprintf255(request, "<input  type=\"submit\" class='disp-none' value=\"Toggle Light\"/></form>");
 			poststr(request, "</td></tr>");
 		}
 		bool bShowCWForPixelAnim = false;
@@ -854,14 +859,14 @@ int http_fn_index(http_request_t* request) {
 
 			poststr(request, "<tr><td>");
 			hprintf255(request, "<h5>LED Temperature Slider %s (%ld K) (Warm <--- ---> Cool)</h5>", activeStr, pwmKelvin);
-			hprintf255(request, "<form class='r' action='index' id='form%i'>", SPECIAL_CHANNEL_TEMPERATURE);
+			hprintf255(request, "<form class='r' action=\"index\" id=\"form%i\">", SPECIAL_CHANNEL_TEMPERATURE);
 
 			//(KELVIN_TEMPERATURE_MAX - KELVIN_TEMPERATURE_MIN) / (HASS_TEMPERATURE_MAX - HASS_TEMPERATURE_MIN) = 13
-			hprintf255(request, "<input type='range' step='13' min='%ld' max='%ld' ", pwmKelvinMin, pwmKelvinMax);
-			hprintf255(request, "value='%ld' onchange='submitTemperature(this);'/>", pwmKelvin);
+			hprintf255(request, "<input type=\"range\" step='13' min=\"%ld\" max=\"%ld\" ", pwmKelvinMin, pwmKelvinMax);
+			hprintf255(request, "value=\"%ld\" onchange=\"submitTemperature(this);\"/>", pwmKelvin);
 
-			hprintf255(request, "<input type='hidden' name='%sIndex' value='%i'/>", inputName, SPECIAL_CHANNEL_TEMPERATURE);
-			hprintf255(request, "<input id='kelvin%i' type='hidden' name='%s' />", SPECIAL_CHANNEL_TEMPERATURE, inputName);
+			hprintf255(request, "<input type=\"hidden\" name=\"%sIndex\" value=\"%i\"/>", inputName, SPECIAL_CHANNEL_TEMPERATURE);
+			hprintf255(request, "<input id=\"kelvin%i\" type=\"hidden\" name=\"%s\" />", SPECIAL_CHANNEL_TEMPERATURE, inputName);
 
 			poststr(request, "</form></td></tr>");
 		}
