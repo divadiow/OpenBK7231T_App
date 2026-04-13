@@ -751,7 +751,7 @@ int http_fn_index(http_request_t* request) {
 #endif
 #if ENABLE_LED_BASIC
 	if (bRawPWMs == 0 || bForceShowRGBCW || bForceShowRGB
-		|| bForceShowSingleDimmer || LED_IsLedDriverChipRunning()) {
+		|| bForceShowSingleDimmer || LED_IsLEDRunning()) {
 		int lm;
 		int c_realPwms = 0;
 		LEDCapabilities ledCaps;
@@ -777,6 +777,7 @@ int http_fn_index(http_request_t* request) {
 		else if (bForceShowRGB) {
 			ledCaps.hasBrightness = 1;
 			ledCaps.hasRGB = 1;
+			ledCaps.hasTemperature = 0;
 		}
 
 		if (ledCaps.hasBrightness) {

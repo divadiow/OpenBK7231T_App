@@ -249,6 +249,21 @@ static int LED_IsHybridPixelPWMWhite() {
 	return LED_HasHybridPixelCoolWhite() || LED_HasHybridPixelWarmWhite();
 }
 
+static int LED_CountMappedRGBChannels() {
+	int count = 0;
+	if (g_cfg.ledRemap.r != 0xff) count++;
+	if (g_cfg.ledRemap.g != 0xff) count++;
+	if (g_cfg.ledRemap.b != 0xff) count++;
+	return count;
+}
+
+static int LED_CountMappedWhiteChannels() {
+	int count = 0;
+	if (g_cfg.ledRemap.c != 0xff) count++;
+	if (g_cfg.ledRemap.w != 0xff) count++;
+	return count;
+}
+
 void LED_GetCapabilities(LEDCapabilities* caps) {
 	int pwmCount;
 
@@ -274,12 +289,21 @@ void LED_GetCapabilities(LEDCapabilities* caps) {
 		return;
 	}
 
+	if (LED_IsLedDriverChipRunning()) {
+		int rgbCount = LED_CountMappedRGBChannels();
+		int whiteCount = LED_CountMappedWhiteChannels();
+
+		caps->hasRGB = (rgbCount >= 3) ? 1 : 0;
+		caps->hasTemperature = (whiteCount >= 2) ? 1 : 0;
+		if (CFG_HasFlag(OBK_FLAG_LED_FORCE_MODE_RGB)) {
+			caps->hasTemperature = 0;
+		}
+		return;
+	}
+
 	caps->hasRGB = shouldSendRGB() ? 1 : 0;
 
 	PIN_get_Relay_PWM_Count(0, &pwmCount, 0);
-	if (LED_IsLedDriverChipRunning()) {
-		pwmCount = CFG_CountLEDRemapChannels();
-	}
 	if (pwmCount == 2 || pwmCount >= 4) {
 		caps->hasTemperature = 1;
 	}
