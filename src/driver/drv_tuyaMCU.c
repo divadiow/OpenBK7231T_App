@@ -2112,22 +2112,26 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 	case TUYA_CMD_MCU_CONF:
 		working_mode_valid = true;
 		// https://github.com/openshwprojects/OpenBK7231T_App/issues/291
-		// Query working mode response. payloadLen 0 keeps the legacy OBK interpretation of
-		// module self-processing mode. payloadLen 2 reports WiFi status LED and reset pins.
+		// Query working mode response. Tuya spec defines payloadLen 0 as
+		// module+MCU co-processing of network events, and payloadLen 2/3 as
+		// module self-processing mode with WiFi LED/reset/BLE GPIO config.
+		// Keep the legacy self_processing_mode assignments for compatibility;
+		// newer v3 devices that need serial WiFi status are handled by the early
+		// WiFi-state report path before QUERY_STATE.
 		if (payloadLen == 0)
 		{
 			self_processing_mode = true;
-			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: module self-processing mode, no MCU GPIO pins");
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: co-processing mode, no module GPIO config payload");
 		}
 		else if (payloadLen == 2)
 		{
 			self_processing_mode = false;
-			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: MCU handles WiFi LED/reset, pins: %i %i",
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: module self-processing mode, WiFi LED/reset GPIO pins: %i %i",
 				(int)(payload[0]), (int)(payload[1]));
 		}
 		else if (payloadLen == 3)
 		{
-			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: extended payload: %i %i %i",
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: module self-processing mode, WiFi LED/reset/BLE GPIO pins: %i %i %i",
 				(int)(payload[0]), (int)(payload[1]), (int)(payload[2]));
 		}
 		else
@@ -2183,6 +2187,10 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 		{
 			byte data23[1] = { 1 };
 
+			if (version != 3) {
+				addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_REPORT_STATUS_SYNC ignored for unexpected version %i", version);
+				break;
+			}
 			TuyaMCU_ParseStateMessage(payload, payloadLen);
 			state_updated = true;
 			g_sendQueryStatePackets = 0;
@@ -2246,20 +2254,35 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 	}
 	break;
 	case TUYA_CMD_DISABLE_HEARTBEAT:
-		// Standard v3 command 0x25. The MCU asks the module to stop heartbeat polling.
-		heartbeat_disabled = true;
-		heartbeat_valid = true;
-		TuyaMCU_SetHeartbeatCounter(0);
-		addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_DISABLE_HEARTBEAT, acknowledging and stopping heartbeat polling");
-		TuyaMCU_SendCommandWithData(TUYA_CMD_DISABLE_HEARTBEAT, NULL, 0);
+		if (version == 3) {
+			// Standard v3 command 0x25. The MCU asks the module to stop heartbeat polling.
+			heartbeat_disabled = true;
+			heartbeat_valid = true;
+			TuyaMCU_SetHeartbeatCounter(0);
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_DISABLE_HEARTBEAT, acknowledging and stopping heartbeat polling");
+			TuyaMCU_SendCommandWithData(TUYA_CMD_DISABLE_HEARTBEAT, NULL, 0);
+		}
+		else {
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_DISABLE_HEARTBEAT ignored for unexpected version %i", version);
+		}
 		break;
 	case TUYA_CMD_GET_MODULE_MAC:
-		addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_GET_MODULE_MAC, sending MAC");
-		TuyaMCU_SendModuleMAC();
+		if (version == 3) {
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_GET_MODULE_MAC, sending MAC");
+			TuyaMCU_SendModuleMAC();
+		}
+		else {
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_GET_MODULE_MAC ignored for unexpected version %i", version);
+		}
 		break;
 	case TUYA_CMD_GET_DPCACHE:
-		addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_GET_DPCACHE, sending empty cache reply");
-		TuyaMCU_SendGetDPCacheReply_Empty();
+		if (version == 3) {
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_GET_DPCACHE, sending empty cache reply");
+			TuyaMCU_SendGetDPCacheReply_Empty();
+		}
+		else {
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_GET_DPCACHE ignored for unexpected version %i", version);
+		}
 		break;
 	case TUYA_CMD_WEATHERDATA:
 		TuyaMCU_ParseWeatherData(payload, payloadLen);
