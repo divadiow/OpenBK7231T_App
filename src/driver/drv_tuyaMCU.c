@@ -439,7 +439,7 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 	command = UART_GetByte(3);
 	lena = UART_GetByte(4); // hi
 	lenb = UART_GetByte(5); // lo
-	len = lenb | lena >> 8;
+	len = ((int)lena << 8) | lenb;
 	// now check if we have received whole packet
 	len += 2 + 1 + 1 + 2 + 1; // header 2 bytes, version, command, lenght, chekcusm
 	if (cs >= len) {
@@ -2100,6 +2100,12 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 	switch (cmd)
 	{
 	case TUYA_CMD_HEARTBEAT:
+		if (!heartbeat_valid) {
+			// A new TuyaMCU wake/session may have a very short window.
+			// Allow the configured WiFi state to be reported promptly again.
+			wifi_state_timer = 0;
+			wifi_state_valid = false;
+		}
 		heartbeat_valid = true;
 		TuyaMCU_SetHeartbeatCounter(0);
 		break;
@@ -2530,6 +2536,8 @@ void TuyaMCU_RunStateMachine_V3() {
 				wifi_state_valid = false;
 				state_updated = false;
 				g_sendQueryStatePackets = 0;
+				// Next TuyaMCU wake/session must not inherit a stale WiFi-state throttle.
+				wifi_state_timer = 0;
 			}
 		}
 		heartbeat_timer = 3;
@@ -2567,6 +2575,14 @@ void TuyaMCU_RunStateMachine_V3() {
 				Tuya_SetWifiState(g_defaultTuyaMCUWiFiState);
 				addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send TUYA_CMD_WIFI_STATE.");
 				TuyaMCU_SendCommandWithData(TUYA_CMD_WIFI_STATE, NULL, 0);
+			}
+			else if ((wifi_state_valid == false) && (wifi_state_timer == 0))
+			{
+				// Some v3 low-power MCUs only report DPs after the module reports
+				// its current WiFi/cloud status. Do this once early in each wake/session,
+				// before repeated QUERY_STATE retries can consume the short awake window.
+				addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send current WiFi state before querying state.");
+				TuyaMCU_RunWiFiUpdateAndPackets();
 			}
 			else if (state_updated == false)
 			{
