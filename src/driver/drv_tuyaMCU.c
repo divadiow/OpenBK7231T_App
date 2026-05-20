@@ -237,6 +237,9 @@ static int wifi_state_timer = 0;
 static bool self_processing_mode = true;
 static bool state_updated = false;
 static int g_sendQueryStatePackets = 0;
+// Set when the v3 state machine sends an early WiFi-state report for a new session.
+// The matching WiFi-state ACK then triggers one immediate QUERY_STATE, matching stock Tuya module ordering.
+static bool g_queryStateAfterWifiStateAck = false;
 static int g_tuyaMCUBatteryAckDelay = 0;
 
 // wifistate to send when not online
@@ -2155,6 +2158,13 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 		}
 		else {
 			wifi_state_valid = true;
+
+			if ((version == 3) && g_queryStateAfterWifiStateAck) {
+				g_queryStateAfterWifiStateAck = false;
+				addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "WiFi state ACK received, sending one QUERY_STATE for fresh v3 session.");
+				TuyaMCU_SendCommandWithData(TUYA_CMD_QUERY_STATE, NULL, 0);
+				g_sendQueryStatePackets = 1;
+			}
 		}
 		break;
 	case TUYA_CMD_WIFI_SELECT:
@@ -2559,6 +2569,7 @@ void TuyaMCU_RunStateMachine_V3() {
 				wifi_state_valid = false;
 				state_updated = false;
 				g_sendQueryStatePackets = 0;
+				g_queryStateAfterWifiStateAck = false;
 				// Next TuyaMCU wake/session must not inherit a stale WiFi-state throttle.
 				wifi_state_timer = 0;
 			}
@@ -2605,6 +2616,7 @@ void TuyaMCU_RunStateMachine_V3() {
 				// its current WiFi/cloud status. Do this once early in each wake/session,
 				// before repeated QUERY_STATE retries can consume the short awake window.
 				addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send current WiFi state before querying state.");
+				g_queryStateAfterWifiStateAck = true;
 				TuyaMCU_RunWiFiUpdateAndPackets();
 			}
 			else if (state_updated == false)
