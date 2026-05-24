@@ -229,9 +229,11 @@ void Test_TuyaMCU_DP22() {
 	CMD_ExecuteCommand("setChannel 11 777", 0);
 	CMD_ExecuteCommand("setChannel 12 777", 0);
 
+	SIM_ClearUART();
 	CMD_ExecuteCommand("uartFakeHex 55AA03220028010100010002010001000301000100040100010005010001000601000100650100010066010001003C", 0);
-
-	Sim_RunFrames(1000, false);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	SELFTEST_ASSERT_CHANNEL(1, 0);
 	SELFTEST_ASSERT_CHANNEL(2, 0);
 	SELFTEST_ASSERT_CHANNEL(3, 0);
@@ -241,6 +243,43 @@ void Test_TuyaMCU_DP22() {
 	SELFTEST_ASSERT_CHANNEL(7, 777);
 	SELFTEST_ASSERT_CHANNEL(11, 0);
 	SELFTEST_ASSERT_CHANNEL(12, 0);
+
+	// TH03-style v3 sync report (dp102 temp*10, dp103 humidity, dp104 battery enum)
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 102 val 21", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 103 val 22", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 104 enum 23", 0);
+	CMD_ExecuteCommand("setChannelType 21 Temperature_div10", 0);
+	CMD_ExecuteCommand("setChannelType 22 Humidity", 0);
+	CMD_ExecuteCommand("setChannelType 23 ReadOnlyLowMidHigh", 0);
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0322001566020004000000DC670200040000003A680400010297", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	SELFTEST_ASSERT_CHANNEL(21, 220);
+	SELFTEST_ASSERT_CHANNEL(22, 58);
+	SELFTEST_ASSERT_CHANNEL(23, 2);
+
+	// v3 command coverage needed by TH03/T1 devices
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03900003021718C6", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0324000026", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 24 00 01 FF 23");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 25 00 00 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA032D00002F", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 2D 00 07 00 BA DA 31 45 CA FF 06");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 void Test_TuyaMCU_Basic() {
 	// reset whole device

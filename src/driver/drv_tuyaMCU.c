@@ -2134,6 +2134,7 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 		}
 		else if (payloadLen == 3)
 		{
+			self_processing_mode = false;
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_MCU_CONF: module self-processing mode, WiFi LED/reset/BLE GPIO pins: %i %i %i",
 				(int)(payload[0]), (int)(payload[1]), (int)(payload[2]));
 		}
