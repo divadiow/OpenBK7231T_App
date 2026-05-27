@@ -278,7 +278,25 @@ void Test_TuyaMCU_DP22() {
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA032D00002F", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 2D 00 07 00 BA DA 31 45 CA FF 06");
+	{
+		byte expectedMac[6];
+		byte expectedReply[14] = { 0x55, 0xAA, 0x00, 0x2D, 0x00, 0x07, 0x00, 0, 0, 0, 0, 0, 0, 0 };
+		int i;
+		int checksum = 0;
+		WiFI_GetMacAddress((char*)expectedMac);
+		for (i = 0; i < 6; i++) {
+			expectedReply[7 + i] = expectedMac[i];
+		}
+		for (i = 2; i < 13; i++) {
+			checksum += expectedReply[i];
+		}
+		expectedReply[13] = checksum & 0xFF;
+		SELFTEST_ASSERT(SIM_UART_GetDataSize() == 14);
+		for (i = 0; i < 14; i++) {
+			SELFTEST_ASSERT(SIM_UART_GetByte(i) == expectedReply[i]);
+		}
+		SIM_UART_ConsumeBytes(14);
+	}
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 void Test_TuyaMCU_Basic() {
