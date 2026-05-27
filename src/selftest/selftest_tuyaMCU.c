@@ -2,6 +2,7 @@
 #ifdef WINDOWS
 
 #include "selftest_local.h"
+#include "../hal/hal_wifi.h"
 
 void Test_TuyaMCU_RawAccess() {
 	// reset whole device
@@ -282,12 +283,13 @@ void Test_TuyaMCU_DP22() {
 		byte expectedMac[6];
 		byte expectedReply[14] = { 0x55, 0xAA, 0x00, 0x2D, 0x00, 0x07, 0x00, 0, 0, 0, 0, 0, 0, 0 };
 		int i;
-		int checksum = 0;
+		int checksum = 0xFF;
 		WiFI_GetMacAddress((char*)expectedMac);
 		for (i = 0; i < 6; i++) {
 			expectedReply[7 + i] = expectedMac[i];
 		}
-		for (i = 2; i < 13; i++) {
+		// Tuya checksum for outgoing packet is 0xFF + command + lenHi + lenLo + payload bytes.
+		for (i = 3; i < 13; i++) {
 			checksum += expectedReply[i];
 		}
 		expectedReply[13] = checksum & 0xFF;
