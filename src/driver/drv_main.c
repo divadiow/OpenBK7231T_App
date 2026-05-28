@@ -79,6 +79,22 @@ static driver_t g_drivers[] = {
 	false,                                   // loaded
 	},
 #endif
+#if ENABLE_DRIVER_HOLTEKCO
+	//drvdetail:{"name":"HoltekCO",
+	//drvdetail:"title":"Holtek CO UART",
+	//drvdetail:"descr":"Holtek CO detector UART protocol driver for BA45F6746-class CO alarm MCUs. It parses AA 13 ... 55 checksum frames, exposes CO ppm, alarm and fault channels, and can poll the Holtek MCU with the known 55 07 03 01 00 00 60 query frame.",
+	//drvdetail:"requires":""}
+	{ "HoltekCO",                            // Driver Name
+	HoltekCO_Init,                           // Init
+	HoltekCO_RunEverySecond,                 // onEverySecond
+	HoltekCO_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	HoltekCO_RunFrame,                       // runQuickTick
+	HoltekCO_Shutdown,                       // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
 #if ENABLE_DRIVER_ROOMBA
 	//drvdetail:{"name":"Roomba",
 	//drvdetail:"title":"Roomba",

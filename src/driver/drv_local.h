@@ -115,6 +115,12 @@ void DGR_SpoofNextDGRPacketSource(const char *ipStrs);
 void TuyaMCU_Sensor_RunEverySecond();
 void TuyaMCU_Sensor_Init();
 
+void HoltekCO_Init();
+void HoltekCO_RunEverySecond();
+void HoltekCO_RunFrame();
+void HoltekCO_Shutdown();
+void HoltekCO_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
+
 void DRV_Test_Charts_AddToHtmlPage(http_request_t *request, int bPreState);
 
 void DRV_Charts_AddToHtmlPage(http_request_t *request, int bPreState);
