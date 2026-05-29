@@ -26,7 +26,7 @@
 #define HOLTEKCO_UART_BUFFER_SIZE           256
 
 /*
- * HoltekCO v0.3.0
+ * HoltekCO v0.3.1
  *
  * Driver for CO detector designs where a Holtek BA45F6746-class CO MCU is
  * connected to the Wi-Fi module by UART. This is intentionally separate from
@@ -96,18 +96,19 @@ static void HoltekCO_SetChannelIfChanged(int ch, int value) {
 }
 
 static void HoltekCO_ApplyChannelSetup(void) {
-	if (HoltekCO_IsChannelValid(g_holtekco_chCO)) {
-		CHANNEL_SetType(g_holtekco_chCO, ChType_ReadOnly);
-		CHANNEL_SetLabel(g_holtekco_chCO, "CO ppm", 1);
-	}
-	if (HoltekCO_IsChannelValid(g_holtekco_chAlarm)) {
-		CHANNEL_SetType(g_holtekco_chAlarm, ChType_ReadOnly);
-		CHANNEL_SetLabel(g_holtekco_chAlarm, "CO alarm", 1);
-	}
-	if (HoltekCO_IsChannelValid(g_holtekco_chFault)) {
-		CHANNEL_SetType(g_holtekco_chFault, ChType_ReadOnly);
-		CHANNEL_SetLabel(g_holtekco_chFault, "CO fault", 1);
-	}
+	/*
+	 * Deliberately do not stamp channel labels or channel types here.
+	 *
+	 * OpenBeken channel labels/types are global and persistent configuration.
+	 * Earlier HoltekCO test builds set labels such as "CO ppm" and "CO alarm"
+	 * from the driver init path, which made the generic top-of-page channel
+	 * summary appear even after the driver was stopped. That is not suitable for
+	 * a mergeable protocol driver or for unrelated devices OTAing to a build that
+	 * merely contains this driver.
+	 *
+	 * This driver only writes decoded values to the configured channels.
+	 * User templates/autoexec/HASS discovery can provide presentation names.
+	 */
 }
 
 static void HoltekCO_SendByteTracked(byte b) {
