@@ -501,8 +501,10 @@ OpenXR809: prebuild_OpenXR809 sdk/OpenXR809/project/oxr_sharedApp/shared
 	$(MAKE) -C sdk/OpenXR809/src install CC_DIR=$(ARM_NONE_EABI_GCC_PATH) APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) --no-print-directory -j $(shell nproc)
 	$(MAKE) -C sdk/OpenXR809/project/oxr_sharedApp/gcc CC_DIR=$(ARM_NONE_EABI_GCC_PATH) APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) --no-print-directory -j $(shell nproc)
 	$(MAKE) -C sdk/OpenXR809/project/oxr_sharedApp/gcc image CC_DIR=$(ARM_NONE_EABI_GCC_PATH) APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) -j $(shell nproc) --no-print-directory
+	$(MAKE) -C sdk/OpenXR809/project/oxr_sharedApp/gcc image_xz CC_DIR=$(ARM_NONE_EABI_GCC_PATH) APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) -j $(shell nproc) --no-print-directory
 	mkdir -p output/$(APP_VERSION)
 	cp sdk/OpenXR809/project/oxr_sharedApp/image/xr809/xr_system.img output/$(APP_VERSION)/OpenXR809_$(APP_VERSION).img
+	cp sdk/OpenXR809/project/oxr_sharedApp/image/xr809/xr_system_img_xz.img output/$(APP_VERSION)/OpenXR809_$(APP_VERSION)_ota.img
 
 .PHONY: build-BK7231
 build-BK7231: $(SDK_PATH)/apps/$(APP_NAME)
