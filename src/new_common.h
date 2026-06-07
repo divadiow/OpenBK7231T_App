@@ -477,6 +477,7 @@ typedef unsigned int u32;
 
 #define OBK_OTA_EXTENSION ".img"
 #if PLATFORM_XR809
+#define OBK_OTA_NAME_EXTENSION "_ota"
 #endif
 //typedef unsigned char u8;
 //typedef unsigned char uint8_t;
