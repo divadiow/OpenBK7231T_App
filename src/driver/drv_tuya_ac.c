@@ -163,20 +163,30 @@ static commandResult_t CMD_TuyaAC_TargetTemp(const void* context, const char* cm
 }
 
 void TuyaAC_Init(void) {
-    UART_InitUART(TUYA_AC_BAUDRATE, 2, false); // Initialize UART without TX queue/buffers perhaps? port 2? Beken uses port 2 (TX2/RX2) usually for TuyaMCU.
     UART_InitReceiveRingBuffer(TUYA_AC_RX_BUFFER_SIZE);
+    UART_InitUART(TUYA_AC_BAUDRATE, 2, false); // Initialize UART without TX queue/buffers perhaps? port 2? Beken uses port 2 (TX2/RX2) usually for TuyaMCU.
 
     CMD_RegisterCommand("ACMode", CMD_TuyaAC_Mode, NULL);
     CMD_RegisterCommand("FANMode", CMD_TuyaAC_Fan, NULL);
     CMD_RegisterCommand("TargetTemperature", CMD_TuyaAC_TargetTemp, NULL);
     CMD_RegisterCommand("ACPower", CMD_TuyaAC_Power, NULL);
 
-    // Send query packet to ask AC to send all status
+    // Send initialization sequence just like the original dongle
+    uint8_t q_init[1] = {0x01};
+    TuyaAC_SendPacket(0x21, 0x0000, q_init, 1);
+
+    uint8_t q_0301[2] = {0x03, 0x01};
+    TuyaAC_SendPacket(0x21, 0x0B0B, q_0301, 2);
+
+    uint8_t q_0305[2] = {0x03, 0x05};
+    TuyaAC_SendPacket(0x21, 0x0B0B, q_0305, 2);
+
     uint8_t query_payload[2] = {0xFF, 0xFF};
     TuyaAC_SendPacket(0x21, 0x0B0B, query_payload, 2);
 }
 
-void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request) {
+void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState) {
+    if (bPreState) return;
     hprintf255(request, "<h3>Tuya AC Driver</h3>");
     hprintf255(request, "<b>Power:</b> %s<br>", g_tuya_ac_power ? "ON" : "OFF");
     hprintf255(request, "<b>Mode:</b> %s<br>", acModeOptions[g_tuya_ac_mode % 5]);
@@ -192,6 +202,8 @@ void TuyaAC_RunEverySecond(void) {
     while (UART_GetDataSize() > 0) {
         // Peek at start byte
         if (UART_GetByte(0) != 0xA5) {
+            uint8_t garbage = UART_GetByte(0);
+            ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "Garbage RX: %02X", garbage);
             UART_ConsumeBytes(1); // consume garbage
             continue;
         }
@@ -232,6 +244,7 @@ void TuyaAC_RunEverySecond(void) {
 
         if (calc_crc != rx_crc) {
             ADDLOG_WARN(LOG_FEATURE_TUYA_AC, "Tuya AC CRC Error: expected %04X, got %04X", calc_crc, rx_crc);
+            printHexToLog("RX_BAD_CRC:", buffer, len);
             continue;
         }
 

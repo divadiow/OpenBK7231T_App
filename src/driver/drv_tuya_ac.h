@@ -5,6 +5,6 @@
 
 void TuyaAC_Init(void);
 void TuyaAC_RunEverySecond(void);
-void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request);
+void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
 
 #endif // __DRV_TUYA_AC_H__
