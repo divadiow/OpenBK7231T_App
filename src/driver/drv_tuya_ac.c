@@ -11,7 +11,7 @@
 #include "drv_uart.h"
 #include "drv_tuya_ac.h"
 
-#define TUYA_AC_BAUDRATE 9600
+#define TUYA_AC_BAUDRATE 115200
 #define TUYA_AC_RX_BUFFER_SIZE 256
 
 // AC State
@@ -164,7 +164,7 @@ static commandResult_t CMD_TuyaAC_TargetTemp(const void* context, const char* cm
 
 void TuyaAC_Init(void) {
     UART_InitReceiveRingBuffer(TUYA_AC_RX_BUFFER_SIZE);
-    UART_InitUART(TUYA_AC_BAUDRATE, 2, false); // Initialize UART without TX queue/buffers perhaps? port 2? Beken uses port 2 (TX2/RX2) usually for TuyaMCU.
+    UART_InitUART(TUYA_AC_BAUDRATE, 0, false); // Initialize UART without TX queue/buffers perhaps? port 0? parity 0!
 
     CMD_RegisterCommand("ACMode", CMD_TuyaAC_Mode, NULL);
     CMD_RegisterCommand("FANMode", CMD_TuyaAC_Fan, NULL);
