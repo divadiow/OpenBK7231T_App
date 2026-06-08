@@ -15,7 +15,7 @@
 #define TCL_UART_PACKET_LEN 1
 #define TCL_UART_PACKET_HEAD 0xff
 #define TCL_UART_RECEIVE_BUFFER_SIZE 256
-#define TCL_baudRate	9600
+#define TCL_baudRate	115200
 
 #include "drv_tclAC.h"
 
