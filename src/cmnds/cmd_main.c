@@ -70,6 +70,7 @@ int g_sleepfactor = 1;
 #include "net/wlan/wlan_ext_req.h"
 #include "pm/pm.h"
 #if PLATFORM_XR809
+#include "image/flash.h"
 #define DEEP_SLEEP PM_MODE_POWEROFF
 #else
 #define DEEP_SLEEP PM_MODE_HIBERNATION
@@ -125,6 +126,107 @@ void LN882H_ApplyPowerSave(int bOn) {
 		wifi_sta_set_powersave(WIFI_NO_POWERSAVE);
 		ln_pm_sleep_mode_set(ACTIVE);
 	}
+}
+#endif
+
+#if PLATFORM_XR809
+typedef struct XR809FlashEraseDiag_s {
+	uint32_t flash;
+	uint32_t addr;
+	uint32_t size;
+	uint32_t delayMs;
+} XR809FlashEraseDiag_t;
+
+static volatile int g_xr809FlashEraseDiagBusy = 0;
+
+static void XR809FlashEraseDiag_Task(beken_thread_arg_t arg) {
+	XR809FlashEraseDiag_t *diag = (XR809FlashEraseDiag_t*)arg;
+	int ret;
+
+	if (diag == NULL) {
+		g_xr809FlashEraseDiagBusy = 0;
+		vTaskDelete(NULL);
+		return;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: task armed, delay %u ms", (unsigned int)diag->delayMs);
+	if (diag->delayMs > 0) {
+		rtos_delay_milliseconds(diag->delayMs);
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: task erase start, flash %u, addr 0x%06x (%uK), size 0x%x (%uK)",
+		(unsigned int)diag->flash,
+		(unsigned int)diag->addr,
+		(unsigned int)(diag->addr / 1024),
+		(unsigned int)diag->size,
+		(unsigned int)(diag->size / 1024));
+
+	ret = flash_erase_wrap(diag->flash, diag->addr, diag->size);
+
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: task erase finished, ret %i", ret);
+	g_xr809FlashEraseDiagBusy = 0;
+	free(diag);
+	vTaskDelete(NULL);
+}
+
+static commandResult_t CMD_XR809FlashEraseDiag(const void* context, const char* cmd, const char* args, int cmdFlags) {
+	XR809FlashEraseDiag_t *diag;
+	OSStatus err;
+
+	Tokenizer_TokenizeString(args, 0);
+
+	if (g_xr809FlashEraseDiagBusy) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashEraseDiag: already running");
+		return CMD_RES_ERROR;
+	}
+
+	diag = (XR809FlashEraseDiag_t*)malloc(sizeof(XR809FlashEraseDiag_t));
+	if (diag == NULL) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashEraseDiag: malloc failed");
+		return CMD_RES_ERROR;
+	}
+
+	diag->addr = 0x0F1000;
+	diag->size = 0x1000;
+	diag->delayMs = 3000;
+	diag->flash = 0;
+
+	if (Tokenizer_GetArgsCount() > 0) {
+		diag->addr = (uint32_t)Tokenizer_GetArgInteger(0);
+	}
+	if (Tokenizer_GetArgsCount() > 1) {
+		diag->size = (uint32_t)Tokenizer_GetArgInteger(1);
+	}
+	if (Tokenizer_GetArgsCount() > 2) {
+		diag->delayMs = (uint32_t)Tokenizer_GetArgInteger(2);
+	}
+	if (Tokenizer_GetArgsCount() > 3) {
+		diag->flash = (uint32_t)Tokenizer_GetArgInteger(3);
+	}
+
+	if (diag->size == 0) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashEraseDiag: size must be non-zero");
+		free(diag);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+
+	g_xr809FlashEraseDiagBusy = 1;
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: creating task, source flags %i, flash %u, addr 0x%06x, size 0x%x, delay %u ms",
+		cmdFlags,
+		(unsigned int)diag->flash,
+		(unsigned int)diag->addr,
+		(unsigned int)diag->size,
+		(unsigned int)diag->delayMs);
+
+	err = rtos_create_thread(NULL, BEKEN_APPLICATION_PRIORITY, "XR809EraseDiag", XR809FlashEraseDiag_Task, 2048, diag);
+	if (err != kNoErr) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashEraseDiag: rtos_create_thread failed, err %i", err);
+		g_xr809FlashEraseDiagBusy = 0;
+		free(diag);
+		return CMD_RES_ERROR;
+	}
+
+	return CMD_RES_OK;
 }
 #endif
 
@@ -1108,6 +1210,14 @@ void CMD_Init_Early() {
 	//cmddetail:"fn":"CMD_If","file":"cmnds/cmd_main.c","requires":"",
 	//cmddetail:"examples":""}
 	CMD_RegisterCommand("if", CMD_If, NULL);
+#if PLATFORM_XR809
+	//cmddetail:{"name":"XR809FlashEraseDiag","args":"[addr=0xf1000][size=0x1000][delayMs=3000][flash=0]",
+	//cmddetail:"descr":"Diagnostic command for XR809 OTA flash erase testing. Creates a separate task which erases the requested flash region after a delay.",
+	//cmddetail:"fn":"CMD_XR809FlashEraseDiag","file":"cmnds/cmd_main.c","requires":"PLATFORM_XR809",
+	//cmddetail:"examples":"XR809FlashEraseDiag 0xf1000 0x1000 3000"}
+	CMD_RegisterCommand("XR809FlashEraseDiag", CMD_XR809FlashEraseDiag, NULL);
+#endif
+
 	//cmddetail:{"name":"ota_http","args":"[HTTP_URL]",
 	//cmddetail:"descr":"Starts the firmware update procedure, the argument should be a reachable HTTP server file. You can easily setup HTTP server with Xampp, or Visual Code, or Python, etc. Make sure you are using OTA file for a correct platform (getting N platform RBL on T will brick device, etc etc)",
 	//cmddetail:"fn":"CMD_HTTPOTA","file":"cmnds/cmd_main.c","requires":"",
