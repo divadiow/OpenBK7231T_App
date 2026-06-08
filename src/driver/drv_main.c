@@ -23,6 +23,7 @@
 #include "drv_ds3231.h"
 #include "drv_hlw8112.h"
 #include "drv_DCF77.h"
+#include "drv_tuya_ac.h"
 
 void DRV_MQTTServer_Init();
 void DRV_MQTTServer_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
@@ -73,6 +74,18 @@ static driver_t g_drivers[] = {
 	TuyaMCU_Sensor_RunEverySecond,           // onEverySecond
 	NULL,                                    // appendInformationToHTTPIndexPage
 	NULL,                                    // runQuickTick
+	NULL,                                    // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_TUYA_AC
+	{ "TuyaAC",                              // Driver Name
+	TuyaAC_Init,                             // Init
+	NULL,                                    // onEverySecond
+	TuyaAC_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	TuyaAC_RunEverySecond,                   // runQuickTick (we use this for UART parsing)
 	NULL,                                    // stopFunction
 	NULL,                                    // onChannelChanged
 	NULL,                                    // onHassDiscovery
