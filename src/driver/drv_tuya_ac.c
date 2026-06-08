@@ -41,7 +41,17 @@ static uint16_t calculate_crc16_xmodem(uint8_t *data, int len) {
     return crc;
 }
 
-static void TuyaAC_SendPacket(uint8_t frame_class, uint8_t *payload, uint16_t payload_len) {
+static void printHexToLog(const char* prefix, uint8_t *data, int len) {
+    char hexstr[256] = {0};
+    int limit = len;
+    if (limit > 80) limit = 80;
+    for(int i = 0; i < limit; i++) {
+        snprintf(hexstr + (i*3), sizeof(hexstr) - (i*3), "%02X ", data[i]);
+    }
+    ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "%s %s", prefix, hexstr);
+}
+
+static void TuyaAC_SendPacket(uint8_t frame_class, uint16_t cmd_flag, uint8_t *payload, uint16_t payload_len) {
     uint16_t packet_len = 12 + payload_len; // 12 bytes header/crc + payload
     uint8_t buffer[256];
     if (packet_len > sizeof(buffer)) return;
@@ -59,8 +69,8 @@ static void TuyaAC_SendPacket(uint8_t frame_class, uint8_t *payload, uint16_t pa
     buffer[8] = 0x00;
     buffer[9] = 0x00;
 
-    buffer[10] = 0x0A; // Cmd flag? typically 0x0A 0x0A for dongle to AC commands
-    buffer[11] = 0x0A;
+    buffer[10] = (cmd_flag >> 8) & 0xFF;
+    buffer[11] = cmd_flag & 0xFF;
 
     if (payload_len > 0 && payload != NULL) {
         memcpy(&buffer[12], payload, payload_len);
@@ -76,6 +86,8 @@ static void TuyaAC_SendPacket(uint8_t frame_class, uint8_t *payload, uint16_t pa
     buffer[8] = (calc_crc >> 8) & 0xFF;
     buffer[9] = calc_crc & 0xFF;
 
+    printHexToLog("TX:", buffer, packet_len);
+
     for (int i = 0; i < packet_len; i++) {
         UART_SendByte(buffer[i]);
     }
@@ -87,7 +99,7 @@ static void TuyaAC_SendDP(uint16_t dp_id, uint8_t *data, uint16_t len) {
     payload[1] = dp_id & 0xFF;
     memcpy(&payload[2], data, len);
     
-    TuyaAC_SendPacket(0x21, payload, 2 + len);
+    TuyaAC_SendPacket(0x21, 0x0A0A, payload, 2 + len);
 }
 
 static void TuyaAC_SendDP_Bool(uint16_t dp_id, uint8_t val) {
@@ -158,6 +170,10 @@ void TuyaAC_Init(void) {
     CMD_RegisterCommand("FANMode", CMD_TuyaAC_Fan, NULL);
     CMD_RegisterCommand("TargetTemperature", CMD_TuyaAC_TargetTemp, NULL);
     CMD_RegisterCommand("ACPower", CMD_TuyaAC_Power, NULL);
+
+    // Send query packet to ask AC to send all status
+    uint8_t query_payload[2] = {0xFF, 0xFF};
+    TuyaAC_SendPacket(0x21, 0x0B0B, query_payload, 2);
 }
 
 void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request) {
@@ -215,9 +231,11 @@ void TuyaAC_RunEverySecond(void) {
         uint16_t rx_crc = (buffer[8] << 8) | buffer[9];
 
         if (calc_crc != rx_crc) {
-            ADDLOG_WARN(LOG_FEATURE_TUYAMCU, "Tuya AC CRC Error: expected %04X, got %04X", calc_crc, rx_crc);
+            ADDLOG_WARN(LOG_FEATURE_TUYA_AC, "Tuya AC CRC Error: expected %04X, got %04X", calc_crc, rx_crc);
             continue;
         }
+
+        printHexToLog("RX:", buffer, len);
 
         // Process Payload
         int payload_len = len - 12;
