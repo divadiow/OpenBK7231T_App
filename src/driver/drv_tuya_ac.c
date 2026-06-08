@@ -32,8 +32,9 @@ static int g_tuya_ac_eco = 0;
 static int g_tuya_ac_v_motor = 0;
 static int g_tuya_ac_h_motor = 0;
 static uint32_t g_tuya_ac_energy = 0;
-static uint32_t g_tuya_ac_in_fan_rpm = 0;
-static float g_tuya_ac_out_temp = 0.0f;
+uint32_t g_tuya_ac_in_fan_rpm = 0;
+uint32_t g_tuya_ac_in_fan_percent = 0;
+float g_tuya_ac_out_temp = 0.0f;
 static uint32_t g_tuya_ac_out_fan_rpm = 0;
 static uint32_t g_tuya_ac_runtime = 0;
 static uint32_t g_tuya_ac_filter = 0;
@@ -54,7 +55,7 @@ static const char *get_ac_fan_str(int v) {
     return "Unknown";
 }
 static const char *get_ac_h_swing_str(int v) {
-    if (v == 0) return "Keep Position";
+    if (v == 0 || v == 8) return "Keep Position";
     if (v == 1) return "Auto L/R";
     if (v == 2) return "Flow Left";
     if (v == 3) return "Flow Middle";
@@ -67,7 +68,7 @@ static const char *get_ac_h_swing_str(int v) {
     return "Unknown";
 }
 static const char *get_ac_v_swing_str(int v) {
-    if (v == 0) return "Keep Position";
+    if (v == 0 || v == 8) return "Keep Position";
     if (v == 1) return "Auto U/D";
     if (v == 2) return "Flow Up";
     if (v == 3) return "Flow Down";
@@ -200,6 +201,49 @@ static int parseFanMode(const char *s) {
     return atoi(s);
 }
 
+static int parseHSwingMode(const char *s) {
+    if (!stricmp(s, "Keep Position")) return 8;
+    if (!stricmp(s, "Auto L/R")) return 1;
+    if (!stricmp(s, "Flow Left")) return 2;
+    if (!stricmp(s, "Flow Middle")) return 3;
+    if (!stricmp(s, "Flow Right")) return 4;
+    if (!stricmp(s, "Fix Left")) return 9;
+    if (!stricmp(s, "Fix Mid-Left")) return 10;
+    if (!stricmp(s, "Fix Middle")) return 11;
+    if (!stricmp(s, "Fix Mid-Right")) return 12;
+    if (!stricmp(s, "Fix Right")) return 13;
+    return atoi(s);
+}
+
+static int parseVSwingMode(const char *s) {
+    if (!stricmp(s, "Keep Position")) return 8;
+    if (!stricmp(s, "Auto U/D")) return 1;
+    if (!stricmp(s, "Flow Up")) return 2;
+    if (!stricmp(s, "Flow Down")) return 3;
+    if (!stricmp(s, "Fix Above")) return 9;
+    if (!stricmp(s, "Fix Mid-High")) return 10;
+    if (!stricmp(s, "Fix Middle")) return 11;
+    if (!stricmp(s, "Fix Mid-Low")) return 12;
+    if (!stricmp(s, "Fix Down")) return 13;
+    return atoi(s);
+}
+
+static int parseSleepMode(const char *s) {
+    if (!stricmp(s, "Off")) return 0;
+    if (!stricmp(s, "Standard")) return 1;
+    if (!stricmp(s, "Aged")) return 2;
+    if (!stricmp(s, "Child")) return 3;
+    return atoi(s);
+}
+
+static int parseGeneratorMode(const char *s) {
+    if (!stricmp(s, "Off")) return 0;
+    if (!stricmp(s, "Level 1")) return 1;
+    if (!stricmp(s, "Level 2")) return 2;
+    if (!stricmp(s, "Level 3")) return 3;
+    return atoi(s);
+}
+
 static commandResult_t CMD_TuyaAC_Power(const void* context, const char* cmd, const char* args, int cmdFlags) {
     Tokenizer_TokenizeString(args, 0);
     g_tuya_ac_power = Tokenizer_GetArgInteger(0);
@@ -218,6 +262,13 @@ static commandResult_t CMD_TuyaAC_Fan(const void* context, const char* cmd, cons
     Tokenizer_TokenizeString(args, 0);
     g_tuya_ac_fan = parseFanMode(Tokenizer_GetArg(0));
     TuyaAC_SendDP_Enum(0x05, g_tuya_ac_fan);
+    if (g_tuya_ac_fan == 0) {
+        TuyaAC_SendDP_Bool(0x0073, 1);
+        g_tuya_ac_mute = 1;
+    } else {
+        TuyaAC_SendDP_Bool(0x0073, 0);
+        g_tuya_ac_mute = 0;
+    }
     return CMD_RES_OK;
 }
 
@@ -236,6 +287,83 @@ static commandResult_t CMD_TuyaAC_EightDegree(const void* context, const char* c
     return CMD_RES_OK;
 }
 
+static commandResult_t CMD_TuyaAC_InFanPercent(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_in_fan_percent = Tokenizer_GetArgInteger(0);
+    TuyaAC_SendDP_Value(0x0072, g_tuya_ac_in_fan_percent);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_HSwing(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_h_swing = parseHSwingMode(Tokenizer_GetArg(0));
+    TuyaAC_SendDP_Enum(0x0E, g_tuya_ac_h_swing);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_VSwing(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_v_swing = parseVSwingMode(Tokenizer_GetArg(0));
+    TuyaAC_SendDP_Enum(0x11, g_tuya_ac_v_swing);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Sleep(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_sleep = parseSleepMode(Tokenizer_GetArg(0));
+    TuyaAC_SendDP_Enum(0x22, g_tuya_ac_sleep);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Generator(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_generator = parseGeneratorMode(Tokenizer_GetArg(0));
+    TuyaAC_SendDP_Enum(0x2D, g_tuya_ac_generator);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Eco(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_eco = Tokenizer_GetArgInteger(0);
+    TuyaAC_SendDP_Bool(0xDF, g_tuya_ac_eco ? 1 : 0);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Mute(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_mute = Tokenizer_GetArgInteger(0);
+    TuyaAC_SendDP_Bool(0x0073, g_tuya_ac_mute ? 1 : 0);
+    if (g_tuya_ac_mute) {
+        TuyaAC_SendDP_Enum(0x0005, 0); // Set fan speed to Mute
+        g_tuya_ac_fan = 0;
+    } else {
+        TuyaAC_SendDP_Enum(0x0005, 1); // Set fan speed to Auto if Mute disabled without explicit fan speed
+        g_tuya_ac_fan = 1;
+    }
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Buzzer(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_buzzer = Tokenizer_GetArgInteger(0);
+    TuyaAC_SendDP_Bool(0x25, g_tuya_ac_buzzer ? 1 : 0);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Display(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_display = Tokenizer_GetArgInteger(0);
+    TuyaAC_SendDP_Bool(0x1E, g_tuya_ac_display ? 1 : 0);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_Health(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    g_tuya_ac_health = Tokenizer_GetArgInteger(0);
+    TuyaAC_SendDP_Bool(0x15, g_tuya_ac_health ? 1 : 0);
+    return CMD_RES_OK;
+}
+
 void TuyaAC_Init(void) {
     UART_InitReceiveRingBuffer(TUYA_AC_RX_BUFFER_SIZE);
     UART_InitUART(TUYA_AC_BAUDRATE, 0, false); // Initialize UART without TX queue/buffers perhaps? port 0? parity 0!
@@ -245,6 +373,16 @@ void TuyaAC_Init(void) {
     CMD_RegisterCommand("TargetTemperature", CMD_TuyaAC_TargetTemp, NULL);
     CMD_RegisterCommand("ACPower", CMD_TuyaAC_Power, NULL);
     CMD_RegisterCommand("ACEightDegree", CMD_TuyaAC_EightDegree, NULL);
+    CMD_RegisterCommand("ACInFanPercent", CMD_TuyaAC_InFanPercent, NULL);
+    CMD_RegisterCommand("ACHSwing", CMD_TuyaAC_HSwing, NULL);
+    CMD_RegisterCommand("ACVSwing", CMD_TuyaAC_VSwing, NULL);
+    CMD_RegisterCommand("ACSleep", CMD_TuyaAC_Sleep, NULL);
+    CMD_RegisterCommand("ACGenerator", CMD_TuyaAC_Generator, NULL);
+    CMD_RegisterCommand("ACEco", CMD_TuyaAC_Eco, NULL);
+    CMD_RegisterCommand("ACMute", CMD_TuyaAC_Mute, NULL);
+    CMD_RegisterCommand("ACBuzzer", CMD_TuyaAC_Buzzer, NULL);
+    CMD_RegisterCommand("ACDisplay", CMD_TuyaAC_Display, NULL);
+    CMD_RegisterCommand("ACHealth", CMD_TuyaAC_Health, NULL);
 
     // Send initialization sequence just like the original dongle
     uint8_t q_init[1] = {0x01};
@@ -453,33 +591,47 @@ void TuyaAC_RunEverySecond(void) {
                 } else if (dp_id == 0x000C) {
                     g_tuya_ac_v_motor = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Vert Motor Status: %s", dp_id, g_tuya_ac_v_motor ? "Moving" : "Stopped");
+                    MQTT_PublishMain_StringString("ac_v_motor", g_tuya_ac_v_motor ? "Moving" : "Stopped", 0);
                 } else if (dp_id == 0x000D) {
                     g_tuya_ac_h_motor = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Horiz Motor Status: %s", dp_id, g_tuya_ac_h_motor ? "Moving" : "Stopped");
+                    MQTT_PublishMain_StringString("ac_h_motor", g_tuya_ac_h_motor ? "Moving" : "Stopped", 0);
                 } else if (dp_id == 0x003D) {
                     g_tuya_ac_energy = val32;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Energy/Electricity: %u", dp_id, g_tuya_ac_energy);
+                    MQTT_PublishMain_StringInt("ac_energy", g_tuya_ac_energy, 0);
                 } else if (dp_id == 0x005C) {
                     g_tuya_ac_in_fan_rpm = val32;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Indoor Fan Speed: %u RPM", dp_id, g_tuya_ac_in_fan_rpm);
+                    MQTT_PublishMain_StringInt("ac_in_fan_rpm", g_tuya_ac_in_fan_rpm, 0);
                 } else if (dp_id == 0x0060) {
                     g_tuya_ac_out_temp = val32 / 100.0f;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Outdoor Temp: %.1f C", dp_id, g_tuya_ac_out_temp);
+                    MQTT_PublishMain_StringFloat("ac_out_temp", g_tuya_ac_out_temp, 1, 0);
                 } else if (dp_id == 0x0064) {
                     g_tuya_ac_out_fan_rpm = val32;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Outdoor Fan Speed: %u RPM", dp_id, g_tuya_ac_out_fan_rpm);
+                    MQTT_PublishMain_StringInt("ac_out_fan_rpm", g_tuya_ac_out_fan_rpm, 0);
                 } else if (dp_id == 0x0065) {
                     g_tuya_ac_runtime = val32;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Runtime Counter: %u mins", dp_id, g_tuya_ac_runtime);
+                    MQTT_PublishMain_StringInt("ac_runtime", g_tuya_ac_runtime, 0);
                 } else if (dp_id == 0x00A4) {
                     g_tuya_ac_filter = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Filter Health: %u%%", dp_id, g_tuya_ac_filter);
+                    MQTT_PublishMain_StringInt("ac_filter", g_tuya_ac_filter, 0);
                 } else if (dp_id == 0x00C0) {
                     g_tuya_ac_compressor_hz = val32;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Compressor: %u Hz", dp_id, g_tuya_ac_compressor_hz);
+                    MQTT_PublishMain_StringInt("ac_compressor_hz", g_tuya_ac_compressor_hz, 0);
                 } else if (dp_id == 0x0147) {
                     g_tuya_ac_eight_degree = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Eight Degree Heat: %s", dp_id, g_tuya_ac_eight_degree ? "On" : "Off");
+                    MQTT_PublishMain_StringString("ac_eight_degree", g_tuya_ac_eight_degree ? "On" : "Off", 0);
+                } else if (dp_id == 0x0072) {
+                    g_tuya_ac_in_fan_percent = val32;
+                    ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Indoor Fan Speed: %u%%", dp_id, g_tuya_ac_in_fan_percent);
+                    MQTT_PublishMain_StringInt("ac_in_fan_percent", g_tuya_ac_in_fan_percent, 0);
                 } else {
                     const char *name = "Unknown";
                     switch(dp_id) {
@@ -496,7 +648,6 @@ void TuyaAC_RunEverySecond(void) {
                         case 0x00C9: name = "Regular Reporting"; break;
                         case 0x0074: name = "Internal or Reserved"; break;
                         case 0x0038: name = "Error Code Raw"; break;
-                        case 0x0072: name = "Internal or Reserved"; break;
                         case 0x008C: name = "Max Volume"; break;
                         case 0x0095: name = "Internal or Reserved"; break;
                         case 0x00BE: name = "Outdoor Fan Tarspeed"; break;
