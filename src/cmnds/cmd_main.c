@@ -66,11 +66,14 @@ int g_sleepfactor = 1;
 #elif PLATFORM_XRADIO
 #include "common/framework/net_ctrl.h"
 #include "driver/chip/hal_wakeup.h"
+#include "net/wlan/wlan.h"
 #include "net/wlan/wlan_defs.h"
 #include "net/wlan/wlan_ext_req.h"
 #include "pm/pm.h"
 #if PLATFORM_XR809
 #include "image/flash.h"
+#include "driver/chip/hal_flash.h"
+#include "driver/chip/hal_flashctrl.h"
 #define DEEP_SLEEP PM_MODE_POWEROFF
 #else
 #define DEEP_SLEEP PM_MODE_HIBERNATION
@@ -135,6 +138,7 @@ typedef struct XR809FlashEraseDiag_s {
 	uint32_t addr;
 	uint32_t size;
 	uint32_t delayMs;
+	uint32_t wlanStopMode;
 } XR809FlashEraseDiag_t;
 
 static volatile int g_xr809FlashEraseDiagBusy = 0;
@@ -152,6 +156,25 @@ static void XR809FlashEraseDiag_Task(beken_thread_arg_t arg) {
 	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: task armed, delay %u ms", (unsigned int)diag->delayMs);
 	if (diag->delayMs > 0) {
 		rtos_delay_milliseconds(diag->delayMs);
+	}
+
+	if (diag->wlanStopMode > 0) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: stopping WLAN before erase, mode %u", (unsigned int)diag->wlanStopMode);
+		wlan_sta_disconnect();
+		rtos_delay_milliseconds(500);
+		wlan_sta_disable();
+		wlan_ap_disable();
+		rtos_delay_milliseconds(500);
+		if (diag->wlanStopMode > 1) {
+			ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: calling wlan_stop()");
+			wlan_stop();
+			rtos_delay_milliseconds(1000);
+		}
+		if (diag->wlanStopMode > 2) {
+			ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: calling wlan_sys_deinit()");
+			wlan_sys_deinit();
+			rtos_delay_milliseconds(1000);
+		}
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: task erase start, flash %u, addr 0x%06x (%uK), size 0x%x (%uK)",
@@ -190,6 +213,7 @@ static commandResult_t CMD_XR809FlashEraseDiag(const void* context, const char* 
 	diag->size = 0x1000;
 	diag->delayMs = 3000;
 	diag->flash = 0;
+	diag->wlanStopMode = 0;
 
 	if (Tokenizer_GetArgsCount() > 0) {
 		diag->addr = (uint32_t)Tokenizer_GetArgInteger(0);
@@ -203,6 +227,9 @@ static commandResult_t CMD_XR809FlashEraseDiag(const void* context, const char* 
 	if (Tokenizer_GetArgsCount() > 3) {
 		diag->flash = (uint32_t)Tokenizer_GetArgInteger(3);
 	}
+	if (Tokenizer_GetArgsCount() > 4) {
+		diag->wlanStopMode = (uint32_t)Tokenizer_GetArgInteger(4);
+	}
 
 	if (diag->size == 0) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashEraseDiag: size must be non-zero");
@@ -211,12 +238,13 @@ static commandResult_t CMD_XR809FlashEraseDiag(const void* context, const char* 
 	}
 
 	g_xr809FlashEraseDiagBusy = 1;
-	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: creating task, source flags %i, flash %u, addr 0x%06x, size 0x%x, delay %u ms",
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashEraseDiag: creating task, source flags %i, flash %u, addr 0x%06x, size 0x%x, delay %u ms, wlanStopMode %u",
 		cmdFlags,
 		(unsigned int)diag->flash,
 		(unsigned int)diag->addr,
 		(unsigned int)diag->size,
-		(unsigned int)diag->delayMs);
+		(unsigned int)diag->delayMs,
+		(unsigned int)diag->wlanStopMode);
 
 	err = rtos_create_thread(NULL, BEKEN_APPLICATION_PRIORITY, "XR809EraseDiag", XR809FlashEraseDiag_Task, 2048, diag);
 	if (err != kNoErr) {
@@ -228,6 +256,113 @@ static commandResult_t CMD_XR809FlashEraseDiag(const void* context, const char* 
 
 	return CMD_RES_OK;
 }
+
+typedef struct XR809FlashOpenDiag_s {
+	uint32_t delayMs;
+	uint32_t mode;
+	uint32_t flash;
+} XR809FlashOpenDiag_t;
+
+static volatile int g_xr809FlashOpenDiagBusy = 0;
+
+static void XR809FlashOpenDiag_Task(beken_thread_arg_t arg) {
+	XR809FlashOpenDiag_t *diag = (XR809FlashOpenDiag_t*)arg;
+	HAL_Status status = HAL_OK;
+
+	if (diag == NULL) {
+		g_xr809FlashOpenDiagBusy = 0;
+		vTaskDelete(NULL);
+		return;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: task armed, delay %u ms, mode %u, flash %u",
+		(unsigned int)diag->delayMs,
+		(unsigned int)diag->mode,
+		(unsigned int)diag->flash);
+	if (diag->delayMs > 0) {
+		rtos_delay_milliseconds(diag->delayMs);
+	}
+
+	if (diag->mode == 0) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: HAL_Flashc_Open/Close start");
+		status = HAL_Flashc_Open();
+		if (status == HAL_OK) {
+			status = HAL_Flashc_Close();
+		}
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: HAL_Flashc_Open/Close finished, status %i", status);
+	}
+	else if (diag->mode == 1) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: HAL_Flash_Open/Close start");
+		status = HAL_Flash_Open(diag->flash, 5000);
+		if (status == HAL_OK) {
+			status = HAL_Flash_Close(diag->flash);
+		}
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: HAL_Flash_Open/Close finished, status %i", status);
+	}
+	else if (diag->mode == 2) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: HAL_Flashc_Xip_RawDisable/RawEnable start");
+		HAL_Flashc_Xip_RawDisable();
+		HAL_Flashc_Xip_RawEnable();
+		ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: HAL_Flashc_Xip_RawDisable/RawEnable finished");
+	}
+	else {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashOpenDiag: unknown mode %u", (unsigned int)diag->mode);
+	}
+
+	g_xr809FlashOpenDiagBusy = 0;
+	free(diag);
+	vTaskDelete(NULL);
+}
+
+static commandResult_t CMD_XR809FlashOpenDiag(const void* context, const char* cmd, const char* args, int cmdFlags) {
+	XR809FlashOpenDiag_t *diag;
+	OSStatus err;
+
+	Tokenizer_TokenizeString(args, 0);
+
+	if (g_xr809FlashOpenDiagBusy) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashOpenDiag: already running");
+		return CMD_RES_ERROR;
+	}
+
+	diag = (XR809FlashOpenDiag_t*)malloc(sizeof(XR809FlashOpenDiag_t));
+	if (diag == NULL) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashOpenDiag: malloc failed");
+		return CMD_RES_ERROR;
+	}
+
+	diag->delayMs = 3000;
+	diag->mode = 0;
+	diag->flash = 0;
+
+	if (Tokenizer_GetArgsCount() > 0) {
+		diag->delayMs = (uint32_t)Tokenizer_GetArgInteger(0);
+	}
+	if (Tokenizer_GetArgsCount() > 1) {
+		diag->mode = (uint32_t)Tokenizer_GetArgInteger(1);
+	}
+	if (Tokenizer_GetArgsCount() > 2) {
+		diag->flash = (uint32_t)Tokenizer_GetArgInteger(2);
+	}
+
+	g_xr809FlashOpenDiagBusy = 1;
+	ADDLOG_INFO(LOG_FEATURE_CMD, "XR809FlashOpenDiag: creating task, source flags %i, delay %u ms, mode %u, flash %u",
+		cmdFlags,
+		(unsigned int)diag->delayMs,
+		(unsigned int)diag->mode,
+		(unsigned int)diag->flash);
+
+	err = rtos_create_thread(NULL, BEKEN_APPLICATION_PRIORITY, "XR809OpenDiag", XR809FlashOpenDiag_Task, 2048, diag);
+	if (err != kNoErr) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "XR809FlashOpenDiag: rtos_create_thread failed, err %i", err);
+		g_xr809FlashOpenDiagBusy = 0;
+		free(diag);
+		return CMD_RES_ERROR;
+	}
+
+	return CMD_RES_OK;
+}
+
 #endif
 
 static commandResult_t CMD_PowerSave(const void* context, const char* cmd, const char* args, int cmdFlags) {
@@ -1211,11 +1346,16 @@ void CMD_Init_Early() {
 	//cmddetail:"examples":""}
 	CMD_RegisterCommand("if", CMD_If, NULL);
 #if PLATFORM_XR809
-	//cmddetail:{"name":"XR809FlashEraseDiag","args":"[addr=0xf1000][size=0x1000][delayMs=3000][flash=0]",
-	//cmddetail:"descr":"Diagnostic command for XR809 OTA flash erase testing. Creates a separate task which erases the requested flash region after a delay.",
+	//cmddetail:{"name":"XR809FlashEraseDiag","args":"[addr=0xf1000][size=0x1000][delayMs=3000][flash=0][wlanStopMode=0]",
+	//cmddetail:"descr":"Diagnostic command for XR809 OTA flash erase testing. Creates a separate task which erases the requested flash region after a delay. wlanStopMode 1 disconnects/disables STA/AP, 2 also calls wlan_stop, 3 also calls wlan_sys_deinit.",
 	//cmddetail:"fn":"CMD_XR809FlashEraseDiag","file":"cmnds/cmd_main.c","requires":"PLATFORM_XR809",
-	//cmddetail:"examples":"XR809FlashEraseDiag 0xf1000 0x1000 3000"}
+	//cmddetail:"examples":"XR809FlashEraseDiag 0xf1000 0x1000 3000; XR809FlashEraseDiag 0xf1000 0x1000 3000 0 2"}
 	CMD_RegisterCommand("XR809FlashEraseDiag", CMD_XR809FlashEraseDiag, NULL);
+	//cmddetail:{"name":"XR809FlashOpenDiag","args":"[delayMs=3000][mode=0][flash=0]",
+	//cmddetail:"descr":"Diagnostic command for XR809 flash controller open/XIP-disable testing. Mode 0 calls HAL_Flashc_Open/Close, mode 1 calls HAL_Flash_Open/Close, mode 2 calls HAL_Flashc_Xip_RawDisable/RawEnable.",
+	//cmddetail:"fn":"CMD_XR809FlashOpenDiag","file":"cmnds/cmd_main.c","requires":"PLATFORM_XR809",
+	//cmddetail:"examples":"XR809FlashOpenDiag 3000 0; XR809FlashOpenDiag 3000 2"}
+	CMD_RegisterCommand("XR809FlashOpenDiag", CMD_XR809FlashOpenDiag, NULL);
 #endif
 
 	//cmddetail:{"name":"ota_http","args":"[HTTP_URL]",
