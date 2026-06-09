@@ -29,6 +29,9 @@ typedef struct {
     uint32_t filter;
     uint32_t compressor_hz;
     int eight_degree;
+    
+    uint32_t last_cmd_time;
+    
     uint8_t seq;
 } tuya_ac_state_t;
 
