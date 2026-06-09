@@ -8,6 +8,10 @@
 #include "../../httpserver/new_http.h"
 #include "../../logging/logging.h"
 
+#ifndef MSG_DONTWAIT
+#define MSG_DONTWAIT 0x08
+#endif
+
 uint32_t flash_read(uint32_t flash, uint32_t addr, void* buf, uint32_t size);
 #define FLASH_INDEX_XR809 0
 
@@ -38,7 +42,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	}
 	ota_status_t ota_update_rest_get(uint8_t* buf, uint32_t buf_size, uint32_t* recv_size, uint8_t* eof_flag)
 	{
-		const int max_empty_recv_retries = 2000;
+		const int max_empty_recv_retries = 15000; /* ~30s at 2ms */
 		int empty_recv_retries = 0;
 
 		*recv_size = 0;
@@ -50,7 +54,6 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			if (bsize > 0)
 			{
 				memcpy(buf, writebuf + startaddr, bsize);
-				ADDLOG_DEBUG(LOG_FEATURE_OTA, "Writelen %i at %i (cached body)", bsize, total);
 				startaddr += bsize;
 				*recv_size = bsize;
 				total += bsize;
@@ -77,10 +80,9 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 				return OTA_STATUS_ERROR;
 			}
 
-			writelen = recv(request->fd, buf, want, 0);
+			writelen = recv(request->fd, buf, want, MSG_DONTWAIT);
 			if (writelen > 0)
 			{
-				ADDLOG_DEBUG(LOG_FEATURE_OTA, "Writelen %i at %i (socket)", writelen, total);
 				*recv_size = writelen;
 				total += writelen;
 				towrite -= writelen;
@@ -92,7 +94,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			 * browser is still streaming the POST body. Do not treat the first -1 as EOF.
 			 */
 			empty_recv_retries++;
-			if ((empty_recv_retries == 1) || ((empty_recv_retries % 100) == 0))
+			if ((empty_recv_retries == 1) || ((empty_recv_retries % 1000) == 0))
 			{
 				ADDLOG_DEBUG(LOG_FEATURE_OTA, "recv retry %d, ret %d, remaining %d, want %d",
 					empty_recv_retries, writelen, towrite, want);
@@ -104,7 +106,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 				*eof_flag = 1;
 				return OTA_STATUS_OK;
 			}
-			rtos_delay_milliseconds(5);
+			rtos_delay_milliseconds(2);
 		}
 
 		*eof_flag = 1;
