@@ -536,6 +536,14 @@ void TuyaAC_RunEverySecond(void) {
                     g_tuya_ac_power = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Power: %s", dp_id, g_tuya_ac_power ? "On" : "Off");
                     MQTT_PublishMain_StringString("ac_power", g_tuya_ac_power ? "On" : "Off", 0);
+                    if (!g_tuya_ac_power) {
+                        g_tuya_ac_in_fan_rpm = 0;
+                        g_tuya_ac_in_fan_percent = 0;
+                        g_tuya_ac_out_fan_rpm = 0;
+                        MQTT_PublishMain_StringInt("ac_in_fan_rpm", 0, 0);
+                        MQTT_PublishMain_StringInt("ac_in_fan_percent", 0, 0);
+                        MQTT_PublishMain_StringInt("ac_out_fan_rpm", 0, 0);
+                    }
                 } else if (dp_id == 0x0012) {
                     g_tuya_ac_mode = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] AC Mode: %s", dp_id, get_ac_mode_str(g_tuya_ac_mode));
@@ -601,7 +609,7 @@ void TuyaAC_RunEverySecond(void) {
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Energy/Electricity: %u", dp_id, g_tuya_ac_energy);
                     MQTT_PublishMain_StringInt("ac_energy", g_tuya_ac_energy, 0);
                 } else if (dp_id == 0x005C) {
-                    g_tuya_ac_in_fan_rpm = val32;
+                    g_tuya_ac_in_fan_rpm = g_tuya_ac_power ? val32 : 0;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Indoor Fan Speed: %u RPM", dp_id, g_tuya_ac_in_fan_rpm);
                     MQTT_PublishMain_StringInt("ac_in_fan_rpm", g_tuya_ac_in_fan_rpm, 0);
                 } else if (dp_id == 0x0060) {
@@ -609,7 +617,7 @@ void TuyaAC_RunEverySecond(void) {
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Outdoor Temp: %.1f C", dp_id, g_tuya_ac_out_temp);
                     MQTT_PublishMain_StringFloat("ac_out_temp", g_tuya_ac_out_temp, 1, 0);
                 } else if (dp_id == 0x0064) {
-                    g_tuya_ac_out_fan_rpm = val32;
+                    g_tuya_ac_out_fan_rpm = g_tuya_ac_power ? val32 : 0;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Outdoor Fan Speed: %u RPM", dp_id, g_tuya_ac_out_fan_rpm);
                     MQTT_PublishMain_StringInt("ac_out_fan_rpm", g_tuya_ac_out_fan_rpm, 0);
                 } else if (dp_id == 0x0065) {
@@ -621,7 +629,7 @@ void TuyaAC_RunEverySecond(void) {
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Filter Health: %u%%", dp_id, g_tuya_ac_filter);
                     MQTT_PublishMain_StringInt("ac_filter", g_tuya_ac_filter, 0);
                 } else if (dp_id == 0x00C0) {
-                    g_tuya_ac_compressor_hz = val32;
+                    g_tuya_ac_compressor_hz = g_tuya_ac_power ? val32 : 0;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Compressor: %u Hz", dp_id, g_tuya_ac_compressor_hz);
                     MQTT_PublishMain_StringInt("ac_compressor_hz", g_tuya_ac_compressor_hz, 0);
                 } else if (dp_id == 0x0147) {
@@ -629,7 +637,7 @@ void TuyaAC_RunEverySecond(void) {
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Eight Degree Heat: %s", dp_id, g_tuya_ac_eight_degree ? "On" : "Off");
                     MQTT_PublishMain_StringString("ac_eight_degree", g_tuya_ac_eight_degree ? "On" : "Off", 0);
                 } else if (dp_id == 0x0072) {
-                    g_tuya_ac_in_fan_percent = val32;
+                    g_tuya_ac_in_fan_percent = g_tuya_ac_power ? val32 : 0;
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Indoor Fan Speed: %u%%", dp_id, g_tuya_ac_in_fan_percent);
                     MQTT_PublishMain_StringInt("ac_in_fan_percent", g_tuya_ac_in_fan_percent, 0);
                 } else {
