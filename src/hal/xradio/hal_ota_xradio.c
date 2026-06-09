@@ -18,7 +18,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	char* writebuf = request->bodystart;
 	int writelen = request->bodylen;
 
-	ADDLOG_DEBUG(LOG_FEATURE_OTA, "OTA post len %d", request->contentLength);
+	ADDLOG_DEBUG(LOG_FEATURE_OTA, "OTA post len %d, bodylen %d, rxmax %d", request->contentLength, request->bodylen, request->receivedLenmax);
 
 #if ENABLE_DRIVER_IR || ENABLE_DRIVER_IRREMOTEESP
 	if(DRV_IsRunning("IR")) DRV_StopDriver("IR");
@@ -38,48 +38,75 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	}
 	ota_status_t ota_update_rest_get(uint8_t* buf, uint32_t buf_size, uint32_t* recv_size, uint8_t* eof_flag)
 	{
+		const int max_empty_recv_retries = 2000;
+		int empty_recv_retries = 0;
+
+		*recv_size = 0;
+		*eof_flag = 0;
+
 		if (recvfp)
 		{
-			//free(buf);
-			//recvfp = false;
-			//buf = writebuf;
-			//*recv_size = writelen;
-			//return OTA_STATUS_OK;
-			int bsize = (writelen > buf_size ? buf_size : writelen);
-			memcpy(buf, writebuf + startaddr, bsize);
-			ADDLOG_DEBUG(LOG_FEATURE_OTA, "Writelen %i at %i", bsize, startaddr);
-			startaddr += bsize;
-			*recv_size = bsize;
-			*eof_flag = 0;
-			total += bsize;
-			towrite -= bsize;
-			writelen -= bsize;
-			recvfp = writelen > 0;
-			return OTA_STATUS_OK;
-		}
-		if (towrite > 0)
-		{
-			*recv_size = writelen = recv(request->fd, buf, (request->receivedLenmax > buf_size ? buf_size : request->receivedLenmax), 0);
-			//*recv_size = writelen = recv(request->fd, writebuf, request->receivedLenmax, 0);
-			ADDLOG_DEBUG(LOG_FEATURE_OTA, "Writelen %i at %i", writelen, total);
-			if (writelen < 0)
+			int bsize = (writelen > (int)buf_size ? (int)buf_size : writelen);
+			if (bsize > 0)
 			{
-				ADDLOG_INFO(LOG_FEATURE_OTA, "recv returned %d - end of data - remaining %d", writelen, towrite);
-				*eof_flag = 1;
-				*recv_size = 0;
+				memcpy(buf, writebuf + startaddr, bsize);
+				ADDLOG_DEBUG(LOG_FEATURE_OTA, "Writelen %i at %i (cached body)", bsize, total);
+				startaddr += bsize;
+				*recv_size = bsize;
+				total += bsize;
+				towrite -= bsize;
+				writelen -= bsize;
+				recvfp = writelen > 0;
 				return OTA_STATUS_OK;
-				//return OTA_STATUS_ERROR;
 			}
+			recvfp = false;
 		}
-		total += writelen;
-		towrite -= writelen;
 
-		if ((towrite > 0) && (writelen >= 0))
+		while (towrite > 0)
 		{
-			*eof_flag = 0;
-			rtos_delay_milliseconds(10);
-			return OTA_STATUS_OK;
+			int want = (towrite > (int)buf_size ? (int)buf_size : towrite);
+			if (want > request->receivedLenmax)
+			{
+				want = request->receivedLenmax;
+			}
+			if (want <= 0)
+			{
+				ADDLOG_ERROR(LOG_FEATURE_OTA, "recv want invalid %d, remaining %d, buf_size %u, rxmax %d",
+					want, towrite, buf_size, request->receivedLenmax);
+				*eof_flag = 1;
+				return OTA_STATUS_ERROR;
+			}
+
+			writelen = recv(request->fd, buf, want, 0);
+			if (writelen > 0)
+			{
+				ADDLOG_DEBUG(LOG_FEATURE_OTA, "Writelen %i at %i (socket)", writelen, total);
+				*recv_size = writelen;
+				total += writelen;
+				towrite -= writelen;
+				*eof_flag = (towrite <= 0);
+				return OTA_STATUS_OK;
+			}
+
+			/* On this XRadio HTTP path, recv() can transiently return <= 0 while the
+			 * browser is still streaming the POST body. Do not treat the first -1 as EOF.
+			 */
+			empty_recv_retries++;
+			if ((empty_recv_retries == 1) || ((empty_recv_retries % 100) == 0))
+			{
+				ADDLOG_DEBUG(LOG_FEATURE_OTA, "recv retry %d, ret %d, remaining %d, want %d",
+					empty_recv_retries, writelen, towrite, want);
+			}
+			if (empty_recv_retries >= max_empty_recv_retries)
+			{
+				ADDLOG_INFO(LOG_FEATURE_OTA, "recv gave no data after %d retries, ret %d, remaining %d",
+					empty_recv_retries, writelen, towrite);
+				*eof_flag = 1;
+				return OTA_STATUS_OK;
+			}
+			rtos_delay_milliseconds(5);
 		}
+
 		*eof_flag = 1;
 		return OTA_STATUS_OK;
 	}
