@@ -83,9 +83,9 @@ static driver_t g_drivers[] = {
 #if ENABLE_DRIVER_TUYA_AC
 	{ "TuyaAC",                              // Driver Name
 	TuyaAC_Init,                             // Init
-	NULL,                                    // onEverySecond
+	TuyaAC_RunEverySecond,                   // onEverySecond
 	TuyaAC_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
-	TuyaAC_RunEverySecond,                   // runQuickTick (we use this for UART parsing)
+	TuyaAC_RunFrame,                         // runQuickTick (we use this for UART parsing)
 	NULL,                                    // stopFunction
 	NULL,                                    // onChannelChanged
 	NULL,                                    // onHassDiscovery
