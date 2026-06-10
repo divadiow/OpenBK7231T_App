@@ -42,11 +42,19 @@
 #define DIRTY_COMPRESSOR_HZ  (1UL << 23)
 #define DIRTY_EIGHT_DEGREE   (1UL << 24)
 
+#define DIRTY_INSTANT_ALWAYS 0xFFFFFFFF
+
 static int g_tuya_ac_have_rx_state = 0;
 static int g_tuya_ac_have_published_state = 0;
 static int g_tuya_ac_prev_mqtt_connected = 0;
 static int g_tuya_ac_snapshot_pending = 0;
 static int g_tuya_ac_snapshot_index = 0;
+
+static int g_tuya_ac_mqtt_batch_size = 8;
+static int g_tuya_ac_mqtt_batch_cooldown = 1;
+
+static int g_tuya_ac_snapshot_interval = 120;
+static int g_tuya_ac_snapshot_timer = 0;
 
 // Buffered publish state
 static uint32_t g_tuya_ac_dirty_flags = 0;
@@ -561,13 +569,13 @@ static void TuyaAC_FlushDirtyToMQTT(void) {
     if (!g_tuya_ac_dirty_flags) return;
 
     int p = 0;
-#define FLUSH(f, code) if (g_tuya_ac_dirty_flags & (f)) { code; g_tuya_ac_dirty_flags &= ~(f); if (++p >= 3) { g_tuya_ac_publish_countdown = 0; return; } }
+#define FLUSH(f, code) if (g_tuya_ac_dirty_flags & (f)) { code; g_tuya_ac_dirty_flags &= ~(f); if (++p >= g_tuya_ac_mqtt_batch_size) { g_tuya_ac_publish_countdown = g_tuya_ac_mqtt_batch_cooldown; return; } }
 
     if (g_tuya_ac_dirty_flags & DIRTY_POWER) {
         MQTT_PublishMain_StringString("ac_power", g_tuya_ac.power ? "On" : "Off", 0);
         g_tuya_ac_dirty_flags &= ~DIRTY_POWER;
         g_tuya_ac_dirty_flags |= DIRTY_MODE;
-        if (++p >= 3) { g_tuya_ac_publish_countdown = 0; return; }
+        if (++p >= g_tuya_ac_mqtt_batch_size) { g_tuya_ac_publish_countdown = g_tuya_ac_mqtt_batch_cooldown; return; }
     }
     FLUSH(DIRTY_MODE, MQTT_PublishMain_StringString("ac_mode", g_tuya_ac.power ? get_ac_mode_str(g_tuya_ac.mode) : "off", 0));
 
@@ -575,7 +583,7 @@ static void TuyaAC_FlushDirtyToMQTT(void) {
         MQTT_PublishMain_StringString("ac_mute", g_tuya_ac.mute ? "On" : "Off", 0);
         g_tuya_ac_dirty_flags &= ~DIRTY_MUTE;
         g_tuya_ac_dirty_flags |= DIRTY_FAN;
-        if (++p >= 3) { g_tuya_ac_publish_countdown = 0; return; }
+        if (++p >= g_tuya_ac_mqtt_batch_size) { g_tuya_ac_publish_countdown = g_tuya_ac_mqtt_batch_cooldown; return; }
     }
     FLUSH(DIRTY_FAN, MQTT_PublishMain_StringString("ac_fan", get_ac_fan_mute_str(), 0));
 
@@ -954,10 +962,34 @@ static commandResult_t CMD_TuyaAC_Health(const void* context, const char* cmd, c
     return CMD_RES_OK;
 }
 
+static commandResult_t CMD_TuyaAC_MqttBatch(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    if (Tokenizer_GetArgsCount() >= 1) {
+        g_tuya_ac_mqtt_batch_size = Tokenizer_GetArgInteger(0);
+    }
+    if (Tokenizer_GetArgsCount() >= 2) {
+        g_tuya_ac_mqtt_batch_cooldown = Tokenizer_GetArgInteger(1);
+    }
+    ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "MQTT Batch limits: %d items per %d seconds", g_tuya_ac_mqtt_batch_size, g_tuya_ac_mqtt_batch_cooldown);
+    return CMD_RES_OK;
+}
+
+static commandResult_t CMD_TuyaAC_MqttSnapshotInterval(const void* context, const char* cmd, const char* args, int cmdFlags) {
+    Tokenizer_TokenizeString(args, 0);
+    if (Tokenizer_GetArgsCount() >= 1) {
+        g_tuya_ac_snapshot_interval = Tokenizer_GetArgInteger(0);
+        g_tuya_ac_snapshot_timer = 0;
+    }
+    ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "MQTT Snapshot interval: %d seconds", g_tuya_ac_snapshot_interval);
+    return CMD_RES_OK;
+}
+
 void TuyaAC_Init(void) {
     UART_InitReceiveRingBuffer(TUYA_AC_RX_BUFFER_SIZE);
     UART_InitUART(TUYA_AC_BAUDRATE, 0, false); // Initialize UART without TX queue/buffers perhaps? port 0? parity 0!
 
+    CMD_RegisterCommand("ACMqttSnapshotInterval", CMD_TuyaAC_MqttSnapshotInterval, NULL);
+    CMD_RegisterCommand("ACMqttBatch", CMD_TuyaAC_MqttBatch, NULL);
     CMD_RegisterCommand("ACMode", CMD_TuyaAC_Mode, NULL);
     CMD_RegisterCommand("FANMode", CMD_TuyaAC_Fan, NULL);
     CMD_RegisterCommand("TargetTemperature", CMD_TuyaAC_TargetTemp, NULL);
@@ -1024,6 +1056,16 @@ void TuyaAC_RunEverySecond(void) {
         g_tuya_ac_have_published_state = 1;
     }
     g_tuya_ac_prev_mqtt_connected = mqtt_connected;
+
+    if (mqtt_connected) {
+        g_tuya_ac_snapshot_timer++;
+        if (g_tuya_ac_snapshot_interval > 0 && g_tuya_ac_snapshot_timer >= g_tuya_ac_snapshot_interval) {
+            g_tuya_ac_snapshot_timer = 0;
+            if (!g_tuya_ac_snapshot_pending && g_tuya_ac_have_rx_state) {
+                TuyaAC_RequestSnapshotPublish();
+            }
+        }
+    }
 
     if (mqtt_connected && g_tuya_ac_snapshot_pending) {
         for (int i = 0; i < 1; i++) {
@@ -1369,7 +1411,7 @@ void TuyaAC_RunFrame(void) {
                 idx += dp_len;
             }
 
-            uint32_t active_instant_flushed = g_tuya_ac_dirty_flags & g_tuya_ac_instant_publish_mask;
+            uint32_t active_instant_flushed = g_tuya_ac_dirty_flags & (g_tuya_ac_instant_publish_mask | DIRTY_INSTANT_ALWAYS);
             if (active_instant_flushed) {
                 TuyaAC_FlushDirtyToMQTT();
                 g_tuya_ac_instant_publish_mask &= ~active_instant_flushed;
