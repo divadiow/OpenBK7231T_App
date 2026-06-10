@@ -1287,8 +1287,8 @@ void TuyaAC_RunFrame(void) {
                         g_tuya_ac_dirty_flags |= DIRTY_OUT_FAN_RPM;
                     }
                 } else if (dp_id == 0x0065) {
-                    uint32_t new_run = val32;
-                    ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Runtime Counter: %u mins", dp_id, new_run);
+                    uint32_t new_run = 100 - val32;
+                    ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Compressor Frequency: %u mins", dp_id, new_run);
                     if (g_tuya_ac.runtime != new_run || g_tuya_ac.seq <= 2) {
                         g_tuya_ac.runtime = new_run;
                         g_tuya_ac_dirty_flags |= DIRTY_RUNTIME;
