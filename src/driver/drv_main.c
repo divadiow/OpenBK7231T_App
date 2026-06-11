@@ -1257,8 +1257,8 @@ static driver_t g_drivers[] = {
 #endif
 #if ENABLE_DRIVER_AHT2X
 	//drvdetail:{"name":"AHT2X",
-	//drvdetail:"title":"TODO",
-	//drvdetail:"descr":"AHT Humidity/temperature sensor. Supported sensors are: AHT10, AHT2X, AHT30. See [presentation guide](https://www.elektroda.com/rtvforum/topic4052685.html)",
+	//drvdetail:"title":"AHTXX / AHT2X",
+	//drvdetail:"descr":"AHT-family humidity/temperature sensor driver. AHT2X is the legacy canonical driver name; startDriver AHTXX is accepted as an alias. Supports selectable/automatic AHT1X, AHT2X and AHT3X-compatible profiles while keeping AHT2X commands and channel/MQTT behaviour compatible. Exact model auto-detection is not guaranteed because AHT-family parts share address/output formats and do not expose a reliable part-ID register. See [presentation guide](https://www.elektroda.com/rtvforum/topic4052685.html)",
 	//drvdetail:"requires":""}
 	{ "AHT2X",                               // Driver Name
 	AHT2X_Init,                              // Init
@@ -1528,8 +1528,19 @@ static driver_t g_drivers[] = {
 
 static const int g_numDrivers = sizeof(g_drivers) / sizeof(g_drivers[0]);
 
+static const char *DRV_NormalizeDriverName(const char *name) {
+#if ENABLE_DRIVER_AHT2X
+	/* AHTXX is the preferred family name; AHT2X remains the canonical loaded driver for OTA/backward compatibility. */
+	if(!stricmp(name, "AHTXX")) {
+		return "AHT2X";
+	}
+#endif
+	return name;
+}
+
 bool DRV_IsRunning(const char* name) {
 	int i;
+	name = DRV_NormalizeDriverName(name);
 
 	for (i = 0; i < g_numDrivers; i++) {
 		if (g_drivers[i].bLoaded) {
@@ -1619,6 +1630,7 @@ void DRV_ShutdownAllDrivers() {
 }
 void DRV_StopDriver(const char* name) {
 	int i;
+	name = DRV_NormalizeDriverName(name);
 
 	if (DRV_Mutex_Take(100) == false) {
 		return;
@@ -1644,6 +1656,7 @@ void DRV_StopDriver(const char* name) {
 void DRV_StartDriver(const char* name) {
 	int i;
 	int bStarted;
+	name = DRV_NormalizeDriverName(name);
 
 	if (DRV_Mutex_Take(100) == false) {
 		return;
