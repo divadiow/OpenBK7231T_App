@@ -1258,7 +1258,7 @@ static driver_t g_drivers[] = {
 #if ENABLE_DRIVER_AHT2X
 	//drvdetail:{"name":"AHT2X",
 	//drvdetail:"title":"TODO",
-	//drvdetail:"descr":"AHT-family humidity/temperature sensor. Legacy driver name is AHT2X; supports AHT1x and AHT2x/AHT3x-compatible command paths. Exact model auto-identification is not available. See [presentation guide](https://www.elektroda.com/rtvforum/topic4052685.html)",
+	//drvdetail:"descr":"AHT-family humidity/temperature sensor. Driver name and commands remain AHT2X; supports AHT1x init fallback and the AHT2x-compatible measurement path used by AHT2x/AHT3x-class modules. Exact model auto-identification is not available. See [presentation guide](https://www.elektroda.com/rtvforum/topic4052685.html)",
 	//drvdetail:"requires":""}
 	{ "AHT2X",                               // Driver Name
 	AHT2X_Init,                              // Init

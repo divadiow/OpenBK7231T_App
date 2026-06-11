@@ -14,7 +14,7 @@ static float g_temp = 0.0, g_humid = 0.0, g_calTemp = 0.0, g_calHum = 0.0;
 static softI2C_t g_softI2C;
 static bool isWorking = false;
 static bool g_crcSupported = false;
-static byte g_crcMode = AHT2X_CRC_MODE_AUTO;
+static byte g_crcMode = AHT2X_CRC_MODE_OFF;
 static uint8_t g_lastStatus = 0;
 
 static bool AHT2X_IsReadyAndCalibrated(uint8_t status)
@@ -143,8 +143,9 @@ static bool AHT2X_ValidateCrcIfPresent(const uint8_t *data)
 
 	/*
 	 * Some AHT1x/AHT2x modules expose only the six measurement bytes described
-	 * by older datasheets/libraries.  In automatic mode, a non-matching seventh
-	 * byte is treated as "CRC not present" rather than as a sensor fault.
+	 * by older datasheets/libraries.  When CRC auto mode is explicitly enabled,
+	 * a non-matching seventh byte is treated as "CRC not present" rather than as
+	 * a sensor fault.
 	 */
 	return true;
 }
@@ -194,9 +195,9 @@ void AHT2X_Initialization()
 
 	/*
 	 * Keep the original AHT2X/AHT20-style init first for OTA compatibility.
-	 * AHT20/AHT21/AHT30-compatible parts use/tolerate 0xBE 0x08 0x00, while
-	 * AHT10/AHT15 datasheets document 0xE1 0x08 0x00.  Falling back to 0xE1
-	 * fixes stricter AHT1x parts without changing existing AHT2X behaviour.
+	 * AHT20/AHT21-style datasheets document 0xBE 0x08 0x00; AHT10/AHT15
+	 * datasheets document 0xE1 0x08 0x00.  Falling back to 0xE1 fixes
+	 * stricter AHT1x parts without changing existing AHT2X start commands.
 	 */
 	if(AHT2X_TryInitializationCommand(AHT2X_CMD_INI, "AHT2X-compatible"))
 	{
@@ -397,9 +398,9 @@ void AHT2X_Init()
 	//cmddetail:"examples":"AHT2X_Cycle 60 <br /> measurement is taken every 60 seconds"}
 	CMD_RegisterCommand("AHT2X_Cycle", AHT2X_Cycle, NULL);
 	//cmddetail:{"name":"AHT2X_CRC","args":"[0/1/2]",
-	//cmddetail:"descr":"Set AHT CRC handling. 0 = off, 1 = automatic when a valid CRC byte is detected, 2 = require CRC validation.",
+	//cmddetail:"descr":"Set AHT CRC handling. 0 = off/legacy six-byte read (default), 1 = automatic when a valid CRC byte is detected, 2 = require CRC validation.",
 	//cmddetail:"fn":"AHT2X_CRC","file":"driver/drv_aht2x.c","requires":"",
-	//cmddetail:"examples":"AHT2X_CRC 2 <br /> require valid CRC for each measurement"}
+	//cmddetail:"examples":"AHT2X_CRC 1 <br /> enable automatic CRC validation where the sensor provides a valid CRC byte"}
 	CMD_RegisterCommand("AHT2X_CRC", AHT2X_CRC, NULL);
 	//cmddetail:{"name":"AHT2X_Measure","args":"",
 	//cmddetail:"descr":"Retrieve OneShot measurement.",
