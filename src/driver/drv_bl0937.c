@@ -8,6 +8,7 @@
 
 //dummy
 #include <math.h>
+#include <float.h>
 
 #include "../cmnds/cmd_public.h"
 #include "../hal/hal_pins.h"
@@ -39,6 +40,19 @@ float last_p = 0.0f;
 volatile uint32_t g_vc_pulses = 0;
 volatile uint32_t g_p_pulses = 0;
 static portTickType pulseStamp;
+
+// BL0937 is pulse/timing based. Reject obviously invalid sample windows
+// instead of letting zero/short tick deltas create inf or large spikes.
+#define BL0937_MIN_SAMPLE_MS 750
+
+static int g_bl0937_skipNextSample = 1;
+static int g_bl0937_badTimingLogCount = 0;
+static int g_bl0937_nonFiniteLogCount = 0;
+
+static int BL0937_IsFiniteFloat(float value)
+{
+	return !isnan(value) && value <= FLT_MAX && value >= -FLT_MAX;
+}
 
 
 void HlwCf1Interrupt(int pinNum)
@@ -113,6 +127,7 @@ void BL0937_Init_Pins()
 	g_vc_pulses = 0;
 	g_p_pulses = 0;
 	pulseStamp = xTaskGetTickCount();
+	g_bl0937_skipNextSample = 1;
 }
 
 void BL0937_Init(void)
@@ -189,6 +204,20 @@ void BL0937_RunEverySecond(void)
 
 
 #endif
+	if(g_bl0937_skipNextSample)
+	{
+		g_bl0937_skipNextSample = 0;
+		g_vc_pulses = 0;
+		g_p_pulses = 0;
+#if PLATFORM_BEKEN
+		GLOBAL_INT_RESTORE();
+#else
+
+#endif
+		pulseStamp = xTaskGetTickCount();
+		return;
+	}
+
 	if(g_sel)
 	{
 		if(g_invertSEL)
@@ -228,6 +257,17 @@ void BL0937_RunEverySecond(void)
 	pulseStamp = xPassedTicks;
 	//addLogAdv(LOG_INFO, LOG_FEATURE_ENERGYMETER,"Voltage pulses %i, current %i, power %i", res_v, res_c, res_p);
 
+	if(ticksElapsed == 0 || ((uint32_t)ticksElapsed * (uint32_t)portTICK_PERIOD_MS) < BL0937_MIN_SAMPLE_MS)
+	{
+		if(g_bl0937_badTimingLogCount < 5)
+		{
+			ADDLOG_WARN(LOG_FEATURE_ENERGYMETER, "BL0937: invalid sample window, ticks=%u, ms=%u, skipping",
+				(unsigned int)ticksElapsed, (unsigned int)((uint32_t)ticksElapsed * (uint32_t)portTICK_PERIOD_MS));
+			g_bl0937_badTimingLogCount++;
+		}
+		return;
+	}
+
 	PwrCal_Scale(res_v, res_c, res_p, &final_v, &final_c, &final_p);
 
 	final_v *= (1000.0f / (float)portTICK_PERIOD_MS);
@@ -238,6 +278,16 @@ void BL0937_RunEverySecond(void)
 
 	final_p *= (1000.0f / (float)portTICK_PERIOD_MS);
 	final_p /= (float)ticksElapsed;
+
+	if(!BL0937_IsFiniteFloat(final_v) || !BL0937_IsFiniteFloat(final_c) || !BL0937_IsFiniteFloat(final_p))
+	{
+		if(g_bl0937_nonFiniteLogCount < 5)
+		{
+			ADDLOG_WARN(LOG_FEATURE_ENERGYMETER, "BL0937: non-finite sample, skipping");
+			g_bl0937_nonFiniteLogCount++;
+		}
+		return;
+	}
 
 	/* patch to limit max power reading, filter random reading errors */
 	if(final_p > BL0937_PMAX)
