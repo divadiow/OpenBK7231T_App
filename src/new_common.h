@@ -1086,6 +1086,17 @@ OSStatus rtos_suspend_thread(beken_thread_t* thread);
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+
+/*
+ * The Opulinks SDK ships lwIP 2.0.3. When building with GCC/newlib,
+ * newlib already provides struct timeval via sys/_timeval.h. Tell lwIP
+ * not to provide its private timeval, otherwise OBK sources that include
+ * lwip/sockets.h fail with a duplicate struct definition.
+ */
+#ifndef LWIP_TIMEVAL_PRIVATE
+#define LWIP_TIMEVAL_PRIVATE 0
+#endif
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
@@ -1104,6 +1115,17 @@ typedef unsigned int UINT32;
 #define os_malloc malloc
 #define os_free free
 #define os_realloc realloc
+
+#ifndef portTICK_PERIOD_MS
+#define portTICK_PERIOD_MS (1000 / configTICK_RATE_HZ)
+#endif
+#ifndef portTICK_RATE_MS
+#define portTICK_RATE_MS portTICK_PERIOD_MS
+#endif
+#ifndef portTickType
+#define portTickType TickType_t
+#endif
+
 #define rtos_delay_milliseconds(x) vTaskDelay((x) / portTICK_PERIOD_MS)
 #define delay_ms(x) vTaskDelay((x) / portTICK_PERIOD_MS)
 #define lwip_close_force(x) lwip_close(x)

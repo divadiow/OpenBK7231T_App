@@ -102,6 +102,7 @@ DEFS  += -DnoLWIP_DYNAMIC_DEBUG_ENABLE
 DEFS  += -D__AT_CMD_TASK__
 DEFS  += -D__noRTL_SIMULATION__
 DEFS  += -D_ARMABI_PURE=
+DEFS  += -DLWIP_TIMEVAL_PRIVATE=0
 DEFS  += -DOPENOPL1000_WIFI_SSID=\"test\"
 DEFS  += -DOPENOPL1000_WIFI_PASSWORD=\"1234abcd\"
 
@@ -117,13 +118,32 @@ INCLUDES += -I $(APS_PATCH_ROOT)/FreeRtos/Source/include
 INCLUDES += -I $(APS_PATCH_ROOT)/FreeRtos/Source/portable/GCC/ARM_CM3
 INCLUDES += -I $(APS_ROOT)/driver/CMSIS/Include
 INCLUDES += -I $(APS_ROOT)/driver/CMSIS/Device/opl1000/Include
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3
 INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3/lwip/src/include
 INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/include
 INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/netif
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3
 INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3/lwip/src/include
 INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/include
 INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/netif
-INCLUDES += $(shell find "$(APS_PATCH_ROOT)" "$(APS_ROOT)" -type d \
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/httpclient
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/httpclient
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/wpa_supplicant-0.7.3
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src/rsn_supp
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src/drivers
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src/utils
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/wpa_supplicant
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/wpa_supplicant-0.7.3
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src/rsn_supp
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src/drivers
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/src/utils
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/wpa_supplicant-0.7.3/wpa_supplicant
+INCLUDES += $(shell find \
+    "$(APS_PATCH_ROOT)/apps" "$(APS_PATCH_ROOT)/driver" "$(APS_PATCH_ROOT)/middleware/netlink" "$(APS_PATCH_ROOT)/project" \
+    "$(APS_ROOT)/apps" "$(APS_ROOT)/driver" "$(APS_ROOT)/middleware/netlink" "$(APS_ROOT)/project" \
+    -type d \
     ! -path "*/.git*" \
     ! -path "*/FreeRtos/Source/portable/Keil*" \
     ! -path "*/FreeRtos/Source/portable/RVDS*" \
