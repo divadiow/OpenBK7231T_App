@@ -139,7 +139,7 @@ sdk/OpenLN8825/project/OpenBeken/app:
 	ln -s "$(shell pwd)/" "sdk/OpenLN8825/project/OpenBeken/app"
 
 .PHONY: prebuild_OpenBK7231N prebuild_OpenBK7231T prebuild_OpenBL602 prebuild_OpenLN882H prebuild_OpenLN8825 
-.PHONY: prebuild_OpenW600 prebuild_OpenW800 prebuild_OpenXR809 prebuild_OpenXR806 prebuild_OpenXR806_DCDC prebuild_OpenXR872 prebuild_ESPIDF prebuild_OpenTR6260
+.PHONY: prebuild_OpenW600 prebuild_OpenW800 prebuild_OpenXR809 prebuild_OpenXR806 prebuild_OpenXR806_DCDC prebuild_OpenXR872 prebuild_ESPIDF prebuild_OpenTR6260 prebuild_OpenOPL1000
 .PHONY: prebuild_OpenRTL87X0C prebuild_OpenBK7238 prebuild_OpenBK7231N_ALT prebuild_OpenBK7231U
 .PHONY: prebuild_OpenBK7231N_ALT prebuild_OpenBK7231T_ALT prebuild_OpenBK7252
 
@@ -262,6 +262,14 @@ prebuild_OpenTR6260: berry
 		echo "prebuild found for OpenTR6260"; \
 		sh platforms/TR6260/pre_build.sh; \
 	else echo "prebuild for OpenTR6260 not found ... "; \
+	fi
+
+prebuild_OpenOPL1000:
+	@if git config --file .gitmodules --get-regexp '^submodule\.sdk/OpenOPL1000\.path$$' >/dev/null 2>&1; then \
+		git submodule update --init --recursive --depth=1 sdk/OpenOPL1000; \
+	elif [ ! -d sdk/OpenOPL1000 ]; then \
+		echo "Missing sdk/OpenOPL1000. Add the OPL1000 A2 SDK as a submodule at sdk/OpenOPL1000."; \
+		exit 1; \
 	fi
 
 prebuild_OpenRTL87X0C: berry
@@ -636,6 +644,10 @@ OpenESP8266: prebuild_ESP8266
 	cd platforms/ESP8266/ && idf.py partition_table
 	esptool.py -c esp8266 merge-bin -o output/$(APP_VERSION)/OpenESP8266_1MB_$(APP_VERSION).factory.bin --flash-mode dout --flash-size 1MB 0x0 ./platforms/ESP8266/build/bootloader/bootloader.bin 0x8000 ./platforms/ESP8266/build/partition_table/partition-table.bin 0x10000 ./platforms/ESP8266/build/OpenBeken.bin
 	
+.PHONY: OpenOPL1000
+OpenOPL1000: prebuild_OpenOPL1000
+	$(MAKE) -C platforms/OPL1000 SDK_ROOT=$(PWD)/sdk/OpenOPL1000 APP_NAME=OpenOPL1000 APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) -j $(shell nproc)
+
 .PHONY: OpenTR6260
 OpenTR6260: prebuild_OpenTR6260
 	if [ ! -e sdk/OpenTR6260/toolchain/nds32le-elf-mculib-v3 ]; then cd sdk/OpenTR6260/toolchain && xz -d < nds32le-elf-mculib-v3.txz | tar xvf - > /dev/null; fi
@@ -843,6 +855,7 @@ clean:
 	-test -d ./sdk/OpenW800 && $(MAKE) -C sdk/OpenW800 clean
 	-test -d ./sdk/OpenW600 && $(MAKE) -C sdk/OpenW600 clean
 	-test -d ./sdk/OpenTR6260 && $(MAKE) -C sdk/OpenTR6260/scripts tr6260s1_clean
+	-test -d ./platforms/OPL1000/build && $(MAKE) -C platforms/OPL1000 clean
 	-test -d ./sdk/OpenRTL87X0C && $(MAKE) -C sdk/OpenRTL87X0C/project/OpenBeken/GCC-RELEASE clean
 	-test -d ./sdk/OpenRTL8710A_B && $(MAKE) -C sdk/OpenRTL8710A_B/project/obk_amebaz/GCC-RELEASE clean
 	-test -d ./sdk/OpenRTL8710A_B && $(MAKE) -C sdk/OpenRTL8710A_B/project/obk_ameba1/GCC-RELEASE clean

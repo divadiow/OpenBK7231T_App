@@ -93,3 +93,6 @@
 	path = sdk/OpenGD32VW553
 	url = https://github.com/NonPIayerCharacter/OpenGD32VW553
 	branch = main
+[submodule "sdk/OpenOPL1000"]
+	path = sdk/OpenOPL1000
+	url = https://github.com/divadiow/OpenOPL1000
