@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "../hal_ota.h"
+#include "../../httpserver/new_http.h"
+#include "../../logging/logging.h"
 
 void otarequest(const char *urlin)
 {
@@ -20,3 +22,12 @@ int HAL_FlashRead(char *buffer, int readlen, int startaddr)
 }
 
 #endif
+
+int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
+{
+    (void)request;
+    (void)startaddr;
+    (void)maxaddr;
+    ADDLOG_ERROR(LOG_FEATURE_OTA, "[OpenOPL1000] OTA flash write is not implemented yet");
+    return -1;
+}

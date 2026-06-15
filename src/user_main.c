@@ -1355,8 +1355,12 @@ void Main_Init_BeforeDelay_Unsafe(bool bAutoRunScripts) {
 	PIN_SetGenericDoubleClickCallback(app_on_generic_dbl_click);
 	ADDLOGF_DEBUG("Initialised other callbacks");
 
-	// initialise rest interface
+	// initialise REST interface. OPL1000 patch RAM is very tight; keep first real port
+	// on the classic OBK HTTP pages/command endpoint and do not pull in the
+	// larger REST/webapp interface yet.
+#if !OBK_OPL1000_MINIMAL_WEB
 	init_rest();
+#endif
 
 	// add some commands...
 	taslike_commands_init();

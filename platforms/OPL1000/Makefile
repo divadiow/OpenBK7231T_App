@@ -29,7 +29,7 @@ APS_ROOT       := $(SDK_ROOT)/SDK/APS
 APS_PATCH_ROOT := $(SDK_ROOT)/SDK/APS_PATCH
 LINK_SCRIPT    := $(APS_ROOT)/project/opl1000/link.ld
 SYMDEFS        := $(APS_ROOT)/targets/opl1000/object/symdefs_gcc.o
-PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3.a
+PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3_lite.a
 M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
 OTA_LOADER     := $(SDK_ROOT)/FW_Pack/opl1000_ota_loader.bin
 
@@ -153,6 +153,8 @@ INCLUDES += $(shell find \
 CFLAGS  := -mthumb -mcpu=cortex-m3 -mlittle-endian
 CFLAGS  += -std=gnu99 -Os
 CFLAGS  += -ffunction-sections -fdata-sections
+CFLAGS  += -flto -fuse-linker-plugin -fno-fat-lto-objects
+CFLAGS  += -fno-unwind-tables -fno-asynchronous-unwind-tables
 CFLAGS  += -fno-builtin -fno-common -fmessage-length=0
 CFLAGS  += -nostartfiles -no-pie -specs=nosys.specs -ffreestanding
 CFLAGS  += -include sys_common.h
@@ -165,6 +167,8 @@ CFLAGS  += $(DEFS) $(INCLUDES)
 LDFLAGS := -mthumb -mcpu=cortex-m3 -mlittle-endian
 LDFLAGS += -T $(LINK_SCRIPT)
 LDFLAGS += -Wl,--gc-sections
+LDFLAGS += -flto -fuse-linker-plugin
+LDFLAGS += -Wl,--print-memory-usage
 LDFLAGS += -Wl,--entry=__Patch_EntryPoint
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(OUTPUT_BASENAME).map
 LDFLAGS += -Xlinker --just-symbols=$(SYMDEFS)

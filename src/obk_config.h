@@ -89,7 +89,7 @@
 #define NO_CHIP_TEMPERATURE                     1
 #define NEW_TCP_SERVER                          1
 #define ENABLE_EXPAND_CONSTANT                  1
-#define ENABLE_TASMOTA_JSON                     1
+#define OBK_OPL1000_MINIMAL_WEB                1
 #define OBK_DISABLE_ALL_DRIVERS                 1
 #undef ENABLE_LED_BASIC
 #undef ENABLE_HTTP_MAC
