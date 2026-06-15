@@ -1,8 +1,8 @@
-# OpenOPL1000 first-stage bring-up firmware for the Opulinks OPL1000 A2 SDK.
+# OpenOPL1000 SDK-native web-home firmware for the Opulinks OPL1000 A2 SDK.
 #
-# This intentionally builds a small SDK-native station image first, rather than
-# pretending the full OpenBeken HAL exists for OPL1000 yet.  It proves that the
-# GitHub workflow, SDK submodule and RF/STA path are usable.
+# This is still a staging target rather than the full upstream OpenBeken HAL,
+# but it now proves STA Wi-Fi, DHCP, TCP sockets, HTTP routing and a release-style
+# OpenOPL1000 home page with OBK-compatible command endpoints.
 
 APP_NAME ?= OpenOPL1000
 APP_VERSION ?= dev
@@ -32,7 +32,7 @@ PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3.a
 M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
 OTA_LOADER     := $(SDK_ROOT)/FW_Pack/opl1000_ota_loader.bin
 
-SOURCES := main_patch.c openopl1000_wifi_sta.c openopl1000_http_server.c
+SOURCES := main_patch.c openopl1000_wifi_sta.c openopl1000_http_server.c openopl1000_console.c
 OBJECTS := $(addprefix $(BUILD_DIR)/,$(SOURCES:.c=.o))
 
 DEFS  := -DGCC

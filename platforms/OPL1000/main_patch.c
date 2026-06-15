@@ -159,6 +159,6 @@ static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx)
 static void Main_AppInit_patch(void)
 {
     Hal_DbgUart_RxIntEn(1);
-    printf("\r\n[OpenOPL1000] OpenOPL1000 first-stage build\r\n");
+    printf("\r\n[OpenOPL1000] OpenOPL1000 web home build\r\n");
     OpenOPL1000_WifiStaInit();
 }

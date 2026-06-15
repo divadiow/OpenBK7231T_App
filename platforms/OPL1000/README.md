@@ -1,37 +1,88 @@
-# OpenOPL1000 first-stage target
+# OpenOPL1000
 
-This is an early Opulinks OPL1000 A2 bring-up target for OpenBeken.
+First-stage OpenOPL1000 target for the Opulinks OPL1000 A2 SDK.
 
-It does not implement the full OpenBeken platform HAL yet. It builds a small
-SDK-native M3 patch image named `OpenOPL1000` and uses the Opulinks station API
-to connect to this fixed test AP:
+This target is still SDK-native rather than the full upstream OpenBeken runtime, but it now gives the device a proper OpenOPL1000 home page instead of just a proof/debug page.
 
-- SSID: `test`
-- Password: `1234abcd`
+## SDK layout
 
-After DHCP succeeds, it starts a minimal HTTP server on TCP port 80. Browse to
-the IP address printed by the UART log or shown by your router DHCP lease table.
-The served page is only a TCP/IP proof page; it is not the OpenBeken web UI yet.
-
-The OPL1000 SDK must be present as a submodule or directory at:
+The build expects the A2 SDK submodule at:
 
 ```text
 sdk/OpenOPL1000
 ```
 
-The expected SDK is the OPL1000 A2 SDK matching `MP_2.21.004` / `Patch_Lib 5753`.
-A later private repo can be wired in with a normal submodule entry, for example:
+The submodule root must contain the SDK root, not only `SDK/APS_PATCH`:
 
-```ini
-[submodule "sdk/OpenOPL1000"]
-	path = sdk/OpenOPL1000
-	url = https://github.com/<owner>/OpenOPL1000.git
+```text
+sdk/OpenOPL1000/
+├─ Demo/
+├─ FW_Pack/
+└─ SDK/
+   ├─ APS/
+   └─ APS_PATCH/
 ```
 
-Build from the repository root with:
+## Wi-Fi
 
-```sh
-make OpenOPL1000
+This stage remains STA-only because the OPL1000 A2 SDK does not expose SoftAP support.
+
+Default credentials are hardcoded at build time from `platforms/OPL1000/Makefile`:
+
+```text
+SSID: test
+Password: 1234abcd
 ```
 
-GitHub Actions uses `arm-none-eabi-gcc` release `8-2019-q3` for this target.
+## Web routes
+
+After DHCP, browse to the assigned IP address.
+
+Implemented routes:
+
+```text
+/
+/index
+/index.html
+/cfg
+/cfg_wifi
+/cfg_pins
+/logs
+/ota
+/about
+/cmd?cmnd=status
+/cm?cmnd=status
+/api/cmd?cmnd=status
+/api/status
+/status.json
+```
+
+The main page intentionally looks and routes more like a normal OpenBeken/OpenOPL1000 device page, but the deferred areas are clearly marked as not wired yet.
+
+## Current scope
+
+Working in this stage:
+
+```text
+STA Wi-Fi
+DHCP
+TCP listen socket
+HTTP page routing
+OpenOPL1000 home page
+/cm?cmnd= command endpoint
+JSON status
+Wi-Fi scan/reconnect commands
+basic GPIO diagnostics
+```
+
+Deferred until later:
+
+```text
+persistent flash config
+pin role configuration
+PWM/channel model
+MQTT
+OTA web update handler
+full OpenBeken command registry
+full OBK runtime loop
+```
