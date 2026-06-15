@@ -166,6 +166,12 @@ typedef long BaseType_t;
 #endif
 #define DEVICENAME_PREFIX_FULL "Open" PLATFORM_MCU_NAME
 #define DEF_MQTT_GROUP "esp"
+#elif PLATFORM_OPL1000
+#define DEVICENAME_PREFIX_FULL "OpenOPL1000"
+#define DEVICENAME_PREFIX_SHORT "opl1000"
+#define PLATFORM_MCU_NAME "OPL1000"
+#define MANUFACTURER "Opulinks"
+#define DEF_MQTT_GROUP "opl1000s"
 #elif PLATFORM_TR6260
 #define DEVICENAME_PREFIX_FULL "OpenTR6260"
 #define DEVICENAME_PREFIX_SHORT "tr6260"
@@ -285,6 +291,8 @@ This platform is not supported, error!
 #define USER_SW_VER "LN8825_Test"
 #elif defined(PLATFORM_ESPIDF)
 #define USER_SW_VER PLATFORM_MCU_NAME "_Test"
+#elif defined(PLATFORM_OPL1000)
+#define USER_SW_VER "OPL1000_Test"
 #elif defined(PLATFORM_TR6260)
 #define USER_SW_VER "TR6260_Test"
 #elif defined(PLATFORM_RTL87X0C)
@@ -450,7 +458,7 @@ typedef int (*beken_thread_function_t)(void *p);
 
 #define kNoErr                      0       //! No error occurred.
 typedef void *beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)( beken_thread_arg_t arg );
 typedef int OSStatus;
 
@@ -607,7 +615,7 @@ OSStatus rtos_suspend_thread(beken_thread_t* thread);
 #define kNoErr                      0       //! No error occurred.
 #define rtos_delay_milliseconds OS_MsDelay
 typedef void *beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)( beken_thread_arg_t arg );
 typedef int OSStatus;
 
@@ -723,7 +731,7 @@ typedef unsigned int UINT32;
 
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -828,7 +836,7 @@ extern u32 pwmout_pin2chan(PinName pin);
 
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -885,7 +893,7 @@ extern void sys_delay_ms(uint32_t ms);
 #define lwip_close_force(x) lwip_close(x)
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -1050,7 +1058,7 @@ typedef unsigned int UINT32;
 #define lwip_close_force(x) lwip_close(x)
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -1071,6 +1079,54 @@ OSStatus rtos_suspend_thread(beken_thread_t* thread);
 //#define GLOBAL_INT_RESTORE()		;
 
 #define OBK_OTA_EXTENSION ".bin.xz.ota"
+
+#elif PLATFORM_OPL1000
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+#include "queue.h"
+#include "event_groups.h"
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include "lwip/netdb.h"
+#include "lwip/dns.h"
+
+typedef unsigned int UINT32;
+
+#define ASSERT
+#define bk_printf printf
+#define os_malloc malloc
+#define os_free free
+#define os_realloc realloc
+#define rtos_delay_milliseconds(x) vTaskDelay((x) / portTICK_PERIOD_MS)
+#define delay_ms(x) vTaskDelay((x) / portTICK_PERIOD_MS)
+#define lwip_close_force(x) lwip_close(x)
+#define kNoErr 0
+typedef void* beken_thread_arg_t;
+typedef TaskHandle_t beken_thread_t;
+typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
+typedef int OSStatus;
+
+#define BEKEN_DEFAULT_WORKER_PRIORITY (6)
+#define BEKEN_APPLICATION_PRIORITY (7)
+
+OSStatus rtos_delete_thread(beken_thread_t* thread);
+OSStatus rtos_create_thread(beken_thread_t* thread,
+	uint8_t priority, const char* name,
+	beken_thread_function_t function,
+	uint32_t stack_size, beken_thread_arg_t arg);
+OSStatus rtos_suspend_thread(beken_thread_t* thread);
+
+#define GLOBAL_INT_DECLARATION() ;
+#define GLOBAL_INT_DISABLE() ;
+#define GLOBAL_INT_RESTORE() ;
+#define OBK_OTA_EXTENSION ".bin"
 
 #elif PLATFORM_GD32VW553
 
@@ -1097,7 +1153,7 @@ typedef unsigned int UINT32;
 #define lwip_close_force(x) lwip_close(x)
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 

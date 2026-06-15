@@ -80,6 +80,20 @@
 //#define ENABLE_DRIVER_IRREMOTEESP				1
 #endif
 
+#elif PLATFORM_OPL1000
+
+/* OpenOPL1000 first real-port profile.
+ * Keep this deliberately small: real OpenBeken HTTP/command/config runtime,
+ * no drivers, no SoftAP, no MQTT/LFS/OTA persistence yet.
+ */
+#define NO_CHIP_TEMPERATURE                     1
+#define NEW_TCP_SERVER                          1
+#define ENABLE_EXPAND_CONSTANT                  1
+#define ENABLE_TASMOTA_JSON                     1
+#define OBK_DISABLE_ALL_DRIVERS                 1
+#undef ENABLE_LED_BASIC
+#undef ENABLE_HTTP_MAC
+
 #elif PLATFORM_W600
 
 // parse things like $CH1 or $hour etc
@@ -174,6 +188,7 @@
 #define ENABLE_DRIVER_HT16K33					1
 #define ENABLE_DRIVER_MAX72XX					1
 #define ENABLE_DRIVER_TUYAMCU					1
+#define ENABLE_DRIVER_TUYA_AC					1
 #define ENABLE_TEST_COMMANDS					1
 #define ENABLE_CALENDAR_EVENTS					1
 #define ENABLE_TEST_DRIVERS						1
@@ -301,6 +316,7 @@
 // #define ENABLE_DRIVER_MAX6675				1
 // #define ENABLE_DRIVER_TEXTSCROLLER			1
 #define ENABLE_DRIVER_TUYAMCU					1
+#define ENABLE_DRIVER_TUYA_AC					1
 // #define ENABLE_DRIVER_HT16K33				1
 // #define ENABLE_DRIVER_MAX72XX				1
 // #define ENABLE_DRIVER_ADCBUTTON				1
@@ -544,6 +560,7 @@
 #define ENABLE_LITTLEFS							1
 #define NEW_TCP_SERVER							1
 #define ENABLE_DRIVER_TUYAMCU					1
+#define ENABLE_DRIVER_TUYA_AC					1
 #define ENABLE_TASMOTADEVICEGROUPS				1
 #define ENABLE_NTP								1
 #define ENABLE_CALENDAR_EVENTS					1

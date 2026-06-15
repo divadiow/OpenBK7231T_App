@@ -12,7 +12,6 @@
 #include "hal_system.h"
 #include "hal_vic.h"
 #include "mw_fim.h"
-#include "openopl1000_wifi_sta.h"
 #include "sys_init.h"
 #include "sys_init_patch.h"
 #include "sys_os_config.h"
@@ -30,6 +29,10 @@ static void Main_AtUartDbgUartSwitch(void);
 static void Main_ApsUartRxDectecConfig(void);
 static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx);
 static void Main_AppInit_patch(void);
+static void OpenOPL1000_OpenBekenTask(void *args);
+
+extern void Main_Init(void);
+extern void Main_OnEverySecond(void);
 
 typedef void (*T_Main_AppInit_fp)(void);
 extern T_Main_AppInit_fp Main_AppInit;
@@ -156,9 +159,36 @@ static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx)
     Hal_DbgUart_RxIntEn(1);
 }
 
+static void OpenOPL1000_OpenBekenTask(void *args)
+{
+    (void)args;
+
+    printf("\r\n[OpenOPL1000] starting real OpenBeken runtime\r\n");
+    Main_Init();
+
+    while (1)
+    {
+        osDelay(1000);
+        Main_OnEverySecond();
+    }
+}
+
 static void Main_AppInit_patch(void)
 {
+    osThreadDef_t threadDef;
+
     Hal_DbgUart_RxIntEn(1);
-    printf("\r\n[OpenOPL1000] OpenOPL1000 web home build\r\n");
-    OpenOPL1000_WifiStaInit();
+    printf("\r\n[OpenOPL1000] OpenBeken platform port\r\n");
+
+    memset(&threadDef, 0, sizeof(threadDef));
+    threadDef.name = "openbeken";
+    threadDef.stacksize = OS_TASK_STACK_SIZE_APP * 2;
+    threadDef.tpriority = OS_TASK_PRIORITY_APP;
+    threadDef.instances = 0;
+    threadDef.pthread = OpenOPL1000_OpenBekenTask;
+
+    if (osThreadCreate(&threadDef, NULL) == NULL)
+    {
+        printf("[OpenOPL1000] failed to create OpenBeken task\r\n");
+    }
 }

@@ -1,0 +1,22 @@
+#if PLATFORM_OPL1000
+
+#include <stdio.h>
+#include <string.h>
+#include "../hal_ota.h"
+
+void otarequest(const char *urlin)
+{
+    printf("[OpenOPL1000] OTA request ignored for now: %s\r\n", urlin ? urlin : "");
+}
+
+int HAL_FlashRead(char *buffer, int readlen, int startaddr)
+{
+    (void)startaddr;
+    if (buffer && readlen > 0)
+    {
+        memset(buffer, 0xFF, readlen);
+    }
+    return 0;
+}
+
+#endif

@@ -1,12 +1,13 @@
-# OpenOPL1000 SDK-native web-home firmware for the Opulinks OPL1000 A2 SDK.
+# OpenOPL1000 real-port target for the Opulinks OPL1000 A2 SDK.
 #
-# This is still a staging target rather than the full upstream OpenBeken HAL,
-# but it now proves STA Wi-Fi, DHCP, TCP sockets, HTTP routing and a release-style
-# OpenOPL1000 home page with OBK-compatible command endpoints.
+# This builds the real OpenBeken core/web/command runtime against the Opulinks
+# patch SDK. OPL1000 support is intentionally STA-only because the vendor SDK
+# does not provide SoftAP.
 
 APP_NAME ?= OpenOPL1000
 APP_VERSION ?= dev
 SDK_ROOT ?= ../../sdk/OpenOPL1000
+OBK_ROOT ?= ../..
 BUILD_DIR ?= build
 OUTPUT_DIR ?= ../../output/$(APP_VERSION)
 OUTPUT_BASENAME ?= $(APP_NAME)_$(APP_VERSION)
@@ -32,12 +33,60 @@ PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3.a
 M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
 OTA_LOADER     := $(SDK_ROOT)/FW_Pack/opl1000_ota_loader.bin
 
-SOURCES := main_patch.c openopl1000_wifi_sta.c openopl1000_http_server.c openopl1000_console.c
-OBJECTS := $(addprefix $(BUILD_DIR)/,$(SOURCES:.c=.o))
+OBK_SRCS := $(OBK_ROOT)/src/
+
+SOURCES := main_patch.c
+SOURCES += $(OBK_SRCS)user_main.c
+SOURCES += $(OBK_SRCS)base64/base64.c
+SOURCES += $(OBK_SRCS)cJSON/cJSON.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_channels.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_enums.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_eventHandlers.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_if.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_main.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_repeatingEvents.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_tasmota.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_tcp.c
+SOURCES += $(OBK_SRCS)cmnds/cmd_tokenizer.c
+SOURCES += $(OBK_SRCS)driver/drv_deviceclock.c
+SOURCES += $(OBK_SRCS)driver/drv_main.c
+SOURCES += $(OBK_SRCS)driver/drv_timed_events.c
+SOURCES += $(OBK_SRCS)driver/drv_uart.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_adc_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_flashConfig_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_flashVars_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_generic_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_hwtimer_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_ota_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_pins_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_uart_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_wifi_opl1000.c
+SOURCES += $(OBK_SRCS)httpclient/http_client.c
+SOURCES += $(OBK_SRCS)httpclient/utils_net.c
+SOURCES += $(OBK_SRCS)httpclient/utils_timer.c
+SOURCES += $(OBK_SRCS)httpserver/http_basic_auth.c
+SOURCES += $(OBK_SRCS)httpserver/http_fns.c
+SOURCES += $(OBK_SRCS)httpserver/http_tcp_server.c
+SOURCES += $(OBK_SRCS)httpserver/json_interface.c
+SOURCES += $(OBK_SRCS)httpserver/new_http.c
+SOURCES += $(OBK_SRCS)httpserver/new_tcp_server.c
+SOURCES += $(OBK_SRCS)httpserver/rest_interface.c
+SOURCES += $(OBK_SRCS)jsmn/jsmn.c
+SOURCES += $(OBK_SRCS)libraries/obktime/obktime.c
+SOURCES += $(OBK_SRCS)logging/logging.c
+SOURCES += $(OBK_SRCS)new_cfg.c
+SOURCES += $(OBK_SRCS)new_common.c
+SOURCES += $(OBK_SRCS)new_pins.c
+SOURCES += $(OBK_SRCS)rgb2hsv.c
+SOURCES += $(OBK_SRCS)tiny_crc8.c
+
+OBJECTS := $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
+VPATH := $(sort $(dir $(SOURCES)))
 
 DEFS  := -DGCC
 DEFS  += -DARMCM3
 DEFS  += -DOPL1000_APS
+DEFS  += -DPLATFORM_OPL1000=1
 DEFS  += -D__noSIMULATOR__
 DEFS  += -D__BLE__
 DEFS  += -D__LE_HOST_USE_CMD__
@@ -56,221 +105,73 @@ DEFS  += -D_ARMABI_PURE=
 DEFS  += -DOPENOPL1000_WIFI_SSID=\"test\"
 DEFS  += -DOPENOPL1000_WIFI_PASSWORD=\"1234abcd\"
 
-# Include set taken from the vendor GCC station example and made SDK_ROOT-relative.
+# Key include paths first; broad SDK paths follow for the vendor patch headers.
 INCLUDES := -I.
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/apps/le_app/cmd_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/apps/le_app/mtc_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/apps/le_app/pts_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/apps/wifi_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_auxadc
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_dbg_uart
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_dma
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_i2c
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_patch
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_pwm
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_spi
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_system
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_tick
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_tmr
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_uart
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_vic
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/hal_wdt
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/chip/opl1000/securityipdriver
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/CMSIS/Device/opl1000/Include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/driver/CMSIS/Include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/FreeRtos/Source/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/FreeRtos/Source/portable/GCC/ARM_CM3
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/at
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/ble_controller_layer/inc
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/cli
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/common/sys_api
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/common/sys_api/rom_if
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/common/sys_ctrl
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/controller_task
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/data_flow
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/diag_task
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/le_stack
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/msg
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/mw_fim
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/mw_ota
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/ps_task
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/wifi_controller_layer
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/wifi_controller_layer/rom_if
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/wifi_mac
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/wifi_mac/common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/wifi_mac/crypto
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/netlink/wifi_mac/utils
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/fatfs/src
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/httpclient
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/lwip-2.0.3
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/lwip-2.0.3/lwip/src/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/lwip-2.0.3/ports/freertos/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/lwip-2.0.3/ports/freertos/netif
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/lwip-2.0.3/ports/rom_if
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/mbedtls/configs
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/mbedtls/include/mbedtls
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/mbedtls/port/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/tinycrypt/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/tinycrypt/include/tinycrypt
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/ap
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/crypto
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/drivers
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/eapol_auth
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/eapol_supp
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/eap_common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/eap_peer
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/eap_server
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/l2_packet
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/radius
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/rsn_supp
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/tls
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/utils
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/src/wps
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/wpa_supplicant
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/middleware/third_party/wpa_supplicant-0.7.3/wpa_supplicant/dbus
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/project/common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/project/opl1000/boot_sequence
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/project/opl1000/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS/project/opl1000/startup
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/apps/le_app/cmd_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/apps/le_app/mtc_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/apps/le_app/pts_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/apps/wifi_app
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_auxadc
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_dbg_uart
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_dma
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_i2c
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_patch
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_pwm
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_spi
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_system
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_tick
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_tmr
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_uart
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_vic
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/hal_wdt
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/chip/opl1000/securityipdriver
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/CMSIS/Device/opl1000/Include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/driver/CMSIS/Include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/FreeRtos/Source/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/FreeRtos/Source/portable/Keil/ARM_CM3
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/at
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/ble_controller_layer/inc
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/cli
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/common/sys_api
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/common/sys_api/rom_if
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/common/sys_ctrl
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/controller_task
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/data_flow
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/diag_task
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/le_stack
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/le_stack/patch
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/msg
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/mw_fim
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/mw_ota
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/ps_task
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/wifi_controller_layer
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/wifi_controller_layer/rom_if
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/wifi_mac
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/wifi_mac/common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/wifi_mac/crypto
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/netlink/wifi_mac/utils
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/fatfs/src
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/httpclient
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/lwip-2.0.3
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/lwip-2.0.3/lwip/src/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/lwip-2.0.3/ports/freertos/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/lwip-2.0.3/ports/freertos/netif
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/lwip-2.0.3/ports/rom_if
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/mbedtls/configs
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/mbedtls/include/mbedtls
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/mbedtls/port/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/tinycrypt/include/tinycrypt
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/ap
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/crypto
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/drivers
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/eapol_auth
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/eapol_supp
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/eap_common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/eap_peer
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/eap_server
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/l2_packet
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/radius
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/rsn_supp
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/tls
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/utils
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/src/wps
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/wpa_supplicant
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/middleware/third_party/wpa_supplicant-0.7.3/wpa_supplicant/dbus
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/project/common
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/project/opl1000/boot_sequence
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/project/opl1000/include
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/project/opl1000/startup
-INCLUDES += -I $(SDK_ROOT)/SDK/APS_PATCH/project/opl1000/lib
+INCLUDES += -I $(OBK_ROOT)/src
+INCLUDES += -I $(OBK_ROOT)/include
+INCLUDES += -I $(OBK_ROOT)/src/hal
+INCLUDES += -I $(OBK_ROOT)/src/hal/opl1000
+INCLUDES += -I $(APS_ROOT)/FreeRtos/Source/include
+INCLUDES += -I $(APS_ROOT)/FreeRtos/Source/portable/GCC/ARM_CM3
+INCLUDES += -I $(APS_PATCH_ROOT)/FreeRtos/Source/include
+INCLUDES += -I $(APS_PATCH_ROOT)/FreeRtos/Source/portable/GCC/ARM_CM3
+INCLUDES += -I $(APS_ROOT)/driver/CMSIS/Include
+INCLUDES += -I $(APS_ROOT)/driver/CMSIS/Device/opl1000/Include
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3/lwip/src/include
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/include
+INCLUDES += -I $(APS_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/netif
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3/lwip/src/include
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/include
+INCLUDES += -I $(APS_PATCH_ROOT)/middleware/third_party/lwip-2.0.3/ports/freertos/netif
+INCLUDES += $(shell find "$(APS_PATCH_ROOT)" "$(APS_ROOT)" -type d \
+    ! -path "*/.git*" \
+    ! -path "*/FreeRtos/Source/portable/Keil*" \
+    ! -path "*/FreeRtos/Source/portable/RVDS*" \
+    ! -path "*/FreeRtos/Source/portable/IAR*" \
+    | sed 's#^#-I #')
 
-CFLAGS  := $(DEFS)
-CFLAGS  += -mthumb -mcpu=cortex-m3 -mlittle-endian
-CFLAGS  += -std=c99 -Os -x none
+CFLAGS  := -mthumb -mcpu=cortex-m3 -mlittle-endian
+CFLAGS  += -std=gnu99 -Os
+CFLAGS  += -ffunction-sections -fdata-sections
+CFLAGS  += -fno-builtin -fno-common -fmessage-length=0
+CFLAGS  += -nostartfiles -no-pie -specs=nosys.specs -ffreestanding
 CFLAGS  += -include sys_common.h
-CFLAGS  += -nostartfiles -no-pie
-CFLAGS  += -fdata-sections -ffunction-sections
-CFLAGS  += -specs=nosys.specs
-CFLAGS  += -ffreestanding
 CFLAGS  += -Wall -Wextra
-CFLAGS  += -Wno-implicit-function-declaration -Wno-int-conversion
-CFLAGS  += -Wno-unused-parameter -Wno-missing-field-initializers
-CFLAGS  += $(INCLUDES)
+CFLAGS  += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-unused-parameter
+CFLAGS  += -Wno-missing-field-initializers -Wno-unused-function -Wno-unused-variable
+CFLAGS  += -Wno-pointer-sign -Wno-format -Wno-sign-compare
+CFLAGS  += $(DEFS) $(INCLUDES)
 
-LDFLAGS := -T $(LINK_SCRIPT)
+LDFLAGS := -mthumb -mcpu=cortex-m3 -mlittle-endian
+LDFLAGS += -T $(LINK_SCRIPT)
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,--entry=__Patch_EntryPoint
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(OUTPUT_BASENAME).map
 LDFLAGS += -Xlinker --just-symbols=$(SYMDEFS)
 
-.PHONY: all clean check-sdk print-config
-all: check-sdk $(BUILD_DIR)/$(OUTPUT_BASENAME).bin package
-
-check-sdk:
-	@test -d "$(SDK_ROOT)" || (echo "Missing SDK_ROOT=$(SDK_ROOT). Put the OPL1000 A2 SDK submodule at sdk/OpenOPL1000."; exit 1)
-	@test -f "$(LINK_SCRIPT)" || (echo "Missing $(LINK_SCRIPT)"; exit 1)
-	@test -f "$(SYMDEFS)" || (echo "Missing $(SYMDEFS)"; exit 1)
-	@test -f "$(PATCH_LIB)" || (echo "Missing $(PATCH_LIB)"; exit 1)
-
-print-config:
-	@echo "APP_NAME=$(APP_NAME)"
-	@echo "APP_VERSION=$(APP_VERSION)"
-	@echo "SDK_ROOT=$(SDK_ROOT)"
-	@echo "CC=$(CC)"
+.PHONY: all package clean
+all: package
 
 $(BUILD_DIR):
-	@mkdir -p $@
+	mkdir -p $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/$(OUTPUT_BASENAME).elf: $(OBJECTS)
+$(BUILD_DIR)/$(OUTPUT_BASENAME).elf: $(OBJECTS) $(PATCH_LIB) $(LINK_SCRIPT) $(SYMDEFS)
 	$(CC) -o $@ $(LDFLAGS) $(CFLAGS) $(OBJECTS) $(PATCH_LIB)
-	-$(SIZE) $@
+	$(SIZE) $@
 
 $(BUILD_DIR)/$(OUTPUT_BASENAME).bin: $(BUILD_DIR)/$(OUTPUT_BASENAME).elf
 	$(OBJCOPY) -O binary $< $@
 
 package: $(BUILD_DIR)/$(OUTPUT_BASENAME).bin
-	@mkdir -p "$(OUTPUT_DIR)"
-	cp "$(BUILD_DIR)/$(OUTPUT_BASENAME).bin" "$(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin"
-	@if [ -f "$(M0_IMAGE)" ]; then cp "$(M0_IMAGE)" "$(OUTPUT_DIR)/$(APP_NAME)_M0_$(APP_VERSION).bin"; fi
-	@if [ -f "$(OTA_LOADER)" ]; then cp "$(OTA_LOADER)" "$(OUTPUT_DIR)/$(APP_NAME)_OTA_LOADER_$(APP_VERSION).bin"; fi
-	@printf '%s\n' \
-		'4,HW,COLD,M3' \
-		'0x00008000,0xB24EF00E' \
-		'4,HW,COLD,M0' \
-		'0x00004000,0x47384F00' \
-		'0x00004004,0x00608001' \
-		'4,CODE,COLD,M3' \
-		'0x004164a0,.\\$(OUTPUT_BASENAME).bin' \
-		> "$(OUTPUT_DIR)/$(APP_NAME)_PatchData_$(APP_VERSION).txt"
+	mkdir -p $(OUTPUT_DIR)
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME).bin $(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin
+	cp $(M0_IMAGE) $(OUTPUT_DIR)/$(APP_NAME)_M0_$(APP_VERSION).bin
+	cp $(OTA_LOADER) $(OUTPUT_DIR)/$(APP_NAME)_OTA_LOADER_$(APP_VERSION).bin
+	printf "[PatchData]\n0x004164a0,.\\$(OUTPUT_BASENAME).bin\n" > $(OUTPUT_DIR)/$(APP_NAME)_PatchData_$(APP_VERSION).txt
+	@echo "OpenOPL1000 output written to $(OUTPUT_DIR)"
 
 clean:
-	rm -rf "$(BUILD_DIR)"
+	rm -rf $(BUILD_DIR)

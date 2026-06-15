@@ -1,88 +1,52 @@
-# OpenOPL1000
+# OpenOPL1000 real-port target
 
-First-stage OpenOPL1000 target for the Opulinks OPL1000 A2 SDK.
+This is the first real OpenBeken/OpenOPL1000 integration target for the Opulinks
+OPL1000 A2 SDK.
 
-This target is still SDK-native rather than the full upstream OpenBeken runtime, but it now gives the device a proper OpenOPL1000 home page instead of just a proof/debug page.
+Unlike the earlier bring-up web-console experiments, this target does not provide
+a separate fake OpenBeken-style HTTP server. It builds and starts the normal
+OpenBeken core, command engine, config layer and web server, then supplies an
+OPL1000 HAL underneath it.
 
-## SDK layout
+Current scope:
 
-The build expects the A2 SDK submodule at:
+- real OpenBeken `Main_Init()` / `Main_OnEverySecond()` path
+- real OpenBeken HTTP server and UI handlers
+- real OpenBeken command endpoint handling
+- OPL1000 STA-only Wi-Fi backend using the vendor SDK
+- hardcoded initial Wi-Fi credentials for bring-up:
+  - SSID: `test`
+  - password: `1234abcd`
+- RAM-backed config/flash-var stubs
+- GPIO/PWM/ADC/OTA stubs only
+
+The Opulinks SDK must be present at:
 
 ```text
 sdk/OpenOPL1000
 ```
 
-The submodule root must contain the SDK root, not only `SDK/APS_PATCH`:
+The expected SDK root contains `Demo`, `FW_Pack` and `SDK` at its top level.
+The intended SDK line for OPL1000 A2/Sonoff testing is:
 
 ```text
-sdk/OpenOPL1000/
-├─ Demo/
-├─ FW_Pack/
-└─ SDK/
-   ├─ APS/
-   └─ APS_PATCH/
+SDK Package: MP_2.21.004
+Patch_Lib: 5753
+Release Date: 2022/03/23
 ```
 
-## Wi-Fi
+Build from the repository root with:
 
-This stage remains STA-only because the OPL1000 A2 SDK does not expose SoftAP support.
-
-Default credentials are hardcoded at build time from `platforms/OPL1000/Makefile`:
-
-```text
-SSID: test
-Password: 1234abcd
+```sh
+make OpenOPL1000
 ```
 
-## Web routes
+Important limitations:
 
-After DHCP, browse to the assigned IP address.
-
-Implemented routes:
-
-```text
-/
-/index
-/index.html
-/cfg
-/cfg_wifi
-/cfg_pins
-/logs
-/ota
-/about
-/cmd?cmnd=status
-/cm?cmnd=status
-/api/cmd?cmnd=status
-/api/status
-/status.json
-```
-
-The main page intentionally looks and routes more like a normal OpenBeken/OpenOPL1000 device page, but the deferred areas are clearly marked as not wired yet.
-
-## Current scope
-
-Working in this stage:
-
-```text
-STA Wi-Fi
-DHCP
-TCP listen socket
-HTTP page routing
-OpenOPL1000 home page
-/cm?cmnd= command endpoint
-JSON status
-Wi-Fi scan/reconnect commands
-basic GPIO diagnostics
-```
-
-Deferred until later:
-
-```text
-persistent flash config
-pin role configuration
-PWM/channel model
-MQTT
-OTA web update handler
-full OpenBeken command registry
-full OBK runtime loop
-```
+- OPL1000 SoftAP is not implemented because Opulinks state OPL1000 supports STA
+  mode only.
+- Configuration persistence is currently RAM-only. Settings changed through the
+  web UI will not survive reboot yet.
+- GPIO/PWM/ADC are placeholders for now; do not expect real pin control yet.
+- OTA route/command exists through the real OBK UI, but actual OPL1000 OTA flash
+  writing is not wired yet.

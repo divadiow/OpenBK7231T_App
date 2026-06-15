@@ -120,8 +120,15 @@ void CFG_SetDefaultConfig() {
 	strcpy(g_cfg.mqtt_userName, "homeassistant");
 	strcpy(g_cfg.mqtt_pass, "qqqqqqqqqq");
 	// already zeroed but just to remember, open AP by default
+#if PLATFORM_OPL1000
+	strcpy_safe(g_cfg.wifi_ssid, OPENOPL1000_WIFI_SSID, sizeof(g_cfg.wifi_ssid));
+	memset(g_cfg.wifi_pass, 0, sizeof(g_cfg.wifi_pass));
+	memcpy(g_cfg.wifi_pass, OPENOPL1000_WIFI_PASSWORD,
+		strlen(OPENOPL1000_WIFI_PASSWORD) < sizeof(g_cfg.wifi_pass) ? strlen(OPENOPL1000_WIFI_PASSWORD) : sizeof(g_cfg.wifi_pass));
+#else
 	g_cfg.wifi_ssid[0] = 0;
 	g_cfg.wifi_pass[0] = 0;
+#endif
 	// i am not sure about this, because some platforms might have no way to store mac outside our cfg?
 	memcpy(g_cfg.mac,mac,6);
 	strcpy(g_cfg.webappRoot, "https://openbekeniot.github.io/webapp/");
