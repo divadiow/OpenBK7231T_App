@@ -15,6 +15,15 @@
 #define TUYA_AC_RX_BUFFER_SIZE 256
 #define TUYA_AC_PUBLISH_INTERVAL_SEC 60
 
+// A5/GFW frame constants verified against the RTL8720CF TCL dump.
+#define TUYA_AC_A5_MAGIC           0xA5
+#define TUYA_AC_FRAME_REQUEST      0x21
+#define TUYA_AC_FRAME_RESPONSE     0x23
+#define TUYA_AC_B1_DEFAULT         0x01
+#define TUYA_AC_B2_CORE            0x00
+#define TUYA_AC_B2_THING           0x01
+#define TUYA_AC_RESP_OK            0x00
+
 // Dirty flag bits — one per publishable parameter
 #define DIRTY_POWER          (1UL << 0)
 #define DIRTY_MODE           (1UL << 1)
@@ -117,7 +126,7 @@ tuya_ac_state_t g_tuya_ac = {
     .filter = 0,
     .compressor_hz = 0,
     .eight_degree = 0,
-    .seq = 0
+    .seq = 1
 };
 
 static const struct {
@@ -435,17 +444,70 @@ static void printHexToLog(const char* prefix, uint8_t *data, int len, uint16_t c
     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "%s LEN=%d CRC=0x%04X %s", prefix, len, crc, hexstr);
 }
 
-static void TuyaAC_SendPacket(uint8_t frame_class, uint16_t cmd_flag, uint8_t *payload, uint16_t payload_len) {
+static int TuyaAC_IsCompactRecordCommand(uint8_t b2, uint8_t cmd) {
+    if (b2 != TUYA_AC_B2_THING) {
+        return 0;
+    }
+    switch (cmd) {
+        case 0x0A:
+        case 0x0B:
+        case 0x0C:
+        case 0x0D:
+        case 0x0E:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static int TuyaAC_ShouldAckRequest(uint8_t b2, uint8_t cmd) {
+    if (b2 == TUYA_AC_B2_THING) {
+        switch (cmd) {
+            case 0x0A: // property write
+            case 0x0C: // compact report/notify
+            case 0x0D: // compact report/notify
+            case 0x0E: // secondary property bucket
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    if (b2 == TUYA_AC_B2_CORE) {
+        switch (cmd) {
+            case 0x00: // observed MCU presence/core heartbeat probe
+            case 0x11: // MCU init path from the decompiled GFW command table
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    return 0;
+}
+
+static int TuyaAC_IsQueryAllPayload(const uint8_t *payload, int payload_len) {
+    return payload_len == 2 && payload[0] == 0xFF && payload[1] == 0xFF;
+}
+
+static void TuyaAC_SendPacketEx(uint8_t b2, uint8_t frame_class, uint8_t seq, uint16_t cmd_flag, uint8_t *payload, uint16_t payload_len) {
     uint16_t packet_len = 12 + payload_len; // 12 bytes header/crc + payload
     uint8_t buffer[256];
     if (packet_len > sizeof(buffer)) return;
 
-    buffer[0] = 0xA5;
-    buffer[1] = 0x01; // typically 01 01 or similar, maybe doesn't matter too much, but let's use 0x01
-    buffer[2] = 0x01; // wait, typical header: A5 01 01 21...
+    buffer[0] = TUYA_AC_A5_MAGIC;
+    buffer[1] = TUYA_AC_B1_DEFAULT;
+    buffer[2] = b2;
     buffer[3] = frame_class;
-    buffer[4] = g_tuya_ac.seq++; // seq
-    buffer[5] = 0x00;
+
+    if (frame_class == TUYA_AC_FRAME_RESPONSE) {
+        buffer[4] = 0x00;
+        buffer[5] = seq;
+    } else {
+        buffer[4] = seq;
+        buffer[5] = 0x00;
+    }
+
     buffer[6] = (packet_len >> 8) & 0xFF;
     buffer[7] = packet_len & 0xFF;
 
@@ -460,24 +522,37 @@ static void TuyaAC_SendPacket(uint8_t frame_class, uint16_t cmd_flag, uint8_t *p
         memcpy(&buffer[12], payload, payload_len);
     }
 
-    // calculate CRC on everything except CRC bytes themselves
-    // wait, CRC is calculated over data_to_check = b[:8] + b[10:]
+    // CRC is calculated over b[0..7] + b[10..end], excluding bytes 8/9.
     uint8_t data_to_check[256];
     memcpy(data_to_check, buffer, 8);
     memcpy(&data_to_check[8], &buffer[10], 2 + payload_len);
-    
+
     uint16_t calc_crc = calculate_crc16_xmodem(data_to_check, 10 + payload_len);
     buffer[8] = (calc_crc >> 8) & 0xFF;
     buffer[9] = calc_crc & 0xFF;
 
     printHexToLog("TX UART:", buffer, packet_len, calc_crc);
-    if (cmd_flag == 0x0A0A && payload != NULL && payload_len > 0) {
+    if (frame_class == TUYA_AC_FRAME_REQUEST && b2 == TUYA_AC_B2_THING && cmd_flag == 0x0A0A && payload != NULL && payload_len > 0) {
         TuyaAC_LogPayloadDp("TX", payload, payload_len);
     }
 
     for (int i = 0; i < packet_len; i++) {
         UART_SendByte(buffer[i]);
     }
+}
+
+static void TuyaAC_SendPacket(uint8_t frame_class, uint16_t cmd_flag, uint8_t *payload, uint16_t payload_len) {
+    TuyaAC_SendPacketEx(TUYA_AC_B2_THING, frame_class, g_tuya_ac.seq++, cmd_flag, payload, payload_len);
+}
+
+static void TuyaAC_SendRequestOnChannel(uint8_t b2, uint8_t cmd, uint8_t *payload, uint16_t payload_len) {
+    uint16_t cmd_flag = ((uint16_t)cmd << 8) | cmd;
+    TuyaAC_SendPacketEx(b2, TUYA_AC_FRAME_REQUEST, g_tuya_ac.seq++, cmd_flag, payload, payload_len);
+}
+
+static void TuyaAC_SendAck(uint8_t b2, uint8_t request_seq, uint8_t cmd, uint8_t resp_flag) {
+    uint16_t cmd_flag = ((uint16_t)(0x80 | (resp_flag & 0x7F)) << 8) | cmd;
+    TuyaAC_SendPacketEx(b2, TUYA_AC_FRAME_RESPONSE, request_seq, cmd_flag, NULL, 0);
 }
 
 static void TuyaAC_SendDP(uint16_t dp_id, uint8_t *data, uint16_t len) {
@@ -1006,18 +1081,16 @@ void TuyaAC_Init(void) {
     CMD_RegisterCommand("ACDisplay", CMD_TuyaAC_Display, NULL);
     CMD_RegisterCommand("ACHealth", CMD_TuyaAC_Health, NULL);
 
-    // Send initialization sequence just like the original dongle
+    // Send the core MCU presence probe observed in the original RTL8720CF TCL dump:
+    // A5 01 00 21 <seq> 00 00 0D <crc> 00 00 01
     uint8_t q_init[1] = {0x01};
-    TuyaAC_SendPacket(0x21, 0x0000, q_init, 1);
+    TuyaAC_SendRequestOnChannel(TUYA_AC_B2_CORE, 0x00, q_init, 1);
 
-    uint8_t q_0301[2] = {0x03, 0x01};
-    TuyaAC_SendPacket(0x21, 0x0B0B, q_0301, 2);
-
-    uint8_t q_0305[2] = {0x03, 0x05};
-    TuyaAC_SendPacket(0x21, 0x0B0B, q_0305, 2);
-
+    // Query all AC/thing properties.  The FF FF query-all form is the only query
+    // payload currently backed by the first dump/recon notes, so avoid the
+    // unproven 03 01 / 03 05 probes here.
     uint8_t query_payload[2] = {0xFF, 0xFF};
-    TuyaAC_SendPacket(0x21, 0x0B0B, query_payload, 2);
+    TuyaAC_SendRequestOnChannel(TUYA_AC_B2_THING, 0x0B, query_payload, 2);
 }
 
 void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState) {
@@ -1112,6 +1185,13 @@ void TuyaAC_RunFrame(void) {
             break; 
         }
 
+        uint8_t peek_frame_class = UART_GetByte(3);
+        if (peek_frame_class != TUYA_AC_FRAME_REQUEST && peek_frame_class != TUYA_AC_FRAME_RESPONSE) {
+            ADDLOG_WARN(LOG_FEATURE_TUYA_AC, "Discarding A5 frame with unsupported class 0x%02X", peek_frame_class);
+            UART_ConsumeBytes(1);
+            continue;
+        }
+
         // We have at least 12 bytes, so we can read the length
         uint16_t len = (UART_GetByte(6) << 8) | UART_GetByte(7);
 
@@ -1148,10 +1228,45 @@ void TuyaAC_RunFrame(void) {
 
         printHexToLog("RX UART:", buffer, len, rx_crc);
 
-        // Process Payload
+        uint8_t b2 = buffer[2];
+        uint8_t frame_class = buffer[3];
+        uint8_t rx_seq = (frame_class == TUYA_AC_FRAME_RESPONSE) ? buffer[5] : buffer[4];
+        uint8_t rx_cmd = (frame_class == TUYA_AC_FRAME_RESPONSE) ? buffer[11] : buffer[10];
+        uint8_t rx_resp_flag = (frame_class == TUYA_AC_FRAME_RESPONSE) ? (buffer[10] & 0x7F) : 0;
+
+        if (frame_class != TUYA_AC_FRAME_REQUEST && frame_class != TUYA_AC_FRAME_RESPONSE) {
+            ADDLOG_WARN(LOG_FEATURE_TUYA_AC, "Tuya AC unsupported frame class 0x%02X", frame_class);
+            continue;
+        }
+
+        if (frame_class == TUYA_AC_FRAME_RESPONSE && rx_resp_flag != TUYA_AC_RESP_OK) {
+            ADDLOG_WARN(LOG_FEATURE_TUYA_AC, "Tuya AC response cmd 0x%02X returned flag 0x%02X", rx_cmd, rx_resp_flag);
+        }
+
+        if (frame_class == TUYA_AC_FRAME_REQUEST && TuyaAC_ShouldAckRequest(b2, rx_cmd)) {
+            TuyaAC_SendAck(b2, rx_seq, rx_cmd, TUYA_AC_RESP_OK);
+        }
+
+        // Process compact AC/property records only on the proven b2=1 thing channel
+        // and only for the GFW commands known to carry compact records.  Core b2=0
+        // frames are gateway control, not DP/id_no records.
         int payload_len = len - 12;
-        if (payload_len > 0) {
-            uint8_t *payload = &buffer[12];
+        if (payload_len <= 0) {
+            continue;
+        }
+
+        uint8_t *payload = &buffer[12];
+        if (!TuyaAC_IsCompactRecordCommand(b2, rx_cmd)) {
+            ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "RX non-property frame b2=0x%02X cmd=0x%02X payload_len=%d", b2, rx_cmd, payload_len);
+            continue;
+        }
+
+        if (rx_cmd == 0x0B && TuyaAC_IsQueryAllPayload(payload, payload_len)) {
+            ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "RX query-all request; not decoding FF FF as property records");
+            continue;
+        }
+
+        {
             int idx = 0;
             int parseGuard = 0;
             while (idx + 2 <= payload_len) {
@@ -1431,6 +1546,7 @@ void TuyaAC_RunFrame(void) {
 
 void TuyaAC_Init(void) {}
 void TuyaAC_RunEverySecond(void) {}
+void TuyaAC_RunFrame(void) {}
 void TuyaAC_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState) {}
 
 #endif // ENABLE_DRIVER_TUYA_AC
