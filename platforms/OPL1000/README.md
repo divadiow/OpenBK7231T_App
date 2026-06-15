@@ -1,13 +1,17 @@
 # OpenOPL1000 first-stage target
 
-This is a first-stage Opulinks OPL1000 A2 bring-up target for OpenBeken.
+This is an early Opulinks OPL1000 A2 bring-up target for OpenBeken.
 
-It does not implement the full OpenBeken platform HAL yet.  It builds a small
+It does not implement the full OpenBeken platform HAL yet. It builds a small
 SDK-native M3 patch image named `OpenOPL1000` and uses the Opulinks station API
 to connect to this fixed test AP:
 
 - SSID: `test`
 - Password: `1234abcd`
+
+After DHCP succeeds, it starts a minimal HTTP server on TCP port 80. Browse to
+the IP address printed by the UART log or shown by your router DHCP lease table.
+The served page is only a TCP/IP proof page; it is not the OpenBeken web UI yet.
 
 The OPL1000 SDK must be present as a submodule or directory at:
 

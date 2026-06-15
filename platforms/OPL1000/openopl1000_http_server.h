@@ -1,0 +1,6 @@
+#ifndef OPENOPL1000_HTTP_SERVER_H
+#define OPENOPL1000_HTTP_SERVER_H
+
+void OpenOPL1000_HttpServerStart(void);
+
+#endif /* OPENOPL1000_HTTP_SERVER_H */

@@ -32,7 +32,7 @@ PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3.a
 M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
 OTA_LOADER     := $(SDK_ROOT)/FW_Pack/opl1000_ota_loader.bin
 
-SOURCES := main_patch.c openopl1000_wifi_sta.c
+SOURCES := main_patch.c openopl1000_wifi_sta.c openopl1000_http_server.c
 OBJECTS := $(addprefix $(BUILD_DIR)/,$(SOURCES:.c=.o))
 
 DEFS  := -DGCC

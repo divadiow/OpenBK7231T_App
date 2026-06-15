@@ -7,6 +7,7 @@
 #include "cmsis_os.h"
 #include "event_loop.h"
 #include "lwip_helper.h"
+#include "openopl1000_http_server.h"
 #include "openopl1000_wifi_sta.h"
 #include "sys_os_config.h"
 #include "wifi_api.h"
@@ -129,6 +130,7 @@ static int OpenOPL1000_WifiEventHandler(wifi_event_id_t eventId, void *data, uin
             s_haveIp = true;
             printf("[OpenOPL1000] got IP\r\n");
             lwip_get_ip_info("st1");
+            OpenOPL1000_HttpServerStart();
             break;
 
         case WIFI_EVENT_STA_DISCONNECTED:
