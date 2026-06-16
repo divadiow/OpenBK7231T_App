@@ -30,6 +30,7 @@ static void Main_ApsUartRxDectecConfig(void);
 static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx);
 static void Main_AppInit_patch(void);
 static void OpenOPL1000_OpenBekenTask(void *args);
+static void OpenOPL1000_EarlyLog(const char *text);
 
 extern void Main_Init(void);
 extern void Main_OnEverySecond(void);
@@ -159,11 +160,39 @@ static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx)
     Hal_DbgUart_RxIntEn(1);
 }
 
+
+static void OpenOPL1000_EarlyLog(const char *text)
+{
+    const char *p;
+
+    if (text == NULL)
+    {
+        return;
+    }
+
+    printf("%s", text);
+
+    if (Hal_DbgUart_DataSend == NULL)
+    {
+        return;
+    }
+
+    for (p = text; *p != '\0'; p++)
+    {
+        if (*p == '\n')
+        {
+            Hal_DbgUart_DataSend('\r');
+        }
+        Hal_DbgUart_DataSend((uint32_t)(uint8_t)*p);
+    }
+}
+
 static void OpenOPL1000_OpenBekenTask(void *args)
 {
     (void)args;
 
-    printf("\r\n[OpenOPL1000] starting real OpenBeken runtime\r\n");
+    OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] OpenBeken task entered\r\n");
+    OpenOPL1000_EarlyLog("[OpenOPL1000] starting real OpenBeken runtime\r\n");
     Main_Init();
 
     while (1)
@@ -177,8 +206,12 @@ static void Main_AppInit_patch(void)
 {
     osThreadDef_t threadDef;
 
+    Hal_Pin_ConfigSet(8, PIN_TYPE_UART_APS_TX, PIN_DRIVING_FLOAT);
+    Hal_Pin_ConfigSet(9, PIN_TYPE_UART_APS_RX, PIN_DRIVING_HIGH);
+    Hal_DbgUart_Init(115200);
     Hal_DbgUart_RxIntEn(1);
-    printf("\r\n[OpenOPL1000] OpenBeken platform port\r\n");
+    OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO8/IO9 @115200\r\n");
+    OpenOPL1000_EarlyLog("[OpenOPL1000] OpenBeken platform port\r\n");
 
     memset(&threadDef, 0, sizeof(threadDef));
     threadDef.name = "openbeken";
@@ -189,6 +222,6 @@ static void Main_AppInit_patch(void)
 
     if (osThreadCreate(&threadDef, NULL) == NULL)
     {
-        printf("[OpenOPL1000] failed to create OpenBeken task\r\n");
+        OpenOPL1000_EarlyLog("[OpenOPL1000] failed to create OpenBeken task\r\n");
     }
 }
