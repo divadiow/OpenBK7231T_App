@@ -1,76 +1,57 @@
-# OpenOPL1000 real-port target
+# OpenOPL1000 platform bring-up
 
-This is the first real OpenBeken/OpenOPL1000 integration target for the Opulinks
-OPL1000 A2 SDK.
-
-Unlike the earlier bring-up web-console experiments, this target does not provide
-a separate fake OpenBeken-style HTTP server. It builds and starts the normal
-OpenBeken core, command engine, config layer and web server, then supplies an
-OPL1000 HAL underneath it.
+This is the first real-port OpenOPL1000 target. It starts the normal OpenBeken runtime rather than a separate OpenOPL1000 web-console shim.
 
 Current scope:
 
-- real OpenBeken `Main_Init()` / `Main_OnEverySecond()` path
-- real OpenBeken HTTP server and UI handlers
-- real OpenBeken command endpoint handling
-- OPL1000 STA-only Wi-Fi backend using the vendor SDK
-- hardcoded initial Wi-Fi credentials for bring-up:
-  - SSID: `test`
-  - password: `1234abcd`
-- RAM-backed config/flash-var stubs
-- GPIO/PWM/ADC/OTA stubs only
+- Opulinks OPL1000 A2 SDK patch entrypoint
+- real OpenBeken `Main_Init()` task
+- STA-only Wi-Fi bring-up through the OPL1000 HAL
+- hardcoded test Wi-Fi defaults for bring-up: `test` / `1234abcd`
+- normal OpenBeken HTTP/command path, trimmed to fit the A2 M3 patch image
 
-The Opulinks SDK must be present at:
+Still intentionally incomplete:
 
-```text
-sdk/OpenOPL1000
-```
+- GPIO/PWM/ADC implementation
+- persistent flash/config storage
+- OTA write implementation
+- SoftAP, because OPL1000 does not support SoftAP
 
-The expected SDK root contains `Demo`, `FW_Pack` and `SDK` at its top level.
-The intended SDK line for OPL1000 A2/Sonoff testing is:
+## UART logging
+
+For bring-up, v9 forces APS/debug UART to the same pins that show the ROM/bootloader text:
 
 ```text
-SDK Package: MP_2.21.004
-Patch_Lib: 5753
-Release Date: 2022/03/23
+IO0 = APS/debug UART TX
+IO1 = APS/debug UART RX
+115200 8N1
 ```
 
-Build from the repository root with:
-
-```sh
-make OpenOPL1000
-```
-
-Important limitations:
-
-- OPL1000 SoftAP is not implemented because Opulinks state OPL1000 supports STA
-  mode only.
-- Configuration persistence is currently RAM-only. Settings changed through the
-  web UI will not survive reboot yet.
-- GPIO/PWM/ADC are placeholders for now; do not expect real pin control yet.
-- OTA route/command exists through the real OBK UI, but actual OPL1000 OTA flash
-  writing is not wired yet.
-
-
-## Opulinks download-tool packing
-
-The GitHub output now includes a `pack_ready` folder and a matching
-`OpenOPL1000_pack_ready_<version>.zip`. Use those canonical names with the
-Opulinks Download Tool Pack tab:
+Expected early marker if the M3 patch reaches application init:
 
 ```text
-Script:  pack_ready\PatchData.txt
-M0 Bin:  pack_ready\opl1000_m0.bin
-M3 Bins: pack_ready\opl1000_app_m3.bin
+[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO0/IO1 @115200
 ```
 
-The pack script and M0 image intentionally match the A2 SDK `Demo/TCP_Client`
-layout. Do not use the old generated `[PatchData]` metadata file as the GUI
-packer script.
+If you only see the ROM/bootloader text and never this marker, the M3 patch has not reached `Main_AppInit_patch()`.
 
-For v8 bring-up logging, check APS/debug UART on IO8/IO9 at 115200 8N1. The
-first expected application marker is:
+## Opulinks pack-ready output
+
+The GitHub build emits a pack-ready ZIP using the names expected by the Opulinks GUI packer:
 
 ```text
-[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO8/IO9 @115200
+OpenOPL1000_pack_ready_<version>.zip
+├─ PatchData.txt
+├─ opl1000_m0.bin
+└─ opl1000_app_m3.bin
 ```
+
+Use those exact files in the OPL1000 Download Tool Pack tab:
+
+```text
+Script:  PatchData.txt
+M0 Bin:  opl1000_m0.bin
+M3 Bins: opl1000_app_m3.bin
+```
+
+v9 uses the root SDK `FW_Pack` M0/PatchData pairing, not the demo TCP_Client pairing. This matches the root SDK patch layout and includes the extra M3/M0 hardware patch words from `FW_Pack/PatchData.txt`.

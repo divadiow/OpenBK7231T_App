@@ -83,6 +83,7 @@ static void Main_PinMuxUpdate(void)
     Hal_Pin_ConfigSet(22, HAL_PIN_TYPE_IO_22, HAL_PIN_DRIVING_IO_22);
     Hal_Pin_ConfigSet(23, HAL_PIN_TYPE_IO_23, HAL_PIN_DRIVING_IO_23);
 
+    s_io01UartMode = HAL_PIN_0_1_UART_MODE;
     at_io01_uart_mode_set(HAL_PIN_0_1_UART_MODE);
 }
 
@@ -206,11 +207,21 @@ static void Main_AppInit_patch(void)
 {
     osThreadDef_t threadDef;
 
-    Hal_Pin_ConfigSet(8, PIN_TYPE_UART_APS_TX, PIN_DRIVING_FLOAT);
-    Hal_Pin_ConfigSet(9, PIN_TYPE_UART_APS_RX, PIN_DRIVING_HIGH);
+    /* Keep early bring-up logging on IO0/IO1.
+     * The vendor default is often UART1/AT on IO0/IO1 and APS debug on IO8/IO9;
+     * for OpenOPL1000 bring-up we force APS/debug UART onto IO0/IO1 so the
+     * same serial connection that shows the ROM/bootloader text also shows app text.
+     */
+    Hal_Pin_ConfigSet(0, PIN_TYPE_UART_APS_TX, PIN_DRIVING_FLOAT);
+    Hal_Pin_ConfigSet(1, PIN_TYPE_UART_APS_RX, PIN_DRIVING_HIGH);
+    Hal_Pin_ConfigSet(8, PIN_TYPE_UART1_TX, PIN_DRIVING_FLOAT);
+    Hal_Pin_ConfigSet(9, PIN_TYPE_UART1_RX, PIN_DRIVING_HIGH);
+    s_io01UartMode = IO01_UART_MODE_DBG;
+    at_io01_uart_mode_set(IO01_UART_MODE_DBG);
+
     Hal_DbgUart_Init(115200);
     Hal_DbgUart_RxIntEn(1);
-    OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO8/IO9 @115200\r\n");
+    OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO0/IO1 @115200\r\n");
     OpenOPL1000_EarlyLog("[OpenOPL1000] OpenBeken platform port\r\n");
 
     memset(&threadDef, 0, sizeof(threadDef));

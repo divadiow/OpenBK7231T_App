@@ -30,7 +30,7 @@ APS_PATCH_ROOT := $(SDK_ROOT)/SDK/APS_PATCH
 LINK_SCRIPT    := $(APS_ROOT)/project/opl1000/link.ld
 SYMDEFS        := $(APS_ROOT)/targets/opl1000/object/symdefs_gcc.o
 PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3_lite.a
-M0_IMAGE       := $(SDK_ROOT)/Demo/TCP_Client/opl1000_m0.bin
+M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
 OTA_LOADER     := $(SDK_ROOT)/FW_Pack/opl1000_ota_loader.bin
 PATCHDATA_SCRIPT := $(OBK_ROOT)/platforms/OPL1000/pack/PatchData.txt
 
@@ -204,6 +204,7 @@ package: $(BUILD_DIR)/$(OUTPUT_BASENAME).bin
 	cd $(OUTPUT_DIR)/pack_ready && zip -q -r ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3.bin
 	@echo "OpenOPL1000 output written to $(OUTPUT_DIR)"
 	@echo "Opulinks pack-ready files written to $(OUTPUT_DIR)/pack_ready"
+	@echo "Pack with: PatchData.txt + opl1000_m0.bin + opl1000_app_m3.bin"
 
 clean:
 	rm -rf $(BUILD_DIR)
