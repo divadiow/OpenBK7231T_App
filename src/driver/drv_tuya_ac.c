@@ -87,7 +87,7 @@ static uint32_t TuyaAC_GetDirtyFlagForDP(uint16_t dp_id) {
         case 0x0025: return DIRTY_BUZZER;
         case 0x002D: return DIRTY_GENERATOR;
         case 0x0073: return DIRTY_MUTE;
-        case 0x00DF: return DIRTY_ECO;
+        case 0x0013: return DIRTY_ECO;
         case 0x0147: return DIRTY_EIGHT_DEGREE;
         case 0x0072: return DIRTY_IN_FAN_PERCENT;
         default: return 0;
@@ -220,15 +220,6 @@ static const char *get_ac_fan_str(TuyaAC_FanMode_e mode) {
 }
 
 static const char *get_ac_fan_mute_str(void) {
-    static char buf[32];
-    if (g_tuya_ac.mute) {
-        if (g_tuya_ac.fan == TUYA_AC_FAN_AUTO) {
-            return "mute";
-        } else {
-            snprintf(buf, sizeof(buf), "mute_%s", get_ac_fan_str(g_tuya_ac.fan));
-            return buf;
-        }
-    }
     return get_ac_fan_str(g_tuya_ac.fan);
 }
 
@@ -391,7 +382,7 @@ static void TuyaAC_LogDpDecode(const char *dir, uint16_t dp_id, const uint8_t *d
             ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "%s DP[0x%04X] POWER=%s", dir, dp_id, dp[0] ? "ON" : "OFF");
             break;
         case 0x0013:
-            ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "%s DP[0x%04X] LOCK=%s", dir, dp_id, dp[0] ? "ON" : "OFF");
+            ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "%s DP[0x%04X] ECO=%s", dir, dp_id, dp[0] ? "ON" : "OFF");
             break;
         case 0x0002:
             ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "%s DP[0x%04X] TARGET=%.1fC", dir, dp_id, val32 / 100.0f);
@@ -797,90 +788,24 @@ static void TuyaAC_SendFanMutePacket(TuyaAC_FanMode_e fan, int mute) {
     int plen = 0;
 
     if (mute) {
-        // Mute ON: fan=0, mute=1 (00 05 00 00 73 01)
-        payload[plen++] = 0x00;
-        payload[plen++] = 0x05;
-        payload[plen++] = 0x00;
-        payload[plen++] = 0x00;
-        payload[plen++] = 0x73;
-        payload[plen++] = 0x01;
+        TuyaAC_AppendDpEnum16(payload, &plen, 0x0005, TUYA_AC_FAN_AUTO);
+        TuyaAC_AppendDpBool(payload, &plen, 0x0073, 1);
     } else {
         switch (fan) {
             case TUYA_AC_FAN_AUTO:
-                // Auto: 00 05 00 00 73 01 (and forces mute=1)
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x01;
-                g_tuya_ac.mute = 1;
-                break;
             case TUYA_AC_FAN_LOWEST:
-                // Lowest: 00 05 01 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x01;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
-                break;
             case TUYA_AC_FAN_LOW:
-                // Low: 00 05 02 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x02;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
-                break;
             case TUYA_AC_FAN_MID_LOW:
-                // Mid-Low: 00 05 03 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x03;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
-                break;
             case TUYA_AC_FAN_MID:
-                // Mid: 00 05 04 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x04;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
-                break;
             case TUYA_AC_FAN_MID_HIGH:
-                // Mid-High: 00 05 05 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
-                break;
             case TUYA_AC_FAN_HIGH:
-                // High: 00 05 06 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x06;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
+                TuyaAC_AppendDpEnum16(payload, &plen, 0x0005, (uint8_t)fan);
+                TuyaAC_AppendDpBool(payload, &plen, 0x0073, 0);
                 break;
             case TUYA_AC_FAN_TURBO:
-                // Turbo: 00 26 00 00 05 07 00 73 00
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x26;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x05;
-                payload[plen++] = 0x07;
-                payload[plen++] = 0x00;
-                payload[plen++] = 0x73;
-                payload[plen++] = 0x00;
+                TuyaAC_AppendDpEnum16(payload, &plen, 0x0026, 0);
+                TuyaAC_AppendDpEnum16(payload, &plen, 0x0005, TUYA_AC_FAN_TURBO);
+                TuyaAC_AppendDpBool(payload, &plen, 0x0073, 0);
                 break;
             default:
                 break;
@@ -899,15 +824,11 @@ static commandResult_t CMD_TuyaAC_Fan(const void* context, const char* cmd, cons
     if (!str) return CMD_RES_OK;
     
     g_tuya_ac.fan = parseFanMode(str);
-    if (g_tuya_ac.fan == TUYA_AC_FAN_AUTO) {
-        g_tuya_ac.mute = 1;
-    } else {
-        g_tuya_ac.mute = 0;
-    }
-    
+    g_tuya_ac.mute = 0;
+
     TuyaAC_SendFanMutePacket(g_tuya_ac.fan, g_tuya_ac.mute);
-    TuyaAC_MarkDpConfigured(0x05);
-    TuyaAC_MarkDpConfigured(0x73);
+    TuyaAC_MarkDpConfigured(0x0005);
+    TuyaAC_MarkDpConfigured(0x0073);
     return CMD_RES_OK;
 }
 
@@ -991,8 +912,8 @@ static commandResult_t CMD_TuyaAC_Eco(const void* context, const char* cmd, cons
     TuyaAC_LogCommand(cmd, args, cmdFlags);
     Tokenizer_TokenizeString(args, 0);
     g_tuya_ac.eco = Tokenizer_GetArgInteger(0);
-    TuyaAC_SendDP_Bool(0xDF, g_tuya_ac.eco ? 1 : 0);
-    TuyaAC_MarkDpConfigured(0xDF);
+    TuyaAC_SendDP_Bool(0x0013, g_tuya_ac.eco ? 1 : 0);
+    TuyaAC_MarkDpConfigured(0x0013);
     return CMD_RES_OK;
 }
 
@@ -1005,8 +926,8 @@ static commandResult_t CMD_TuyaAC_Mute(const void* context, const char* cmd, con
     }
     
     TuyaAC_SendFanMutePacket(g_tuya_ac.fan, g_tuya_ac.mute);
-    TuyaAC_MarkDpConfigured(0x73);
-    TuyaAC_MarkDpConfigured(0x05);
+    TuyaAC_MarkDpConfigured(0x0073);
+    TuyaAC_MarkDpConfigured(0x0005);
     return CMD_RES_OK;
 }
 
@@ -1394,7 +1315,7 @@ void TuyaAC_RunFrame(void) {
                         g_tuya_ac.mute = new_mute;
                         g_tuya_ac_dirty_flags |= DIRTY_MUTE;
                     }
-                } else if (dp_id == 0x00DF) {
+                } else if (dp_id == 0x0013) {
                     int new_eco = payload[idx];
                     ADDLOG_INFO(LOG_FEATURE_TUYA_AC, "  - [0x%04X] Eco Mode: %s", dp_id, new_eco ? "On" : "Off");
                     if (g_tuya_ac.eco != new_eco || g_tuya_ac.seq <= 2) {
@@ -1491,6 +1412,7 @@ void TuyaAC_RunFrame(void) {
                         case 0x00D4: name = "Stores Mode"; break;
                         case 0x00D5: name = "Examine Mode"; break;
                         case 0x00D6: name = "Filter Blocknotify"; break;
+                        case 0x00DF: name = "Internal or Reserved"; break;
                         case 0x00C9: name = "Regular Reporting"; break;
                         case 0x0074: name = "Internal or Reserved"; break;
                         case 0x0038: name = "Error Code Raw"; break;
