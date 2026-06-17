@@ -41,7 +41,8 @@ extern size_t xPortGetFreeHeapSize(void);
 
 static void (*g_wifiStatusCallback)(int code);
 static bool g_wifiInitialised;
-static bool g_lwipInitialised;
+static bool g_lwipThreadStarted;
+static osThreadId g_lwipThread;
 static bool g_haveIp;
 static bool g_seenScanComplete;
 static char g_ssid[WIFI_MAX_LENGTH_OF_SSID];
@@ -88,18 +89,53 @@ static void OpenOPL1000_UpdateNetifStrings(void)
     strcpy(g_dns, g_gw);
 }
 
-static void OpenOPL1000_LwipInitOnce(void)
+static void OpenOPL1000_LwipThread(void *args)
 {
-    if (g_lwipInitialised)
+    (void)args;
+
+    /* This mirrors the vendor examples. lwip_net_ready() blocks until Wi-Fi is
+     * connected and DHCP has completed, so it must not run in the OBK init task
+     * before wifi_start() has returned. v11 called it synchronously and stalled
+     * before wifi_set_config()/wifi_start().
+     */
+    printf("[OpenOPL1000] lwIP task: network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    lwip_network_init(WIFI_MODE_STA);
+    printf("[OpenOPL1000] lwIP task: net_ready wait, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    lwip_net_ready();
+    printf("[OpenOPL1000] lwIP task: net_ready returned, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+
+    while (1)
+    {
+        if (g_haveIp)
+        {
+            OpenOPL1000_UpdateNetifStrings();
+        }
+        osDelay(10000);
+    }
+}
+
+static void OpenOPL1000_LwipStartTaskOnce(void)
+{
+    osThreadDef_t threadDef;
+
+    if (g_lwipThreadStarted)
     {
         return;
     }
 
-    printf("[OpenOPL1000] lwIP init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
-    lwip_network_init(WIFI_MODE_STA);
-    lwip_net_ready();
-    g_lwipInitialised = true;
-    printf("[OpenOPL1000] lwIP init done, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    memset(&threadDef, 0, sizeof(threadDef));
+    threadDef.name = "opl_lwip";
+    threadDef.stacksize = OS_TASK_STACK_SIZE_APP;
+    threadDef.tpriority = OS_TASK_PRIORITY_APP;
+    threadDef.instances = 0;
+    threadDef.pthread = OpenOPL1000_LwipThread;
+
+    g_lwipThread = osThreadCreate(&threadDef, NULL);
+    g_lwipThreadStarted = (g_lwipThread != NULL);
+
+    printf("[OpenOPL1000] lwIP task create %s, heap=%u\r\n",
+           g_lwipThreadStarted ? "ok" : "failed",
+           OpenOPL1000_GetFreeHeap());
 }
 
 static void OpenOPL1000_WifiWaitReady(void)
@@ -293,7 +329,6 @@ static void OpenOPL1000_WifiInitOnce(void)
 
     wifi_event_loop_init((wifi_event_cb_t)OpenOPL1000_WifiEventHandler);
     wifi_init(&initConfig, NULL);
-    OpenOPL1000_LwipInitOnce();
 
     g_wifiInitialised = true;
     printf("[OpenOPL1000] Wi-Fi init done, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
@@ -350,6 +385,8 @@ void HAL_ConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticI
 
     rc = wifi_start();
     printf("[OpenOPL1000] wifi_start rc=%d heap=%u\r\n", rc, OpenOPL1000_GetFreeHeap());
+
+    OpenOPL1000_LwipStartTaskOnce();
 }
 
 void HAL_FastConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticIP_t *ip)
