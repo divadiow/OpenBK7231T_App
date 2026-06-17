@@ -1589,6 +1589,14 @@ void Main_Init_After_Delay()
 			g_openAP = 5;
 		}
 		else {
+#if PLATFORM_OPL1000
+			/*
+			 * OPL1000 has no SoftAP fallback and the socket layer must be brought up
+			 * by the vendor STA path before the HTTP listener can be created. Do not
+			 * wait for the generic five-second retry timer during bring-up.
+			 */
+			Main_ConnectToWiFiNow();
+#else
 			if (Main_HasFastConnect()) {
 #if ENABLE_MQTT
 				mqtt_loopsWithDisconnected = 9999;
@@ -1598,6 +1606,7 @@ void Main_Init_After_Delay()
 			else {
 				g_connectToWiFi = 5;
 			}
+#endif
 		}
 	}
 

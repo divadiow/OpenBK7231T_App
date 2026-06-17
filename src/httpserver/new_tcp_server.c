@@ -19,6 +19,17 @@
 #define HTTP_CLIENT_STACK_SIZE		4096
 #define HTTP_CLIENT_STACK_SIZE		6144
 #endif
+#if PLATFORM_OPL1000
+/*
+ * The OPL1000 A2 patch image has very little free RAM once the vendor Wi-Fi,
+ * supplicant and controller tasks are running. Keep the first real-port HTTP
+ * server small and avoid starting the listener until the STA path has DHCP.
+ */
+#define MAX_SOCKETS_TCP            2
+#define REPLY_BUFFER_SIZE          1024
+#define INCOMING_BUFFER_SIZE       1024
+#define HTTP_CLIENT_STACK_SIZE     2048
+#endif
 #ifndef MAX_SOCKETS_TCP
 #define MAX_SOCKETS_TCP MEMP_NUM_TCP_PCB
 #endif
@@ -202,6 +213,20 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 {
 	OSStatus err = kNoErr;
 	int reuse = 1;
+
+#if PLATFORM_OPL1000
+	/*
+	 * OBK starts the HTTP task during Main_Init_After_Delay, but on OPL1000
+	 * the vendor lwIP/socket layer is not usable until the STA event path has
+	 * reached GOT_IP. If we create the socket early it fails repeatedly and the
+	 * restart loop burns scarce heap.
+	 */
+	while(!Main_IsConnectedToWiFi())
+	{
+		rtos_delay_milliseconds(500);
+	}
+	rtos_delay_milliseconds(500);
+#endif
 
 	struct sockaddr_in server_addr =
 	{

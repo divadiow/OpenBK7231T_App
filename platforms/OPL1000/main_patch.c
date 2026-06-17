@@ -166,14 +166,7 @@ static void OpenOPL1000_EarlyLog(const char *text)
 {
     const char *p;
 
-    if (text == NULL)
-    {
-        return;
-    }
-
-    printf("%s", text);
-
-    if (Hal_DbgUart_DataSend == NULL)
+    if ((text == NULL) || (Hal_DbgUart_DataSend == NULL))
     {
         return;
     }
