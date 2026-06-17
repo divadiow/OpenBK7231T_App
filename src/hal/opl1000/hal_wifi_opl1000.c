@@ -305,6 +305,23 @@ static void OpenOPL1000_WifiWorker(void *args)
                 g_lwipStarted = false;
                 printf("[OpenOPL1000] worker: lost IP, restarting network path\r\n");
             }
+            else
+            {
+                /* Once DHCP has completed the worker has no more critical work.
+                 * Terminate it so its stack is returned before the first HTTP
+                 * request arrives.  v15 proved the HTTP listener could start,
+                 * but the per-client path failed with only ~728 bytes free.
+                 */
+                printf("[OpenOPL1000] worker: network ready, terminating worker to free stack, heap=%u\r\n",
+                       OpenOPL1000_GetFreeHeap());
+                g_workerStarted = false;
+                g_workerThread = NULL;
+                osThreadTerminate(osThreadGetId());
+                while (1)
+                {
+                    osDelay(10000);
+                }
+            }
         }
 
         osDelay(10000);

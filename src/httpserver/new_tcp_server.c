@@ -27,8 +27,8 @@
  */
 #define MAX_SOCKETS_TCP            2
 #define REPLY_BUFFER_SIZE          1024
-#define INCOMING_BUFFER_SIZE       1024
-#define HTTP_CLIENT_STACK_SIZE     2048
+#define INCOMING_BUFFER_SIZE       768
+#define HTTP_CLIENT_STACK_SIZE     1024
 #endif
 #ifndef MAX_SOCKETS_TCP
 #define MAX_SOCKETS_TCP MEMP_NUM_TCP_PCB
@@ -154,6 +154,90 @@ exit:
 	rtos_suspend_thread(NULL);
 #endif
 }
+
+
+#if PLATFORM_OPL1000
+static void tcp_client_process_sync(tcp_thread_t* arg)
+{
+	int fd = arg->fd;
+	char* buf = NULL;
+	char* reply = NULL;
+	int replyBufferSize = REPLY_BUFFER_SIZE;
+
+	/* OPL1000 has too little heap after STA/lwIP bring-up to create a per-client
+	 * HTTP task.  Process one accepted connection on the TCP server task and use
+	 * small heap buffers, then immediately free them.  This keeps the real OBK
+	 * HTTP parser/route path but avoids the failing HTTP Client thread creation.
+	 */
+	buf = (char*)os_malloc(INCOMING_BUFFER_SIZE);
+	reply = (char*)os_malloc(replyBufferSize);
+	if(buf == NULL || reply == NULL)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 sync client malloc failed, buf=%p reply=%p", buf, reply);
+		goto exit;
+	}
+
+	http_request_t request;
+	memset(&request, 0, sizeof(request));
+
+	request.fd = fd;
+	request.received = buf;
+	request.receivedLenmax = INCOMING_BUFFER_SIZE - 2;
+	request.responseCode = HTTP_RESPONSE_OK;
+	request.receivedLen = 0;
+
+	while(1)
+	{
+		int remaining = request.receivedLenmax - request.receivedLen;
+		int received = recv(fd, request.received + request.receivedLen, remaining, 0);
+		if(received <= 0)
+		{
+			break;
+		}
+		request.receivedLen += received;
+		request.received[request.receivedLen] = 0;
+		if(received < remaining || request.receivedLen >= request.receivedLenmax)
+		{
+			break;
+		}
+	}
+
+	request.received[request.receivedLen] = 0;
+	request.reply = reply;
+	request.replylen = 0;
+	request.replymaxlen = replyBufferSize - 1;
+	reply[0] = '\0';
+
+	if(request.receivedLen <= 0)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 sync client disconnected before request, fd: %d", fd);
+		goto exit;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 sync request len %i", request.receivedLen);
+	int lenret = HTTP_ProcessPacket(&request);
+	if(lenret > 0)
+	{
+		ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 sync reply len %i", lenret);
+		send(fd, reply, lenret, 0);
+	}
+	else
+	{
+		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 sync HTTP_ProcessPacket returned %i", lenret);
+	}
+
+exit:
+	if(buf != NULL)
+		os_free(buf);
+	if(reply != NULL)
+		os_free(reply);
+	if(fd != INVALID_SOCK)
+		lwip_close(fd);
+	arg->fd = INVALID_SOCK;
+	arg->thread = NULL;
+	arg->isCompleted = false;
+}
+#endif
 
 static inline char* get_clientaddr(struct sockaddr_storage* source_addr)
 {
@@ -335,7 +419,10 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 			else
 			{
 				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(&source_addr));
-
+#if PLATFORM_OPL1000
+				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(&source_addr));
+				tcp_client_process_sync(&sock[new_idx]);
+#else
 				rtos_delay_milliseconds(20);
 				if(kNoErr != rtos_create_thread(&sock[new_idx].thread,
 					BEKEN_APPLICATION_PRIORITY,
@@ -349,6 +436,7 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 					sock[new_idx].fd = INVALID_SOCK;
 					goto error;
 				}
+#endif
 			}
 		}
 		rtos_delay_milliseconds(10);

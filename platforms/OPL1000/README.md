@@ -82,3 +82,14 @@ v13 showed that `wifi_scan_start(..., true)` returns before the Opulinks scan ca
 ## v15 note
 
 v15 keeps the v9+ FW_Pack-style PatchData and pack_ready output.  The Wi-Fi worker now matches APs using the SDK's raw scan_report_t from wifi_get_scan_result(), because v14 showed the public wifi_scan_get_ap_list() result had RSSI/channel/auth populated but blank SSID fields while the SDK's own scan table printed the SSIDs correctly.
+
+## v16 HTTP bring-up note
+
+v15 reached STA association, DHCP and `Info:HTTP:TCP server listening`, but an incoming
+browser connection failed because the generic OBK HTTP server attempted to create a
+per-client `HTTP Client` task when only about 728 bytes of heap remained.
+
+v16 keeps the same STA/raw-scan connection path, then terminates the temporary Wi-Fi
+worker task after DHCP so its stack is returned.  The OPL1000 HTTP server also handles
+one accepted connection synchronously on the TCP server task with small temporary
+buffers instead of creating a per-client thread.
