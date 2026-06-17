@@ -53,6 +53,8 @@ extern void (*wifi_sta_info_init)(void);
 extern void (*agent_init)(void);
 extern void (*tracer_load)(void);
 extern void (*tcpip_config_dhcp_arp_check_init)(void);
+extern int (*nl_scrt_Init)(void);
+extern void (*sys_cfg_init)(void);
 
 void __Patch_EntryPoint(void)
 {
@@ -121,6 +123,24 @@ static void Main_ServiceInitNoBle(void)
 
     lwip_task_create();
 
+    /* WPA2-PSK association uses the SDK security/HMAC path even when BLE is
+     * disabled.  The full SDK service init normally reaches this via the
+     * BLE/security startup path or the HW-crypto define.  In the NoBle
+     * service init we must initialise it explicitly; otherwise the supplicant
+     * later fails with:
+     *   [scrt_res_lock_impl] sem is null
+     *   [nl_hmac_sha_1_impl] scrt_res_alloc fail
+     */
+    if (nl_scrt_Init != NULL)
+    {
+        int scrtRc = nl_scrt_Init();
+        printf("[OpenOPL1000] nl_scrt_Init rc=%d\r\n", scrtRc);
+    }
+    else
+    {
+        printf("[OpenOPL1000] nl_scrt_Init pointer is NULL\r\n");
+    }
+
     if (do_supplicant_init != NULL)
     {
         do_supplicant_init();
@@ -169,6 +189,15 @@ static void Main_ServiceInitNoBle(void)
     if (tcpip_config_dhcp_arp_check_init != NULL)
     {
         tcpip_config_dhcp_arp_check_init();
+    }
+
+    /* Sys_ServiceInit_patch() normally calls sys_cfg_init() after
+     * Sys_ServiceInit_impl().  Our replacement service init bypasses that
+     * wrapper, so preserve the same post-service SDK configuration step.
+     */
+    if (sys_cfg_init != NULL)
+    {
+        sys_cfg_init();
     }
 }
 

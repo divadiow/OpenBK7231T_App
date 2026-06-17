@@ -147,3 +147,19 @@ OpenOPL1000_pack_ready_<version>.zip
 ```
 
 This is an experiment. If Wi-Fi fails earlier than v17/v18, revert to the normal SDK service-init path and continue with stack-size trimming instead.
+
+## v20 note
+
+v19 proved that skipping the BLE/LE task recovers a large amount of heap, but
+WPA2-PSK then failed during association because the SDK security/HMAC resource
+semaphores were not initialised:
+
+```text
+[scrt_res_lock_impl ...] sem is null
+[nl_hmac_sha_1_impl ...] scrt_res_alloc fail
+```
+
+v20 keeps the BLE/LE task disabled, but explicitly calls `nl_scrt_Init()` in the
+custom No-BLE service init before the WPA supplicant is started.  It also calls
+`sys_cfg_init()` because replacing `Sys_ServiceInit_patch()` otherwise bypasses
+that SDK post-service configuration step.
