@@ -29,22 +29,20 @@
 #define OPENOPL1000_WIFI_PASSWORD "1234abcd"
 #endif
 
-/* Keep this small. The real OBK runtime leaves very little heap on OPL1000 A2
- * during early bring-up, so the SDK demo's malloc(sizeof(wifi_scan_list_t))
- * can fail before association. Use a fixed small scan-record buffer instead.
- */
-#define OPENOPL1000_WIFI_READY_DELAY_MS 2000
-#define OPENOPL1000_SCAN_RECORD_LIMIT   8
+#define OPENOPL1000_WIFI_READY_DELAY_MS      2000
+#define OPENOPL1000_ASSOC_WAIT_SECONDS       12
+#define OPENOPL1000_SCAN_RETRY_DELAY_MS      2000
 
-typedef size_t (*OpenOPL1000HeapFn)(void);
 extern size_t xPortGetFreeHeapSize(void);
 
 static void (*g_wifiStatusCallback)(int code);
 static bool g_wifiInitialised;
-static bool g_lwipThreadStarted;
-static osThreadId g_lwipThread;
+static bool g_wifiStarted;
+static bool g_workerStarted;
+static bool g_associated;
 static bool g_haveIp;
-static bool g_seenScanComplete;
+static bool g_lwipStarted;
+static osThreadId g_workerThread;
 static char g_ssid[WIFI_MAX_LENGTH_OF_SSID];
 static char g_password[WIFI_LENGTH_PASSPHRASE + 1];
 static uint8_t g_bssid[WIFI_MAC_ADDRESS_LENGTH];
@@ -53,7 +51,12 @@ static char g_ip[16] = "0.0.0.0";
 static char g_gw[16] = "0.0.0.0";
 static char g_mask[16] = "0.0.0.0";
 static char g_dns[16] = "0.0.0.0";
-static wifi_scan_info_t g_scanRecords[OPENOPL1000_SCAN_RECORD_LIMIT];
+
+/* Static to avoid the SDK demo malloc(sizeof(wifi_scan_list_t)) path. The v12
+ * log showed only ~488 bytes free after Wi-Fi/lwIP bring-up, so dynamic scan
+ * allocation is not safe in the real OBK runtime.
+ */
+static wifi_scan_list_t g_scanList;
 
 static unsigned int OpenOPL1000_GetFreeHeap(void)
 {
@@ -85,119 +88,75 @@ static void OpenOPL1000_UpdateNetifStrings(void)
         strcpy(g_mask, "0.0.0.0");
     }
 
-    /* DNS is not directly exposed by the Opulinks helper path used here yet. */
     strcpy(g_dns, g_gw);
 }
 
-static void OpenOPL1000_LwipThread(void *args)
+static bool OpenOPL1000_IsAssociated(void)
 {
-    (void)args;
+    wifi_ap_record_t apInfo;
+    int rc;
 
-    /* This mirrors the vendor examples. lwip_net_ready() blocks until Wi-Fi is
-     * connected and DHCP has completed, so it must not run in the OBK init task
-     * before wifi_start() has returned. v11 called it synchronously and stalled
-     * before wifi_set_config()/wifi_start().
-     */
-    printf("[OpenOPL1000] lwIP task: network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
-    lwip_network_init(WIFI_MODE_STA);
-    printf("[OpenOPL1000] lwIP task: net_ready wait, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
-    lwip_net_ready();
-    printf("[OpenOPL1000] lwIP task: net_ready returned, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    memset(&apInfo, 0, sizeof(apInfo));
+    rc = wifi_sta_get_ap_info(&apInfo);
 
-    while (1)
+    if (rc == 0 && apInfo.ssid_length > 0)
     {
-        if (g_haveIp)
-        {
-            OpenOPL1000_UpdateNetifStrings();
-        }
-        osDelay(10000);
-    }
-}
-
-static void OpenOPL1000_LwipStartTaskOnce(void)
-{
-    osThreadDef_t threadDef;
-
-    if (g_lwipThreadStarted)
-    {
-        return;
+        memcpy(g_bssid, apInfo.bssid, sizeof(g_bssid));
+        g_channel = apInfo.channel;
+        printf("[OpenOPL1000] associated with '%.*s' bssid=" MACSTR " ch=%u rssi=%d heap=%u\r\n",
+               apInfo.ssid_length,
+               apInfo.ssid,
+               MAC2STR(apInfo.bssid),
+               (unsigned int)apInfo.channel,
+               apInfo.rssi,
+               OpenOPL1000_GetFreeHeap());
+        return true;
     }
 
-    memset(&threadDef, 0, sizeof(threadDef));
-    threadDef.name = "opl_lwip";
-    threadDef.stacksize = OS_TASK_STACK_SIZE_APP;
-    threadDef.tpriority = OS_TASK_PRIORITY_APP;
-    threadDef.instances = 0;
-    threadDef.pthread = OpenOPL1000_LwipThread;
-
-    g_lwipThread = osThreadCreate(&threadDef, NULL);
-    g_lwipThreadStarted = (g_lwipThread != NULL);
-
-    printf("[OpenOPL1000] lwIP task create %s, heap=%u\r\n",
-           g_lwipThreadStarted ? "ok" : "failed",
-           OpenOPL1000_GetFreeHeap());
+    return false;
 }
 
-static void OpenOPL1000_WifiWaitReady(void)
+static int OpenOPL1000_DoBlockingScanAndConnect(void)
 {
-    osDelay(OPENOPL1000_WIFI_READY_DELAY_MS);
-}
-
-static void OpenOPL1000_WifiScan(void)
-{
-    int rc;
-    wifi_scan_config_t scanConfig;
-    memset(&scanConfig, 0, sizeof(scanConfig));
-
-    printf("[OpenOPL1000] scanning for SSID '%s', heap=%u\r\n", g_ssid, OpenOPL1000_GetFreeHeap());
-    rc = wifi_scan_start(&scanConfig, false);
-    printf("[OpenOPL1000] wifi_scan_start rc=%d\r\n", rc);
-}
-
-static int OpenOPL1000_WifiConnectDirect(const char *reason)
-{
-    int rc;
     wifi_config_t wifiConfig;
+    wifi_scan_config_t scanConfig;
+    int rc;
+    int matched = 0;
 
-    memset(&wifiConfig, 0, sizeof(wifiConfig));
-    wifi_get_config(WIFI_MODE_STA, &wifiConfig);
+    memset(&scanConfig, 0, sizeof(scanConfig));
+    memset(&g_scanList, 0, sizeof(g_scanList));
 
-    printf("[OpenOPL1000] direct connect attempt (%s), ssid='%s', heap=%u\r\n",
-           reason ? reason : "no reason",
+    printf("[OpenOPL1000] worker: blocking scan for SSID '%s', heap=%u\r\n",
            g_ssid,
            OpenOPL1000_GetFreeHeap());
 
-    OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
-    rc = wifi_connection_connect(&wifiConfig);
-    printf("[OpenOPL1000] wifi_connection_connect rc=%d\r\n", rc);
-    return rc;
-}
+    /* The event-loop callback is not reliable in the v12 real OBK runtime: the
+     * SDK prints scan tables, but our WIFI_EVENT_SCAN_COMPLETE callback is not
+     * reached. Use a worker-owned blocking scan instead, then consume the scan
+     * list synchronously like the vendor demos do.
+     */
+    rc = wifi_scan_start(&scanConfig, true);
+    printf("[OpenOPL1000] worker: wifi_scan_start(blocking) rc=%d heap=%u\r\n",
+           rc,
+           OpenOPL1000_GetFreeHeap());
 
-static int OpenOPL1000_WifiConnectFromScan(void)
-{
-    wifi_config_t wifiConfig;
-    uint16_t recordCount = OPENOPL1000_SCAN_RECORD_LIMIT;
-    int matched = 0;
-    int rc;
+    rc = wifi_scan_get_ap_list(&g_scanList);
+    printf("[OpenOPL1000] worker: wifi_scan_get_ap_list rc=%d ap_count=%d heap=%u\r\n",
+           rc,
+           g_scanList.num,
+           OpenOPL1000_GetFreeHeap());
+
+    if (rc != 0 || g_scanList.num <= 0)
+    {
+        return -1;
+    }
 
     memset(&wifiConfig, 0, sizeof(wifiConfig));
     wifi_get_config(WIFI_MODE_STA, &wifiConfig);
 
-    memset(g_scanRecords, 0, sizeof(g_scanRecords));
-    rc = wifi_scan_get_ap_records(&recordCount, g_scanRecords);
-    printf("[OpenOPL1000] scan records rc=%d count=%u heap=%u\r\n",
-           rc,
-           (unsigned int)recordCount,
-           OpenOPL1000_GetFreeHeap());
-
-    if ((rc != 0) || (recordCount == 0))
+    for (int i = 0; i < g_scanList.num; i++)
     {
-        return OpenOPL1000_WifiConnectDirect("no scan records");
-    }
-
-    for (uint16_t i = 0; i < recordCount; i++)
-    {
-        const wifi_scan_info_t *rec = &g_scanRecords[i];
+        const wifi_scan_info_t *rec = &g_scanList.ap_record[i];
 
         if ((rec->ssid_length == wifiConfig.sta_config.ssid_length) &&
             (memcmp(rec->ssid,
@@ -207,9 +166,13 @@ static int OpenOPL1000_WifiConnectFromScan(void)
             matched = 1;
             memcpy(g_bssid, rec->bssid, sizeof(g_bssid));
             g_channel = rec->channel;
-            memcpy(wifiConfig.sta_config.bssid, rec->bssid, sizeof(wifiConfig.sta_config.bssid));
-            wifiConfig.sta_config.bssid_present = 1;
-            printf("[OpenOPL1000] matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d\r\n",
+
+            /* Stay close to the vendor demo: do not force bssid_present. The
+             * SDK docs say this should normally remain 0 unless the caller
+             * specifically wants to restrict to one BSSID.
+             */
+            wifiConfig.sta_config.bssid_present = 0;
+            printf("[OpenOPL1000] worker: matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d\r\n",
                    g_ssid,
                    MAC2STR(rec->bssid),
                    (unsigned int)rec->channel,
@@ -220,18 +183,122 @@ static int OpenOPL1000_WifiConnectFromScan(void)
 
     if (!matched)
     {
-        printf("[OpenOPL1000] SSID '%s' not found in first %u records, rescanning\r\n",
+        printf("[OpenOPL1000] worker: SSID '%s' not found in %d records\r\n",
                g_ssid,
-               (unsigned int)recordCount);
-        OpenOPL1000_WifiScan();
+               g_scanList.num);
         return -1;
     }
 
-    wifi_set_config(WIFI_MODE_STA, &wifiConfig);
     OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
     rc = wifi_connection_connect(&wifiConfig);
-    printf("[OpenOPL1000] wifi_connection_connect rc=%d\r\n", rc);
+    printf("[OpenOPL1000] worker: wifi_connection_connect rc=%d heap=%u\r\n",
+           rc,
+           OpenOPL1000_GetFreeHeap());
     return rc;
+}
+
+static void OpenOPL1000_StartLwipAndWaitForIp(void)
+{
+    if (g_lwipStarted)
+    {
+        return;
+    }
+
+    g_lwipStarted = true;
+    printf("[OpenOPL1000] worker: lwIP network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    lwip_network_init(WIFI_MODE_STA);
+    printf("[OpenOPL1000] worker: lwIP net_start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    lwip_net_start(WIFI_MODE_STA);
+    printf("[OpenOPL1000] worker: lwIP net_ready wait, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    lwip_net_ready();
+
+    g_haveIp = true;
+    OpenOPL1000_UpdateNetifStrings();
+    printf("[OpenOPL1000] worker: got IP %s GW=%s MASK=%s heap=%u\r\n",
+           g_ip,
+           g_gw,
+           g_mask,
+           OpenOPL1000_GetFreeHeap());
+    lwip_get_ip_info("st1");
+    OpenOPL1000_ReportStatus(WIFI_STA_CONNECTED);
+}
+
+static void OpenOPL1000_WifiWorker(void *args)
+{
+    (void)args;
+
+    printf("[OpenOPL1000] worker: started, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    osDelay(OPENOPL1000_WIFI_READY_DELAY_MS);
+
+    while (1)
+    {
+        if (!g_associated)
+        {
+            OpenOPL1000_DoBlockingScanAndConnect();
+
+            for (int i = 0; i < OPENOPL1000_ASSOC_WAIT_SECONDS; i++)
+            {
+                osDelay(1000);
+                if (OpenOPL1000_IsAssociated())
+                {
+                    g_associated = true;
+                    break;
+                }
+            }
+
+            if (!g_associated)
+            {
+                printf("[OpenOPL1000] worker: not associated after %u seconds, retrying heap=%u\r\n",
+                       (unsigned int)OPENOPL1000_ASSOC_WAIT_SECONDS,
+                       OpenOPL1000_GetFreeHeap());
+                wifi_connection_disconnect_ap();
+                osDelay(OPENOPL1000_SCAN_RETRY_DELAY_MS);
+                continue;
+            }
+        }
+
+        if (g_associated && !g_haveIp)
+        {
+            OpenOPL1000_StartLwipAndWaitForIp();
+        }
+
+        if (g_haveIp)
+        {
+            OpenOPL1000_UpdateNetifStrings();
+            if (strcmp(g_ip, "0.0.0.0") == 0)
+            {
+                g_haveIp = false;
+                g_lwipStarted = false;
+                printf("[OpenOPL1000] worker: lost IP, restarting network path\r\n");
+            }
+        }
+
+        osDelay(10000);
+    }
+}
+
+static void OpenOPL1000_StartWorkerOnce(void)
+{
+    osThreadDef_t threadDef;
+
+    if (g_workerStarted)
+    {
+        return;
+    }
+
+    memset(&threadDef, 0, sizeof(threadDef));
+    threadDef.name = "opl_wifi";
+    threadDef.stacksize = OS_TASK_STACK_SIZE_APP;
+    threadDef.tpriority = OS_TASK_PRIORITY_APP;
+    threadDef.instances = 0;
+    threadDef.pthread = OpenOPL1000_WifiWorker;
+
+    g_workerThread = osThreadCreate(&threadDef, NULL);
+    g_workerStarted = (g_workerThread != NULL);
+
+    printf("[OpenOPL1000] worker task create %s, heap=%u\r\n",
+           g_workerStarted ? "ok" : "failed",
+           OpenOPL1000_GetFreeHeap());
 }
 
 static int OpenOPL1000_DefaultStaConnectedHandler(wifi_event_t event, uint8_t *data, uint32_t length)
@@ -250,60 +317,51 @@ static int OpenOPL1000_DefaultStaDisconnectedHandler(wifi_event_t event, uint8_t
 
 static int OpenOPL1000_WifiEventHandler(wifi_event_id_t eventId, void *data, uint16_t length)
 {
+    (void)data;
     (void)length;
 
     switch (eventId)
     {
         case WIFI_EVENT_STA_START:
-            printf("[OpenOPL1000] Wi-Fi STA started\r\n");
-            OpenOPL1000_WifiWaitReady();
-            OpenOPL1000_WifiScan();
+            printf("[OpenOPL1000] event: STA_START\r\n");
             break;
 
         case WIFI_EVENT_SCAN_COMPLETE:
-            g_seenScanComplete = true;
-            printf("[OpenOPL1000] scan complete event\r\n");
-            OpenOPL1000_WifiConnectFromScan();
+            printf("[OpenOPL1000] event: SCAN_COMPLETE\r\n");
             break;
 
         case WIFI_EVENT_STA_CONNECTED:
-            if (data)
-            {
-                wifi_event_sta_connected_t *ev = (wifi_event_sta_connected_t *)data;
-                memcpy(g_bssid, ev->bssid, sizeof(g_bssid));
-                g_channel = ev->channel;
-            }
-            printf("[OpenOPL1000] connected to '%s', starting lwIP\r\n", g_ssid);
+            printf("[OpenOPL1000] event: STA_CONNECTED\r\n");
+            g_associated = true;
             OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
-            lwip_net_start(WIFI_MODE_STA);
             break;
 
         case WIFI_EVENT_STA_GOT_IP:
+            printf("[OpenOPL1000] event: STA_GOT_IP\r\n");
             g_haveIp = true;
             OpenOPL1000_UpdateNetifStrings();
-            printf("[OpenOPL1000] got IP %s\r\n", g_ip);
-            lwip_get_ip_info("st1");
+            printf("[OpenOPL1000] event: got IP %s\r\n", g_ip);
             OpenOPL1000_ReportStatus(WIFI_STA_CONNECTED);
             break;
 
         case WIFI_EVENT_STA_DISCONNECTED:
+            printf("[OpenOPL1000] event: STA_DISCONNECTED\r\n");
+            g_associated = false;
             g_haveIp = false;
-            printf("[OpenOPL1000] disconnected, rescanning\r\n");
+            g_lwipStarted = false;
             OpenOPL1000_ReportStatus(WIFI_STA_DISCONNECTED);
-            OpenOPL1000_WifiWaitReady();
-            OpenOPL1000_WifiScan();
             break;
 
         case WIFI_EVENT_STA_CONNECTION_FAILED:
+            printf("[OpenOPL1000] event: STA_CONNECTION_FAILED\r\n");
+            g_associated = false;
             g_haveIp = false;
-            printf("[OpenOPL1000] connection failed, rescanning\r\n");
+            g_lwipStarted = false;
             OpenOPL1000_ReportStatus(WIFI_STA_AUTH_FAILED);
-            OpenOPL1000_WifiWaitReady();
-            OpenOPL1000_WifiScan();
             break;
 
         default:
-            printf("[OpenOPL1000] Wi-Fi event %d\r\n", eventId);
+            printf("[OpenOPL1000] event: %d\r\n", eventId);
             break;
     }
 
@@ -376,6 +434,11 @@ void HAL_ConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticI
     strncpy((char *)wifiConfig.sta_config.password, g_password, sizeof(wifiConfig.sta_config.password));
     wifiConfig.sta_config.ssid_length = strlen(g_ssid);
     wifiConfig.sta_config.password_length = strlen(g_password);
+    wifiConfig.sta_config.bssid_present = 0;
+    wifiConfig.sta_config.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wifiConfig.sta_config.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    wifiConfig.sta_config.threshold.authmode = WIFI_AUTH_OPEN;
+    wifiConfig.sta_config.threshold.rssi = -127;
 
     rc = wifi_set_config(WIFI_MODE_STA, &wifiConfig);
     printf("[OpenOPL1000] wifi_set_config rc=%d ssid_len=%u pass_len=%u\r\n",
@@ -383,10 +446,18 @@ void HAL_ConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticI
            (unsigned int)wifiConfig.sta_config.ssid_length,
            (unsigned int)wifiConfig.sta_config.password_length);
 
-    rc = wifi_start();
-    printf("[OpenOPL1000] wifi_start rc=%d heap=%u\r\n", rc, OpenOPL1000_GetFreeHeap());
+    if (!g_wifiStarted)
+    {
+        rc = wifi_start();
+        g_wifiStarted = (rc == 0);
+        printf("[OpenOPL1000] wifi_start rc=%d heap=%u\r\n", rc, OpenOPL1000_GetFreeHeap());
+    }
+    else
+    {
+        printf("[OpenOPL1000] wifi_start skipped; already started, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    }
 
-    OpenOPL1000_LwipStartTaskOnce();
+    OpenOPL1000_StartWorkerOnce();
 }
 
 void HAL_FastConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticIP_t *ip)
@@ -408,8 +479,10 @@ void HAL_DisableEnhancedFastConnect(void)
 
 void HAL_DisconnectFromWifi(void)
 {
+    g_associated = false;
     g_haveIp = false;
-    wifi_stop();
+    g_lwipStarted = false;
+    wifi_connection_disconnect_ap();
     OpenOPL1000_ReportStatus(WIFI_STA_DISCONNECTED);
 }
 
