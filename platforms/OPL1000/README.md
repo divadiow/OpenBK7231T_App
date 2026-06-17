@@ -55,3 +55,9 @@ M3 Bins: opl1000_app_m3.bin
 ```
 
 v9 uses the root SDK `FW_Pack` M0/PatchData pairing, not the demo TCP_Client pairing. This matches the root SDK patch layout and includes the extra M3/M0 hardware patch words from `FW_Pack/PatchData.txt`.
+
+## v11 Wi-Fi bring-up note
+
+v11 keeps the v10 real OpenBeken runtime path and changes only the OPL1000 Wi-Fi glue.
+The v10 log showed the scan table but no association, with only about 728 bytes free after Wi-Fi init. The SDK demo path allocates a full `wifi_scan_list_t`, which is too large under the real OBK runtime. v11 avoids that heap allocation by using a fixed small scan-record buffer, copies the matched BSSID/channel into the STA config, and removes the extra no-op OPL1000 Wi-Fi keeper task to recover heap.
+
