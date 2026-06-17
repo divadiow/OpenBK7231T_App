@@ -163,3 +163,20 @@ v20 keeps the BLE/LE task disabled, but explicitly calls `nl_scrt_Init()` in the
 custom No-BLE service init before the WPA supplicant is started.  It also calls
 `sys_cfg_init()` because replacing `Sys_ServiceInit_patch()` otherwise bypasses
 that SDK post-service configuration step.
+
+## v21 notes
+
+v21 keeps the v20 Wi-Fi/BLE-disabled bring-up base, but changes the OPL1000
+HTTP path from the tiny holding-page-only responder to a static-buffer,
+synchronous real OpenBeken HTTP parser path.
+
+Expected test URLs:
+
+- `/` - real OpenBeken index route
+- `/cm?cmnd=status` - real OpenBeken command route
+- `/status` - tiny OPL1000 fallback JSON endpoint
+- `/opl1000` - tiny OPL1000 fallback HTML endpoint
+
+This is still deliberately single-client and synchronous on OPL1000. It avoids
+heap allocation and per-client HTTP tasks because those were the source of the
+pre-v20 browser crashes.

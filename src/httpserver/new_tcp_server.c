@@ -161,16 +161,26 @@ exit:
 #include "../hal/hal_wifi.h"
 extern size_t xPortGetFreeHeapSize(void);
 
-#define OPL1000_MICRO_REQ_SIZE 512
-#define OPL1000_MICRO_REPLY_SIZE 768
-#define OPL1000_STATUS_BODY_SIZE 192
-#define OPL1000_PAGE_BODY_SIZE 256
+/*
+ * v20 proved that Wi-Fi, DHCP, TCP accept and static micro HTTP all work once
+ * BLE is disabled. v21 keeps the static/synchronous socket model but routes the
+ * request through the real OpenBeken HTTP parser and page/command handlers.
+ *
+ * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
+ * that large locals can overflow the TCP_server stack.
+ */
+#define OPL1000_OBK_REQ_SIZE      768
+#define OPL1000_OBK_REPLY_SIZE    1024
+#define OPL1000_MICRO_REPLY_SIZE  768
+#define OPL1000_STATUS_BODY_SIZE  192
+#define OPL1000_PAGE_BODY_SIZE    256
 
-static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
+static char g_opl1000_obk_req[OPL1000_OBK_REQ_SIZE];
+static char g_opl1000_obk_reply[OPL1000_OBK_REPLY_SIZE];
 static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
 static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE];
 static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE];
-static http_request_t g_opl1000_request_probe;
+static http_request_t g_opl1000_request;
 static struct sockaddr_storage g_opl1000_source_addr;
 
 static int opl1000_send_all(int fd, const char *data, int len)
@@ -216,94 +226,120 @@ static int opl1000_http_write_response(int fd, const char *status, const char *c
 	return opl1000_send_all(fd, g_opl1000_micro_reply, len);
 }
 
-static void tcp_client_process_sync(tcp_thread_t* arg)
+static int opl1000_micro_fallback(int fd, const char *buf)
 {
-	int fd = arg->fd;
-	char *buf = g_opl1000_micro_req;
-	http_request_t *requestProbe = &g_opl1000_request_probe;
-	int sendRc = 0;
-
-	/* OPL1000 A2 is down to roughly 728 bytes of FreeRTOS heap after Wi-Fi,
-	 * supplicant and lwIP/DHCP are running. Keep this path static and stack-light:
-	 * v17 proved browser receive/send works, but overflowed the TCP_server stack
-	 * after using local response buffers and verbose formatted logging.
-	 */
-	memset(requestProbe, 0, sizeof(*requestProbe));
-	memset(buf, 0, OPL1000_MICRO_REQ_SIZE);
-
-	requestProbe->fd = fd;
-	requestProbe->received = buf;
-	requestProbe->receivedLenmax = OPL1000_MICRO_REQ_SIZE - 2;
-	requestProbe->responseCode = HTTP_RESPONSE_OK;
-	requestProbe->receivedLen = 0;
-
-	while(1)
-	{
-		int remaining = requestProbe->receivedLenmax - requestProbe->receivedLen;
-		int received = recv(fd, requestProbe->received + requestProbe->receivedLen, remaining, 0);
-		if(received <= 0)
-		{
-			break;
-		}
-		requestProbe->receivedLen += received;
-		requestProbe->received[requestProbe->receivedLen] = 0;
-		if(strstr(requestProbe->received, "\r\n\r\n") != NULL ||
-			strstr(requestProbe->received, "\n\n") != NULL ||
-			received < remaining ||
-			requestProbe->receivedLen >= requestProbe->receivedLenmax)
-		{
-			break;
-		}
-	}
-
-	if(requestProbe->receivedLen <= 0)
-	{
-		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 micro client disconnected before request, fd: %d", fd);
-		goto exit;
-	}
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 micro request len %i heap %u",
-		requestProbe->receivedLen,
-		(unsigned int)xPortGetFreeHeapSize());
-
 	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
 	{
-		sendRc = opl1000_http_write_response(fd,
+		return opl1000_http_write_response(fd,
 			"404 Not Found",
 			"text/plain",
 			"not found\n");
 	}
-	else if(strncmp(buf, "GET /cm?cmnd=status", 20) == 0 ||
-		strncmp(buf, "GET /status", 11) == 0)
+	else if(strncmp(buf, "GET /opl1000", 12) == 0)
+	{
+		snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
+			"<html><body><h1>OpenOPL1000</h1>"
+			"<p>IP: %s</p>"
+			"<p>Heap: %u</p>"
+			"<p>v21 real HTTP test build</p>"
+			"</body></html>\n",
+			HAL_GetMyIPString(),
+			(unsigned int)xPortGetFreeHeapSize());
+		return opl1000_http_write_response(fd,
+			"200 OK",
+			"text/html",
+			g_opl1000_page_body);
+	}
+	else if(strncmp(buf, "GET /status", 11) == 0)
 	{
 		snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
 			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
 			HAL_GetMyIPString(),
 			(unsigned int)xPortGetFreeHeapSize(),
 			Main_IsConnectedToWiFi() ? 1 : 0);
-		sendRc = opl1000_http_write_response(fd,
+		return opl1000_http_write_response(fd,
 			"200 OK",
 			"application/json",
 			g_opl1000_status_body);
 	}
-	else
+	return 0;
+}
+
+static void tcp_client_process_sync(tcp_thread_t* arg)
+{
+	int fd = arg->fd;
+	http_request_t *request = &g_opl1000_request;
+	int sendRc = 0;
+	int lenret = 0;
+
+	memset(request, 0, sizeof(*request));
+	memset(g_opl1000_obk_req, 0, OPL1000_OBK_REQ_SIZE);
+	memset(g_opl1000_obk_reply, 0, OPL1000_OBK_REPLY_SIZE);
+
+	request->fd = fd;
+	request->received = g_opl1000_obk_req;
+	request->receivedLenmax = OPL1000_OBK_REQ_SIZE - 2;
+	request->responseCode = HTTP_RESPONSE_OK;
+	request->receivedLen = 0;
+	request->reply = g_opl1000_obk_reply;
+	request->replylen = 0;
+	request->replymaxlen = OPL1000_OBK_REPLY_SIZE - 1;
+
+	while(1)
 	{
-		snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
-			"<html><body><h1>OpenOPL1000</h1>"
-			"<p>IP: %s</p>"
-			"<p>Heap: %u</p>"
-			"<p><a href='/status'>status</a></p>"
-			"</body></html>\n",
-			HAL_GetMyIPString(),
-			(unsigned int)xPortGetFreeHeapSize());
-		sendRc = opl1000_http_write_response(fd,
-			"200 OK",
-			"text/html",
-			g_opl1000_page_body);
+		int remaining = request->receivedLenmax - request->receivedLen;
+		int received = recv(fd, request->received + request->receivedLen, remaining, 0);
+		if(received <= 0)
+		{
+			break;
+		}
+		request->receivedLen += received;
+		request->received[request->receivedLen] = 0;
+		if(strstr(request->received, "\r\n\r\n") != NULL ||
+			strstr(request->received, "\n\n") != NULL ||
+			received < remaining ||
+			request->receivedLen >= request->receivedLenmax)
+		{
+			break;
+		}
 	}
 
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
+	if(request->receivedLen <= 0)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 OBK client disconnected before request, fd: %d", fd);
+		goto exit;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_HTTP,
+		"OPL1000 OBK request len %i heap %u first='%.*s'",
+		request->receivedLen,
+		(unsigned int)xPortGetFreeHeapSize(),
+		(request->receivedLen > 48) ? 48 : request->receivedLen,
+		request->received);
+
+	/* Keep a tiny known-good fallback endpoint for diagnostics, but use the real
+	 * OpenBeken HTTP parser/routes for normal / and /cm requests.
+	 */
+	sendRc = opl1000_micro_fallback(fd, request->received);
+	if(sendRc == 0)
+	{
+		lenret = HTTP_ProcessPacket(request);
+		if(lenret > 0)
+		{
+			sendRc = send(fd, request->reply, lenret, 0);
+		}
+		else
+		{
+			/* Some OBK handlers stream via postany()/send() and return 0. */
+			sendRc = lenret;
+		}
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_HTTP,
+		"OPL1000 OBK reply rc %i lenret %i heap %u",
+		sendRc,
+		lenret,
+		(unsigned int)xPortGetFreeHeapSize());
 
 exit:
 	if(fd != INVALID_SOCK)
