@@ -29,9 +29,10 @@
 #define OPENOPL1000_WIFI_PASSWORD "1234abcd"
 #endif
 
-#define OPENOPL1000_WIFI_READY_DELAY_MS      2000
-#define OPENOPL1000_ASSOC_WAIT_SECONDS       12
-#define OPENOPL1000_SCAN_RETRY_DELAY_MS      2000
+#define OPENOPL1000_WIFI_READY_DELAY_MS      3000
+#define OPENOPL1000_SCAN_RESULT_WAIT_MS      3500
+#define OPENOPL1000_ASSOC_WAIT_SECONDS       20
+#define OPENOPL1000_SCAN_RETRY_DELAY_MS      7000
 
 extern size_t xPortGetFreeHeapSize(void);
 
@@ -116,7 +117,7 @@ static bool OpenOPL1000_IsAssociated(void)
     return false;
 }
 
-static int OpenOPL1000_DoBlockingScanAndConnect(void)
+static int OpenOPL1000_DoDelayedScanAndConnect(void)
 {
     wifi_config_t wifiConfig;
     wifi_scan_config_t scanConfig;
@@ -126,28 +127,32 @@ static int OpenOPL1000_DoBlockingScanAndConnect(void)
     memset(&scanConfig, 0, sizeof(scanConfig));
     memset(&g_scanList, 0, sizeof(g_scanList));
 
-    printf("[OpenOPL1000] worker: blocking scan for SSID '%s', heap=%u\r\n",
+    printf("[OpenOPL1000] worker: async scan for SSID '%s', heap=%u\r\n",
            g_ssid,
            OpenOPL1000_GetFreeHeap());
 
-    /* The event-loop callback is not reliable in the v12 real OBK runtime: the
-     * SDK prints scan tables, but our WIFI_EVENT_SCAN_COMPLETE callback is not
-     * reached. Use a worker-owned blocking scan instead, then consume the scan
-     * list synchronously like the vendor demos do.
+    /* The v13 log proved that wifi_scan_start(..., true) returns before the
+     * SDK has populated its scan cache: wifi_scan_get_ap_list() saw ap_count=0,
+     * then the ROM/event-loop printed the real AP table a second or two later.
+     * Use the same non-blocking scan style as the vendor examples, but consume
+     * the result from our worker after a conservative delay.
      */
-    rc = wifi_scan_start(&scanConfig, true);
-    printf("[OpenOPL1000] worker: wifi_scan_start(blocking) rc=%d heap=%u\r\n",
+    rc = wifi_scan_start(&scanConfig, false);
+    printf("[OpenOPL1000] worker: wifi_scan_start(async) rc=%d heap=%u\r\n",
            rc,
            OpenOPL1000_GetFreeHeap());
 
+    osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
+
     rc = wifi_scan_get_ap_list(&g_scanList);
-    printf("[OpenOPL1000] worker: wifi_scan_get_ap_list rc=%d ap_count=%d heap=%u\r\n",
+    printf("[OpenOPL1000] worker: delayed wifi_scan_get_ap_list rc=%d ap_count=%d heap=%u\r\n",
            rc,
            g_scanList.num,
            OpenOPL1000_GetFreeHeap());
 
     if (rc != 0 || g_scanList.num <= 0)
     {
+        printf("[OpenOPL1000] worker: no usable scan result yet; will retry without disconnect\r\n");
         return -1;
     }
 
@@ -158,6 +163,15 @@ static int OpenOPL1000_DoBlockingScanAndConnect(void)
     {
         const wifi_scan_info_t *rec = &g_scanList.ap_record[i];
 
+        printf("[OpenOPL1000] worker: rec[%d] ssid='%.*s' len=%u rssi=%d ch=%u auth=%d\r\n",
+               i,
+               rec->ssid_length,
+               rec->ssid,
+               (unsigned int)rec->ssid_length,
+               rec->rssi,
+               (unsigned int)rec->channel,
+               rec->auth_mode);
+
         if ((rec->ssid_length == wifiConfig.sta_config.ssid_length) &&
             (memcmp(rec->ssid,
                     wifiConfig.sta_config.ssid,
@@ -167,23 +181,28 @@ static int OpenOPL1000_DoBlockingScanAndConnect(void)
             memcpy(g_bssid, rec->bssid, sizeof(g_bssid));
             g_channel = rec->channel;
 
-            /* Stay close to the vendor demo: do not force bssid_present. The
-             * SDK docs say this should normally remain 0 unless the caller
-             * specifically wants to restrict to one BSSID.
-             */
-            wifiConfig.sta_config.bssid_present = 0;
-            printf("[OpenOPL1000] worker: matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d\r\n",
+            memcpy(wifiConfig.sta_config.bssid, rec->bssid, sizeof(wifiConfig.sta_config.bssid));
+            wifiConfig.sta_config.bssid_present = 1;
+            wifiConfig.sta_config.scan_method = WIFI_FAST_SCAN;
+            wifiConfig.sta_config.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+            wifiConfig.sta_config.threshold.authmode = WIFI_AUTH_OPEN;
+            wifiConfig.sta_config.threshold.rssi = -127;
+
+            printf("[OpenOPL1000] worker: matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d auth=%d pair=%d group=%d\r\n",
                    g_ssid,
                    MAC2STR(rec->bssid),
                    (unsigned int)rec->channel,
-                   rec->rssi);
+                   rec->rssi,
+                   rec->auth_mode,
+                   rec->pairwise_cipher,
+                   rec->group_cipher);
             break;
         }
     }
 
     if (!matched)
     {
-        printf("[OpenOPL1000] worker: SSID '%s' not found in %d records\r\n",
+        printf("[OpenOPL1000] worker: SSID '%s' not found in %d delayed records\r\n",
                g_ssid,
                g_scanList.num);
         return -1;
@@ -234,7 +253,7 @@ static void OpenOPL1000_WifiWorker(void *args)
     {
         if (!g_associated)
         {
-            OpenOPL1000_DoBlockingScanAndConnect();
+            OpenOPL1000_DoDelayedScanAndConnect();
 
             for (int i = 0; i < OPENOPL1000_ASSOC_WAIT_SECONDS; i++)
             {
@@ -251,7 +270,10 @@ static void OpenOPL1000_WifiWorker(void *args)
                 printf("[OpenOPL1000] worker: not associated after %u seconds, retrying heap=%u\r\n",
                        (unsigned int)OPENOPL1000_ASSOC_WAIT_SECONDS,
                        OpenOPL1000_GetFreeHeap());
-                wifi_connection_disconnect_ap();
+                /* Do not call wifi_connection_disconnect_ap() here. The v13 log
+                 * WDTed in the SDK opl_event_loop shortly after a retry. Let the
+                 * controller settle, then re-scan/re-connect from the worker.
+                 */
                 osDelay(OPENOPL1000_SCAN_RETRY_DELAY_MS);
                 continue;
             }
