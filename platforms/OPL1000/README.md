@@ -93,3 +93,18 @@ v16 keeps the same STA/raw-scan connection path, then terminates the temporary W
 worker task after DHCP so its stack is returned.  The OPL1000 HTTP server also handles
 one accepted connection synchronously on the TCP server task with small temporary
 buffers instead of creating a per-client thread.
+
+
+## v17 note
+
+The v15/v16 logs proved that STA association, DHCP and the TCP listener are working, but only about 728 bytes of FreeRTOS heap remain once lwIP is up. v16 still tried to allocate request/reply buffers for an accepted browser socket and failed. v17 changes the temporary OPL1000 HTTP handling to a static-buffer micro endpoint so that a browser request can be answered without `os_malloc()` or an HTTP client task.
+
+Temporary endpoints for bring-up:
+
+```text
+http://<device-ip>/
+http://<device-ip>/cm?cmnd=status
+http://<device-ip>/status
+```
+
+This is intentionally a bring-up path. It proves socket RX/TX from the real OpenBeken runtime, but the full OBK web UI remains disabled until more heap is recovered from the OPL1000 port.

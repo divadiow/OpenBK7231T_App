@@ -7,6 +7,7 @@
 #include "lwip/ip_addr.h"
 #include "lwip/inet.h"
 #include <string.h>
+#include <stdio.h>
 #include "../logging/logging.h"
 #include "../hal/hal_ota.h"
 #include "new_http.h"
@@ -157,82 +158,169 @@ exit:
 
 
 #if PLATFORM_OPL1000
+#include "../hal/hal_wifi.h"
+extern size_t xPortGetFreeHeapSize(void);
+
+#define OPL1000_MICRO_REQ_SIZE 512
+#define OPL1000_MICRO_REPLY_SIZE 768
+
+static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
+static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
+
+static int opl1000_send_all(int fd, const char *data, int len)
+{
+	int sentTotal = 0;
+	while(sentTotal < len)
+	{
+		int sent = send(fd, data + sentTotal, len - sentTotal, 0);
+		if(sent <= 0)
+		{
+			return sent;
+		}
+		sentTotal += sent;
+	}
+	return sentTotal;
+}
+
+static int opl1000_http_write_response(int fd, const char *status, const char *ctype, const char *body)
+{
+	int bodyLen = (int)strlen(body);
+	int len = snprintf(g_opl1000_micro_reply,
+		OPL1000_MICRO_REPLY_SIZE,
+		"HTTP/1.1 %s\r\n"
+		"Connection: close\r\n"
+		"Content-Type: %s\r\n"
+		"Content-Length: %d\r\n"
+		"Cache-Control: no-store\r\n"
+		"\r\n"
+		"%s",
+		status,
+		ctype,
+		bodyLen,
+		body);
+
+	if(len <= 0)
+	{
+		return len;
+	}
+	if(len >= OPL1000_MICRO_REPLY_SIZE)
+	{
+		len = OPL1000_MICRO_REPLY_SIZE - 1;
+	}
+	return opl1000_send_all(fd, g_opl1000_micro_reply, len);
+}
+
 static void tcp_client_process_sync(tcp_thread_t* arg)
 {
 	int fd = arg->fd;
-	char* buf = NULL;
-	char* reply = NULL;
-	int replyBufferSize = REPLY_BUFFER_SIZE;
+	char *buf = g_opl1000_micro_req;
+	http_request_t requestProbe;
+	int firstLineLen;
+	int sendRc = 0;
 
-	/* OPL1000 has too little heap after STA/lwIP bring-up to create a per-client
-	 * HTTP task.  Process one accepted connection on the TCP server task and use
-	 * small heap buffers, then immediately free them.  This keeps the real OBK
-	 * HTTP parser/route path but avoids the failing HTTP Client thread creation.
+	/* OPL1000 A2 is down to roughly 728 bytes of FreeRTOS heap after Wi-Fi,
+	 * supplicant and lwIP/DHCP are running. v16 therefore accepted the socket but
+	 * failed to malloc even small request/reply buffers.  This v17 path avoids
+	 * heap use entirely and serves a tiny bring-up HTTP endpoint from static
+	 * storage.  The full OBK HTTP route path can be re-enabled after more heap is
+	 * recovered from the port.
 	 */
-	buf = (char*)os_malloc(INCOMING_BUFFER_SIZE);
-	reply = (char*)os_malloc(replyBufferSize);
-	if(buf == NULL || reply == NULL)
-	{
-		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 sync client malloc failed, buf=%p reply=%p", buf, reply);
-		goto exit;
-	}
+	memset(&requestProbe, 0, sizeof(requestProbe));
+	memset(buf, 0, OPL1000_MICRO_REQ_SIZE);
 
-	http_request_t request;
-	memset(&request, 0, sizeof(request));
-
-	request.fd = fd;
-	request.received = buf;
-	request.receivedLenmax = INCOMING_BUFFER_SIZE - 2;
-	request.responseCode = HTTP_RESPONSE_OK;
-	request.receivedLen = 0;
+	requestProbe.fd = fd;
+	requestProbe.received = buf;
+	requestProbe.receivedLenmax = OPL1000_MICRO_REQ_SIZE - 2;
+	requestProbe.responseCode = HTTP_RESPONSE_OK;
+	requestProbe.receivedLen = 0;
 
 	while(1)
 	{
-		int remaining = request.receivedLenmax - request.receivedLen;
-		int received = recv(fd, request.received + request.receivedLen, remaining, 0);
+		int remaining = requestProbe.receivedLenmax - requestProbe.receivedLen;
+		int received = recv(fd, requestProbe.received + requestProbe.receivedLen, remaining, 0);
 		if(received <= 0)
 		{
 			break;
 		}
-		request.receivedLen += received;
-		request.received[request.receivedLen] = 0;
-		if(received < remaining || request.receivedLen >= request.receivedLenmax)
+		requestProbe.receivedLen += received;
+		requestProbe.received[requestProbe.receivedLen] = 0;
+		if(strstr(requestProbe.received, "\r\n\r\n") != NULL ||
+			strstr(requestProbe.received, "\n\n") != NULL ||
+			received < remaining ||
+			requestProbe.receivedLen >= requestProbe.receivedLenmax)
 		{
 			break;
 		}
 	}
 
-	request.received[request.receivedLen] = 0;
-	request.reply = reply;
-	request.replylen = 0;
-	request.replymaxlen = replyBufferSize - 1;
-	reply[0] = '\0';
-
-	if(request.receivedLen <= 0)
+	if(requestProbe.receivedLen <= 0)
 	{
-		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 sync client disconnected before request, fd: %d", fd);
+		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 micro client disconnected before request, fd: %d", fd);
 		goto exit;
 	}
 
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 sync request len %i", request.receivedLen);
-	int lenret = HTTP_ProcessPacket(&request);
-	if(lenret > 0)
+	firstLineLen = 0;
+	while(firstLineLen < requestProbe.receivedLen &&
+		buf[firstLineLen] != '\r' &&
+		buf[firstLineLen] != '\n')
 	{
-		ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 sync reply len %i", lenret);
-		send(fd, reply, lenret, 0);
+		firstLineLen++;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_HTTP,
+		"OPL1000 micro request len %i heap %u first='%.*s'",
+		requestProbe.receivedLen,
+		(unsigned int)xPortGetFreeHeapSize(),
+		firstLineLen,
+		buf);
+
+	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
+	{
+		sendRc = opl1000_http_write_response(fd,
+			"404 Not Found",
+			"text/plain",
+			"not found\n");
+	}
+	else if(strncmp(buf, "GET /cm?cmnd=status", 20) == 0 ||
+		strncmp(buf, "GET /status", 11) == 0)
+	{
+		char body[256];
+		snprintf(body, sizeof(body),
+			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"gw\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
+			HAL_GetMyIPString(),
+			HAL_GetMyGatewayString(),
+			(unsigned int)xPortGetFreeHeapSize(),
+			Main_IsConnectedToWiFi() ? 1 : 0);
+		sendRc = opl1000_http_write_response(fd,
+			"200 OK",
+			"application/json",
+			body);
 	}
 	else
 	{
-		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 sync HTTP_ProcessPacket returned %i", lenret);
+		char body[384];
+		snprintf(body, sizeof(body),
+			"<html><head><title>OpenOPL1000</title></head>"
+			"<body><h1>OpenOPL1000</h1>"
+			"<p>WiFi connected. IP: %s</p>"
+			"<p>Free heap: %u bytes</p>"
+			"<p><a href='/cm?cmnd=status'>status</a></p>"
+			"</body></html>\n",
+			HAL_GetMyIPString(),
+			(unsigned int)xPortGetFreeHeapSize());
+		sendRc = opl1000_http_write_response(fd,
+			"200 OK",
+			"text/html",
+			body);
 	}
 
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply send rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
+
 exit:
-	if(buf != NULL)
-		os_free(buf);
-	if(reply != NULL)
-		os_free(reply);
 	if(fd != INVALID_SOCK)
+	{
 		lwip_close(fd);
+	}
 	arg->fd = INVALID_SOCK;
 	arg->thread = NULL;
 	arg->isCompleted = false;
