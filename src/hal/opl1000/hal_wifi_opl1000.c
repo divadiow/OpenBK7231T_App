@@ -121,6 +121,7 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
 {
     wifi_config_t wifiConfig;
     wifi_scan_config_t scanConfig;
+    scan_report_t *report;
     int rc;
     int matched = 0;
 
@@ -131,11 +132,11 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
            g_ssid,
            OpenOPL1000_GetFreeHeap());
 
-    /* The v13 log proved that wifi_scan_start(..., true) returns before the
-     * SDK has populated its scan cache: wifi_scan_get_ap_list() saw ap_count=0,
-     * then the ROM/event-loop printed the real AP table a second or two later.
-     * Use the same non-blocking scan style as the vendor examples, but consume
-     * the result from our worker after a conservative delay.
+    /* Use vendor-demo style async scan.  The public wifi_scan_get_ap_list()
+     * conversion path on A2 gives valid RSSI/channel/auth fields but empty
+     * SSID fields in our real-port build.  The SDK's own table printer reads
+     * from the lower-level scan_report_t via wifi_get_scan_result(), where the
+     * SSID is present.  v15 therefore matches using that same internal report.
      */
     rc = wifi_scan_start(&scanConfig, false);
     printf("[OpenOPL1000] worker: wifi_scan_start(async) rc=%d heap=%u\r\n",
@@ -145,41 +146,54 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
     osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
 
     rc = wifi_scan_get_ap_list(&g_scanList);
-    printf("[OpenOPL1000] worker: delayed wifi_scan_get_ap_list rc=%d ap_count=%d heap=%u\r\n",
+    printf("[OpenOPL1000] worker: public scan list rc=%d ap_count=%d heap=%u\r\n",
            rc,
            g_scanList.num,
            OpenOPL1000_GetFreeHeap());
 
-    if (rc != 0 || g_scanList.num <= 0)
+    report = wifi_get_scan_result ? wifi_get_scan_result() : NULL;
+    printf("[OpenOPL1000] worker: raw scan report ptr=%p count=%u heap=%u\r\n",
+           report,
+           report ? (unsigned int)report->uScanApNum : 0,
+           OpenOPL1000_GetFreeHeap());
+
+    if (report == NULL || report->pScanInfo == NULL || report->uScanApNum == 0)
     {
-        printf("[OpenOPL1000] worker: no usable scan result yet; will retry without disconnect\r\n");
+        printf("[OpenOPL1000] worker: raw scan report not ready; will retry\r\n");
         return -1;
     }
 
     memset(&wifiConfig, 0, sizeof(wifiConfig));
     wifi_get_config(WIFI_MODE_STA, &wifiConfig);
 
-    for (int i = 0; i < g_scanList.num; i++)
+    for (uint32_t i = 0; i < report->uScanApNum; i++)
     {
-        const wifi_scan_info_t *rec = &g_scanList.ap_record[i];
+        const scan_info_t *rec = &report->pScanInfo[i];
+        unsigned int ssidLen = (unsigned int)rec->ssid_len;
 
-        printf("[OpenOPL1000] worker: rec[%d] ssid='%.*s' len=%u rssi=%d ch=%u auth=%d\r\n",
-               i,
-               rec->ssid_length,
+        if (ssidLen > WIFI_MAX_LENGTH_OF_SSID)
+        {
+            ssidLen = WIFI_MAX_LENGTH_OF_SSID;
+        }
+
+        printf("[OpenOPL1000] worker: raw[%u] ssid='%.*s' len=%u bssid=" MACSTR " rssi=%d ch=%u caps=0x%04x\r\n",
+               (unsigned int)i,
+               ssidLen,
                rec->ssid,
-               (unsigned int)rec->ssid_length,
+               ssidLen,
+               MAC2STR(rec->bssid),
                rec->rssi,
-               (unsigned int)rec->channel,
-               rec->auth_mode);
+               (unsigned int)rec->ap_channel,
+               (unsigned int)rec->capabilities);
 
-        if ((rec->ssid_length == wifiConfig.sta_config.ssid_length) &&
+        if ((ssidLen == wifiConfig.sta_config.ssid_length) &&
             (memcmp(rec->ssid,
                     wifiConfig.sta_config.ssid,
                     wifiConfig.sta_config.ssid_length) == 0))
         {
             matched = 1;
             memcpy(g_bssid, rec->bssid, sizeof(g_bssid));
-            g_channel = rec->channel;
+            g_channel = rec->ap_channel;
 
             memcpy(wifiConfig.sta_config.bssid, rec->bssid, sizeof(wifiConfig.sta_config.bssid));
             wifiConfig.sta_config.bssid_present = 1;
@@ -188,23 +202,21 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
             wifiConfig.sta_config.threshold.authmode = WIFI_AUTH_OPEN;
             wifiConfig.sta_config.threshold.rssi = -127;
 
-            printf("[OpenOPL1000] worker: matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d auth=%d pair=%d group=%d\r\n",
+            rc = wifi_set_config(WIFI_MODE_STA, &wifiConfig);
+            printf("[OpenOPL1000] worker: matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d set_config rc=%d\r\n",
                    g_ssid,
                    MAC2STR(rec->bssid),
-                   (unsigned int)rec->channel,
+                   (unsigned int)rec->ap_channel,
                    rec->rssi,
-                   rec->auth_mode,
-                   rec->pairwise_cipher,
-                   rec->group_cipher);
+                   rc);
             break;
         }
     }
 
     if (!matched)
     {
-        printf("[OpenOPL1000] worker: SSID '%s' not found in %d delayed records\r\n",
-               g_ssid,
-               g_scanList.num);
+        printf("[OpenOPL1000] worker: SSID '%s' not found in raw scan report\r\n",
+               g_ssid);
         return -1;
     }
 
