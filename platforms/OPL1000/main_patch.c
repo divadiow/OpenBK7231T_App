@@ -12,6 +12,7 @@
 #include "hal_system.h"
 #include "hal_vic.h"
 #include "mw_fim.h"
+#include "mw_ota.h"
 #include "sys_init.h"
 #include "sys_init_patch.h"
 #include "sys_os_config.h"
@@ -23,6 +24,7 @@ void __Patch_EntryPoint(void) __attribute__((used));
 
 static void Main_PinMuxUpdate(void);
 static void Main_FlashLayoutUpdate(void);
+static void Main_ServiceInitNoBle(void);
 static void Main_MiscModulesInit(void);
 static void Main_MiscDriverConfigSetup(void);
 static void Main_AtUartDbgUartSwitch(void);
@@ -38,6 +40,20 @@ extern void Main_OnEverySecond(void);
 typedef void (*T_Main_AppInit_fp)(void);
 extern T_Main_AppInit_fp Main_AppInit;
 
+/* SDK service-init hooks. Most of these symbols are ROM/SDK function-pointer
+ * variables, not plain functions; declare them as callable pointers so we can
+ * reproduce Sys_ServiceInit without creating the BLE/LE RTOS task.
+ */
+extern void (*wifi_mac_task_create)(void);
+extern void lwip_task_create(void);
+extern int (*do_supplicant_init)(void);
+extern void (*controller_task_create)(void);
+extern void (*ipc_init)(void);
+extern void (*wifi_sta_info_init)(void);
+extern void (*agent_init)(void);
+extern void (*tracer_load)(void);
+extern void (*tcpip_config_dhcp_arp_check_init)(void);
+
 void __Patch_EntryPoint(void)
 {
     SysInit_EntryPoint();
@@ -50,6 +66,7 @@ void __Patch_EntryPoint(void)
     MwFim_FlashLayoutUpdate = Main_FlashLayoutUpdate;
     Sys_MiscModulesInit = Main_MiscModulesInit;
     Sys_MiscDriverConfigSetup = Main_MiscDriverConfigSetup;
+    Sys_ServiceInit = Main_ServiceInitNoBle;
     at_cmd_switch_uart1_dbguart = Main_AtUartDbgUartSwitch;
 
     Sys_SetUnsuedSramEndBound(0x440000);
@@ -89,6 +106,70 @@ static void Main_PinMuxUpdate(void)
 
 static void Main_FlashLayoutUpdate(void)
 {
+}
+
+static void Main_ServiceInitNoBle(void)
+{
+    T_MwOtaLayoutInfo tLayout;
+
+    printf("[OpenOPL1000] Sys_ServiceInitNoBle: Wi-Fi services only; skipping BLE/LE task\r\n");
+
+    if (wifi_mac_task_create != NULL)
+    {
+        wifi_mac_task_create();
+    }
+
+    lwip_task_create();
+
+    if (do_supplicant_init != NULL)
+    {
+        do_supplicant_init();
+    }
+
+    if (controller_task_create != NULL)
+    {
+        controller_task_create();
+    }
+
+    if (ipc_init != NULL)
+    {
+        ipc_init();
+    }
+
+    /* Intentionally do not call LeRtosTaskCreat().  This saves the BLE/LE task
+     * stack/heap for the Wi-Fi-only OpenBeken bring-up path.
+     */
+
+    if (wifi_sta_info_init != NULL)
+    {
+        wifi_sta_info_init();
+    }
+
+    if (agent_init != NULL)
+    {
+        agent_init();
+    }
+
+    if (tracer_load != NULL)
+    {
+        tracer_load();
+    }
+
+    tLayout.ulaHeaderAddr[0] = MW_OTA_HEADER_ADDR_1;
+    tLayout.ulaHeaderAddr[1] = MW_OTA_HEADER_ADDR_2;
+    tLayout.ulaImageAddr[0] = MW_OTA_IMAGE_ADDR_1;
+    tLayout.ulaImageAddr[1] = MW_OTA_IMAGE_ADDR_2;
+    tLayout.ulImageSize = MW_OTA_IMAGE_SIZE;
+
+    if (MwOta_Init != NULL)
+    {
+        MwOta_Init(&tLayout, 0);
+    }
+
+    if (tcpip_config_dhcp_arp_check_init != NULL)
+    {
+        tcpip_config_dhcp_arp_check_init();
+    }
 }
 
 static void Main_MiscModulesInit(void)

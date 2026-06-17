@@ -108,3 +108,42 @@ http://<device-ip>/status
 ```
 
 This is intentionally a bring-up path. It proves socket RX/TX from the real OpenBeken runtime, but the full OBK web UI remains disabled until more heap is recovered from the OPL1000 port.
+
+
+## v18 notes
+
+v18 keeps the v17 micro HTTP bring-up server but reduces TCP_server stack usage.
+The v17 browser test proved that TCP accept/receive/send worked, but the module
+then reset with `stack overflow: ... TCP_server`.  v18 removes local response
+body buffers, makes the HTTP request probe/static accept storage global, and
+reduces verbose per-request logging so the synchronous OPL1000 HTTP path can run
+inside the existing TCP_server task stack.
+
+
+## v19 notes - Wi-Fi-only service init
+
+OpenOPL1000 v19 overrides the SDK service-initialisation hook with `Main_ServiceInitNoBle()`.
+It recreates the normal Wi-Fi/lwIP/supplicant/controller/OTA initialisation sequence but deliberately skips `LeRtosTaskCreat()`.
+
+The aim is to recover the BLE/LE task stack/heap for the Wi-Fi-only OpenBeken bring-up path. Expected boot log difference:
+
+```text
+[OpenOPL1000] Sys_ServiceInitNoBle: Wi-Fi services only; skipping BLE/LE task
+wifiMac Task create successful
+Supplicant task is created successfully!
+controller_queue creates successful!
+controller_queue_ble creates successful!
+controller_task_create successful!
+# no "LE Task create successful" line expected
+```
+
+The Opulinks pack-ready output remains:
+
+```text
+pack_ready/PatchData.txt
+pack_ready/opl1000_m0.bin
+pack_ready/opl1000_app_m3.bin
+OpenOPL1000_pack_ready_<version>.zip
+```
+
+This is an experiment. If Wi-Fi fails earlier than v17/v18, revert to the normal SDK service-init path and continue with stack-size trimming instead.

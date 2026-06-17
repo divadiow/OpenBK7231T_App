@@ -163,9 +163,15 @@ extern size_t xPortGetFreeHeapSize(void);
 
 #define OPL1000_MICRO_REQ_SIZE 512
 #define OPL1000_MICRO_REPLY_SIZE 768
+#define OPL1000_STATUS_BODY_SIZE 192
+#define OPL1000_PAGE_BODY_SIZE 256
 
 static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
 static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
+static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE];
+static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE];
+static http_request_t g_opl1000_request_probe;
+static struct sockaddr_storage g_opl1000_source_addr;
 
 static int opl1000_send_all(int fd, const char *data, int len)
 {
@@ -214,65 +220,52 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 {
 	int fd = arg->fd;
 	char *buf = g_opl1000_micro_req;
-	http_request_t requestProbe;
-	int firstLineLen;
+	http_request_t *requestProbe = &g_opl1000_request_probe;
 	int sendRc = 0;
 
 	/* OPL1000 A2 is down to roughly 728 bytes of FreeRTOS heap after Wi-Fi,
-	 * supplicant and lwIP/DHCP are running. v16 therefore accepted the socket but
-	 * failed to malloc even small request/reply buffers.  This v17 path avoids
-	 * heap use entirely and serves a tiny bring-up HTTP endpoint from static
-	 * storage.  The full OBK HTTP route path can be re-enabled after more heap is
-	 * recovered from the port.
+	 * supplicant and lwIP/DHCP are running. Keep this path static and stack-light:
+	 * v17 proved browser receive/send works, but overflowed the TCP_server stack
+	 * after using local response buffers and verbose formatted logging.
 	 */
-	memset(&requestProbe, 0, sizeof(requestProbe));
+	memset(requestProbe, 0, sizeof(*requestProbe));
 	memset(buf, 0, OPL1000_MICRO_REQ_SIZE);
 
-	requestProbe.fd = fd;
-	requestProbe.received = buf;
-	requestProbe.receivedLenmax = OPL1000_MICRO_REQ_SIZE - 2;
-	requestProbe.responseCode = HTTP_RESPONSE_OK;
-	requestProbe.receivedLen = 0;
+	requestProbe->fd = fd;
+	requestProbe->received = buf;
+	requestProbe->receivedLenmax = OPL1000_MICRO_REQ_SIZE - 2;
+	requestProbe->responseCode = HTTP_RESPONSE_OK;
+	requestProbe->receivedLen = 0;
 
 	while(1)
 	{
-		int remaining = requestProbe.receivedLenmax - requestProbe.receivedLen;
-		int received = recv(fd, requestProbe.received + requestProbe.receivedLen, remaining, 0);
+		int remaining = requestProbe->receivedLenmax - requestProbe->receivedLen;
+		int received = recv(fd, requestProbe->received + requestProbe->receivedLen, remaining, 0);
 		if(received <= 0)
 		{
 			break;
 		}
-		requestProbe.receivedLen += received;
-		requestProbe.received[requestProbe.receivedLen] = 0;
-		if(strstr(requestProbe.received, "\r\n\r\n") != NULL ||
-			strstr(requestProbe.received, "\n\n") != NULL ||
+		requestProbe->receivedLen += received;
+		requestProbe->received[requestProbe->receivedLen] = 0;
+		if(strstr(requestProbe->received, "\r\n\r\n") != NULL ||
+			strstr(requestProbe->received, "\n\n") != NULL ||
 			received < remaining ||
-			requestProbe.receivedLen >= requestProbe.receivedLenmax)
+			requestProbe->receivedLen >= requestProbe->receivedLenmax)
 		{
 			break;
 		}
 	}
 
-	if(requestProbe.receivedLen <= 0)
+	if(requestProbe->receivedLen <= 0)
 	{
 		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 micro client disconnected before request, fd: %d", fd);
 		goto exit;
 	}
 
-	firstLineLen = 0;
-	while(firstLineLen < requestProbe.receivedLen &&
-		buf[firstLineLen] != '\r' &&
-		buf[firstLineLen] != '\n')
-	{
-		firstLineLen++;
-	}
-
 	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 micro request len %i heap %u first='%.*s'",
-		requestProbe.receivedLen,
-		(unsigned int)xPortGetFreeHeapSize(),
-		firstLineLen,
-		buf);
+		"OPL1000 micro request len %i heap %u",
+		requestProbe->receivedLen,
+		(unsigned int)xPortGetFreeHeapSize());
 
 	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
 	{
@@ -284,37 +277,33 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 	else if(strncmp(buf, "GET /cm?cmnd=status", 20) == 0 ||
 		strncmp(buf, "GET /status", 11) == 0)
 	{
-		char body[256];
-		snprintf(body, sizeof(body),
-			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"gw\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
+		snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
+			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
 			HAL_GetMyIPString(),
-			HAL_GetMyGatewayString(),
 			(unsigned int)xPortGetFreeHeapSize(),
 			Main_IsConnectedToWiFi() ? 1 : 0);
 		sendRc = opl1000_http_write_response(fd,
 			"200 OK",
 			"application/json",
-			body);
+			g_opl1000_status_body);
 	}
 	else
 	{
-		char body[384];
-		snprintf(body, sizeof(body),
-			"<html><head><title>OpenOPL1000</title></head>"
-			"<body><h1>OpenOPL1000</h1>"
-			"<p>WiFi connected. IP: %s</p>"
-			"<p>Free heap: %u bytes</p>"
-			"<p><a href='/cm?cmnd=status'>status</a></p>"
+		snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
+			"<html><body><h1>OpenOPL1000</h1>"
+			"<p>IP: %s</p>"
+			"<p>Heap: %u</p>"
+			"<p><a href='/status'>status</a></p>"
 			"</body></html>\n",
 			HAL_GetMyIPString(),
 			(unsigned int)xPortGetFreeHeapSize());
 		sendRc = opl1000_http_write_response(fd,
 			"200 OK",
 			"text/html",
-			body);
+			g_opl1000_page_body);
 	}
 
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply send rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
 
 exit:
 	if(fd != INVALID_SOCK)
@@ -453,8 +442,14 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 	ADDLOG_INFO(LOG_FEATURE_HTTP, "TCP server listening");
 	while(true)
 	{
+#if PLATFORM_OPL1000
+		struct sockaddr_storage *source_addr_ptr = &g_opl1000_source_addr;
+		socklen_t addr_len = sizeof(g_opl1000_source_addr);
+#else
 		struct sockaddr_storage source_addr;
+		struct sockaddr_storage *source_addr_ptr = &source_addr;
 		socklen_t addr_len = sizeof(source_addr);
+#endif
 
 		int new_idx = 0;
 		for(int i = 0; i < max_socks; ++i)
@@ -479,7 +474,7 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 		}
 		if(new_idx < max_socks)
 		{
-			sock[new_idx].fd = accept(listen_sock, (struct sockaddr*)&source_addr, &addr_len);
+			sock[new_idx].fd = accept(listen_sock, (struct sockaddr*)source_addr_ptr, &addr_len);
 
 #if LWIP_SO_RCVTIMEO
 #if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
@@ -506,9 +501,9 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 			}
 			else
 			{
-				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(&source_addr));
+				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
 #if PLATFORM_OPL1000
-				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(&source_addr));
+				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
 				tcp_client_process_sync(&sock[new_idx]);
 #else
 				rtos_delay_milliseconds(20);
