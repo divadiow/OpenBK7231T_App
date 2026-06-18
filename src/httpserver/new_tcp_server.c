@@ -163,23 +163,17 @@ exit:
 extern size_t xPortGetFreeHeapSize(void);
 
 /*
- * v26 full-OBK-HTTP experiment.
+ * v24 keeps the v23 direct-command approach and adds a tiny micro UI.
+ * v20 proved Wi-Fi/DHCP/TCP/browser micro-HTTP is stable with BLE disabled.
+ * v21/v22 proved that pulling the fuller OBK HTTP path into this constrained
+ * build is still too fragile. Keep the transport static and small, expose
+ * a direct /cm?cmnd= bridge, and provide a tiny form-based UI.
  *
- * Keep all of the v25 proven transport and memory fixes:
- *   - BLE/LE disabled in platform service init
- *   - Wi-Fi worker terminates after DHCP
- *   - single-client synchronous TCP handling
- *   - no per-client HTTP task
- *   - static HTTP buffers
- *
- * The only deliberate risk in this build is routing normal HTTP requests back
- * through HTTP_ProcessPacket().  /status and /opl1000 remain tiny local
- * fallbacks so we still have a diagnostic page if the full OBK route is only
- * partly usable.
+ * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
+ * that large locals can overflow the TCP_server stack.
  */
-#define OPL1000_FULL_OBK_HTTP_EXPERIMENT 1
-#define OPL1000_MICRO_REQ_SIZE    768
-#define OPL1000_MICRO_REPLY_SIZE  1024
+#define OPL1000_MICRO_REQ_SIZE    512
+#define OPL1000_MICRO_REPLY_SIZE  768
 #define OPL1000_STATUS_BODY_SIZE  320
 #define OPL1000_PAGE_BODY_SIZE    640
 #define OPL1000_CMD_SIZE          128
@@ -370,52 +364,8 @@ static int opl1000_handle_direct_cmnd(int fd, const char *buf)
 		g_opl1000_status_body);
 }
 
-static int opl1000_handle_full_obk_experiment(int fd, http_request_t *requestProbe)
-{
-	int lenret;
-
-	requestProbe->reply = g_opl1000_micro_reply;
-	requestProbe->replylen = 0;
-	requestProbe->replymaxlen = OPL1000_MICRO_REPLY_SIZE - 1;
-	requestProbe->responseCode = HTTP_RESPONSE_OK;
-	g_opl1000_micro_reply[0] = 0;
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 v26 full OBK before HTTP_ProcessPacket len %i heap %u",
-		requestProbe->receivedLen,
-		(unsigned int)xPortGetFreeHeapSize());
-
-	lenret = HTTP_ProcessPacket(requestProbe);
-
-	/* HTTP_ProcessPacket/postany may already have streamed chunks directly to
-	 * the socket.  If it leaves a final buffered fragment, send it here.
-	 */
-	if(lenret > 0 && requestProbe->replylen > 0)
-	{
-		int sent = opl1000_send_all(fd, requestProbe->reply, requestProbe->replylen);
-		ADDLOG_INFO(LOG_FEATURE_HTTP,
-			"OPL1000 v26 full OBK final send rc %i lenret %i replylen %i heap %u",
-			sent,
-			lenret,
-			requestProbe->replylen,
-			(unsigned int)xPortGetFreeHeapSize());
-		return sent;
-	}
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 v26 full OBK done lenret %i replylen %i heap %u",
-		lenret,
-		requestProbe->replylen,
-		(unsigned int)xPortGetFreeHeapSize());
-	return lenret;
-}
-
 static int opl1000_micro_fallback(int fd, const char *buf)
 {
-	/* Tiny local endpoints are kept as diagnostic fallbacks.  Everything else,
-	 * including /, /cfg, /cm?... and normal OBK assets, goes through the real
-	 * OpenBeken HTTP router in this experiment.
-	 */
 	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
 	{
 		return opl1000_http_write_response(fd,
@@ -423,15 +373,44 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 			"text/plain",
 			"not found\n");
 	}
-	else if(strncmp(buf, "GET /status", 11) == 0 ||
-		strncmp(buf, "GET /opl1000", 12) == 0)
+	else if(strncmp(buf, "GET /cm?", 8) == 0)
 	{
-		return opl1000_write_status(fd, "v26-full-obk-experiment");
+		return opl1000_handle_direct_cmnd(fd, buf);
+	}
+	else if(strncmp(buf, "GET /status", 11) == 0)
+	{
+		return opl1000_write_status(fd, "v23-micro");
+	}
+	else if(strncmp(buf, "GET /cfg", 8) == 0 ||
+		strncmp(buf, "GET /index", 10) == 0)
+	{
+		return opl1000_http_write_response(fd,
+			"503 Service Unavailable",
+			"text/html",
+			"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled in v24.</p><p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n");
 	}
 
-	return opl1000_handle_full_obk_experiment(fd, &g_opl1000_request_probe);
+	snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
+		"<html><body><h1>OpenOPL1000</h1>"
+		"<p>IP: %s</p>"
+		"<p>Heap: %u</p>"
+		"<p>v24 direct-command micro UI</p>"
+		"<p><a href='/status'>status json</a></p>"
+		"<p><a href='/cm?cmnd=Status'>Status command</a></p>"
+		"<p><a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a></p>"
+		"<form action='/cm' method='get'>"
+		"<input name='cmnd' value='Status' style='width:220px'>"
+		"<button type='submit'>Run command</button>"
+		"</form>"
+		"<p><small>Full GUI remains disabled until transport and heap are proven stable.</small></p>"
+		"</body></html>\n",
+		HAL_GetMyIPString(),
+		(unsigned int)xPortGetFreeHeapSize());
+	return opl1000_http_write_response(fd,
+		"200 OK",
+		"text/html",
+		g_opl1000_page_body);
 }
-
 
 static void tcp_client_process_sync(tcp_thread_t* arg)
 {
@@ -478,12 +457,12 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 v26 request len %i heap %u",
+		"OPL1000 micro request len %i heap %u",
 		requestProbe->receivedLen,
 		(unsigned int)xPortGetFreeHeapSize());
 
 	sendRc = opl1000_micro_fallback(fd, requestProbe->received);
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 v26 reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
 
 exit:
 	if(fd != INVALID_SOCK)
