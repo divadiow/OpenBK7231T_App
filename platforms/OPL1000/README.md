@@ -255,25 +255,25 @@ The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the 
 
 v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
 
-## v30 split-M3 high-tail SHM probe
+## v31 split-M3 high-tail SHM probe
 
-v30 is based on the stable v25 OpenOPL1000 line and deliberately does **not**
+v31 is based on the stable v25 OpenOPL1000 line and deliberately does **not**
 re-enable the full stock OpenBeken HTTP UI.
 
-The only architectural experiment in v30 is the vendor `Expand_M3_RAM` style
+The only architectural experiment in v31 is the vendor `Expand_M3_RAM` style
 split-M3 packaging path:
 
 - normal M3 patch image is linked for `0x004164A0`
-- a tiny probe function is linked into section `SHM_REGION` at `0x80003800`, the high 2 KB tail of the 16 KB SHM block
+- a tiny probe function is linked into section `SHM_REGION` at `0x80003400`, the high 3 KB tail of the 16 KB SHM block
 - the build emits two M3 binaries from one ELF:
   - `opl1000_app_m3_main.bin` loaded at `0x004164A0`
-  - `opl1000_app_m3_shm.bin` loaded at `0x80003800`
+  - `opl1000_app_m3_shm.bin` loaded at `0x80003400`
 - `pack/PatchData.txt` references both M3 binaries
 
 Expected boot marker if the split-M3 binary was packed and loaded correctly:
 
 ```text
-[OpenOPL1000] split-M3 v30-tail2k: shm_fn=0x80003801 result=0x........
+[OpenOPL1000] split-M3 v31-tail3k: shm_fn=0x80003401 result=0x........
 ```
 
 If the marker does not appear, or the device resets immediately after the
@@ -294,14 +294,14 @@ and include both M3 binary files.  This is intentionally different from the
 single-M3 v25 pack-ready layout.
 
 
-## v30 note
+## v31 note
 
-v29b proved the split-M3 pack path and executable SHM code at `0x80000000`, but repeated resets occurred immediately after `wifi_connection_connect rc=0`.  v29c then proved the high 1 KB tail at `0x80003C00` survives Wi-Fi association, lwIP, DHCP, worker termination, and TCP server startup.  v30 keeps the same v25 runtime base and split-M3 pack format but moves the second M3 image down to `0x80003800` to test whether the high 2 KB tail is also safe.
+v29b proved the split-M3 pack path and executable SHM code at `0x80000000`, but repeated resets occurred immediately after `wifi_connection_connect rc=0`.  v29c then proved the high 1 KB tail at `0x80003C00` survives Wi-Fi association, lwIP, DHCP, worker termination, and TCP server startup.  v31 keeps the same v25 runtime base and split-M3 pack format but moves the second M3 image down to `0x80003400` to test whether the high 3 KB tail is also safe.
 
 Expected marker:
 
 ```text
-[OpenOPL1000] split-M3 v30-tail2k: shm_fn=0x80003801 result=0x........
+[OpenOPL1000] split-M3 v31-tail3k: shm_fn=0x80003401 result=0x........
 ```
 
-If Wi-Fi connects and reaches DHCP, the high 2 KB SHM tail is potentially usable.  If it resets after `wifi_connection_connect rc=0`, keep the proven-safe limit at the high 1 KB tail from v29c and do not move lower yet.
+If Wi-Fi connects and reaches DHCP, the high 3 KB SHM tail is potentially usable.  If it resets after `wifi_connection_connect rc=0`, keep the proven-safe limit at the high 1 KB tail from v29c and do not move lower yet.

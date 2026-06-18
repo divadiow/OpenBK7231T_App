@@ -18,7 +18,7 @@
 4,CODE,COLD,M3
 0x004164a0,.\opl1000_app_m3_main.bin
 4,CODE,COLD,M3
-0x80003800,.\opl1000_app_m3_shm.bin
+0x80003400,.\opl1000_app_m3_shm.bin
 4,CODE,COLD,M0
 0x20608000,.\RW_IRAM1_EntryPoint.bin
 4,CODE,COLD,M0
