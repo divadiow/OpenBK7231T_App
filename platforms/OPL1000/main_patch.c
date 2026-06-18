@@ -19,6 +19,8 @@
 
 static E_IO01_UART_MODE s_io01UartMode;
 
+#define OPENOPL1000_SHM_CODE __attribute__((section("SHM_REGION"), noinline, used, long_call))
+
 void __Patch_EntryPoint(void) __attribute__((section("ENTRY_POINT")));
 void __Patch_EntryPoint(void) __attribute__((used));
 
@@ -33,6 +35,7 @@ static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx);
 static void Main_AppInit_patch(void);
 static void OpenOPL1000_OpenBekenTask(void *args);
 static void OpenOPL1000_EarlyLog(const char *text);
+static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value) OPENOPL1000_SHM_CODE;
 
 extern void Main_Init(void);
 extern void Main_OnEverySecond(void);
@@ -55,6 +58,19 @@ extern void (*tracer_load)(void);
 extern void (*tcpip_config_dhcp_arp_check_init)(void);
 extern int (*nl_scrt_Init)(void);
 extern void (*sys_cfg_init)(void);
+
+static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value)
+{
+    /* Tiny split-M3 probe.  Keep this deliberately self-contained: no strings,
+     * no SDK calls, no static locals.  If it is actually loaded at 0x80000000,
+     * calling it from normal patch RAM proves the second M3 image is present
+     * and executable.
+     */
+    value ^= 0xA55A5AA5u;
+    value += 0x12345678u;
+    value ^= 0x0F0F0F0Fu;
+    return value;
+}
 
 void __Patch_EntryPoint(void)
 {
@@ -326,6 +342,13 @@ static void Main_AppInit_patch(void)
     Hal_DbgUart_RxIntEn(1);
     OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO0/IO1 @115200\r\n");
     OpenOPL1000_EarlyLog("[OpenOPL1000] OpenBeken platform port\r\n");
+
+    {
+        uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);
+        printf("[OpenOPL1000] split-M3 v29: shm_fn=0x%08x result=0x%08x\r\n",
+               (unsigned int)(uintptr_t)OpenOPL1000_ShmProbeFn,
+               (unsigned int)shmProbe);
+    }
 
     memset(&threadDef, 0, sizeof(threadDef));
     threadDef.name = "openbeken";

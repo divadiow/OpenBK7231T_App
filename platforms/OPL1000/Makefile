@@ -27,7 +27,7 @@ SIZE    := $(CROSS_COMPILE)size
 
 APS_ROOT       := $(SDK_ROOT)/SDK/APS
 APS_PATCH_ROOT := $(SDK_ROOT)/SDK/APS_PATCH
-LINK_SCRIPT    := $(APS_ROOT)/project/opl1000/link.ld
+LINK_SCRIPT    := $(OBK_ROOT)/platforms/OPL1000/link_split_m3.ld
 SYMDEFS        := $(APS_ROOT)/targets/opl1000/object/symdefs_gcc.o
 PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3_lite.a
 M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
@@ -186,24 +186,29 @@ $(BUILD_DIR)/$(OUTPUT_BASENAME).elf: $(OBJECTS) $(PATCH_LIB) $(LINK_SCRIPT) $(SY
 	$(CC) -o $@ $(LDFLAGS) $(CFLAGS) $(OBJECTS) $(PATCH_LIB)
 	$(SIZE) $@
 
-$(BUILD_DIR)/$(OUTPUT_BASENAME).bin: $(BUILD_DIR)/$(OUTPUT_BASENAME).elf
-	$(OBJCOPY) -O binary $< $@
+$(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin: $(BUILD_DIR)/$(OUTPUT_BASENAME).elf
+	$(OBJCOPY) -O binary --remove-section=.shm_region $< $@
 
-package: $(BUILD_DIR)/$(OUTPUT_BASENAME).bin
+$(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin: $(BUILD_DIR)/$(OUTPUT_BASENAME).elf
+	$(OBJCOPY) -O binary --only-section=.shm_region $< $@
+
+package: $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin
 	mkdir -p $(OUTPUT_DIR)
 	mkdir -p $(OUTPUT_DIR)/pack_ready
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME).bin $(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(OUTPUT_DIR)/$(OUTPUT_BASENAME)_main.bin
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(OUTPUT_DIR)/$(OUTPUT_BASENAME)_shm.bin
 	cp $(BUILD_DIR)/$(OUTPUT_BASENAME).map $(OUTPUT_DIR)/$(OUTPUT_BASENAME).map
 	cp $(M0_IMAGE) $(OUTPUT_DIR)/$(APP_NAME)_M0_$(APP_VERSION).bin
 	cp $(OTA_LOADER) $(OUTPUT_DIR)/$(APP_NAME)_OTA_LOADER_$(APP_VERSION).bin
 	cp $(PATCHDATA_SCRIPT) $(OUTPUT_DIR)/$(APP_NAME)_PatchData_$(APP_VERSION).txt
 	cp $(PATCHDATA_SCRIPT) $(OUTPUT_DIR)/pack_ready/PatchData.txt
 	cp $(M0_IMAGE) $(OUTPUT_DIR)/pack_ready/opl1000_m0.bin
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME).bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3.bin
-	cd $(OUTPUT_DIR)/pack_ready && zip -q -r ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3.bin
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3_main.bin
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3_shm.bin
+	cd $(OUTPUT_DIR)/pack_ready && zip -q -r ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3_main.bin opl1000_app_m3_shm.bin
 	@echo "OpenOPL1000 output written to $(OUTPUT_DIR)"
-	@echo "Opulinks pack-ready files written to $(OUTPUT_DIR)/pack_ready"
-	@echo "Pack with: PatchData.txt + opl1000_m0.bin + opl1000_app_m3.bin"
+	@echo "Opulinks split-M3 pack-ready files written to $(OUTPUT_DIR)/pack_ready"
+	@echo "Pack with: PatchData.txt + opl1000_m0.bin + opl1000_app_m3_main.bin + opl1000_app_m3_shm.bin"
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -255,7 +255,40 @@ The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the 
 
 v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
 
+## v29 split-M3 RAM packaging probe
 
-## v28 note
+v29 is based on the stable v25 OpenOPL1000 line and deliberately does **not**
+re-enable the full stock OpenBeken HTTP UI.
 
-This test keeps the v25 Wi-Fi/HTTP baseline and uses the 0x80000000 shared-memory window as a manual scratch arena for the OPL1000 micro HTTP request/reply buffers. It does not call `vPortHeapRegionInit()`.
+The only architectural experiment in v29 is the vendor `Expand_M3_RAM` style
+split-M3 packaging path:
+
+- normal M3 patch image is linked for `0x004164A0`
+- a tiny probe function is linked into section `SHM_REGION` at `0x80000000`
+- the build emits two M3 binaries from one ELF:
+  - `opl1000_app_m3_main.bin` loaded at `0x004164A0`
+  - `opl1000_app_m3_shm.bin` loaded at `0x80000000`
+- `pack/PatchData.txt` references both M3 binaries
+
+Expected boot marker if the split-M3 binary was packed and loaded correctly:
+
+```text
+[OpenOPL1000] split-M3 v29: shm_fn=0x80000001 result=0x........
+```
+
+If the marker does not appear, or the device resets immediately after the
+`OpenBeken platform port` line, the second M3 image probably was not packed or
+loaded correctly.
+
+Use the generated pack-ready directory.  The pack-ready ZIP contains:
+
+```text
+PatchData.txt
+opl1000_m0.bin
+opl1000_app_m3_main.bin
+opl1000_app_m3_shm.bin
+```
+
+In the Opulinks pack tool, use the `PatchData.txt` from the pack-ready folder
+and include both M3 binary files.  This is intentionally different from the
+single-M3 v25 pack-ready layout.
