@@ -163,8 +163,11 @@ extern size_t xPortGetFreeHeapSize(void);
 
 /*
  * v20 proved that Wi-Fi, DHCP, TCP accept and static micro HTTP all work once
- * BLE is disabled. v21 keeps the static/synchronous socket model but routes the
- * request through the real OpenBeken HTTP parser and page/command handlers.
+ * BLE is disabled. v22 keeps the stable single-client/static-buffer transport,
+ * treats empty browser connections as normal, and only routes lightweight /cm
+ * command requests through the real OpenBeken HTTP parser. Full UI pages are
+ * deliberately kept behind micro fallback responses until the server lifecycle
+ * is proven stable.
  *
  * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
  * that large locals can overflow the TCP_server stack.
@@ -226,8 +229,20 @@ static int opl1000_http_write_response(int fd, const char *status, const char *c
 	return opl1000_send_all(fd, g_opl1000_micro_reply, len);
 }
 
-static int opl1000_micro_fallback(int fd, const char *buf)
+static bool opl1000_is_cmd_request(const char *buf)
 {
+	/* First OBK target for OPL1000: command endpoint only.  The normal GUI can
+	 * allocate/format substantially more data and is enabled later, once the
+	 * socket lifecycle is stable under normal browser behaviour.
+	 */
+	return strncmp(buf, "GET /cm?", 8) == 0 ||
+		strncmp(buf, "POST /cm", 8) == 0;
+}
+
+static int opl1000_micro_fallback(int fd, const char *buf, bool *handled)
+{
+	*handled = true;
+
 	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
 	{
 		return opl1000_http_write_response(fd,
@@ -235,13 +250,15 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 			"text/plain",
 			"not found\n");
 	}
-	else if(strncmp(buf, "GET /opl1000", 12) == 0)
+	else if(strncmp(buf, "GET / ", 6) == 0 ||
+		strncmp(buf, "GET /opl1000", 12) == 0)
 	{
 		snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
 			"<html><body><h1>OpenOPL1000</h1>"
 			"<p>IP: %s</p>"
 			"<p>Heap: %u</p>"
-			"<p>v21 real HTTP test build</p>"
+			"<p>v22 hardened HTTP transport build</p>"
+			"<p>Try <code>/status</code> or <code>/cm?cmnd=status</code>.</p>"
 			"</body></html>\n",
 			HAL_GetMyIPString(),
 			(unsigned int)xPortGetFreeHeapSize());
@@ -253,7 +270,7 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 	else if(strncmp(buf, "GET /status", 11) == 0)
 	{
 		snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
+			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"v22\"}\n",
 			HAL_GetMyIPString(),
 			(unsigned int)xPortGetFreeHeapSize(),
 			Main_IsConnectedToWiFi() ? 1 : 0);
@@ -262,6 +279,16 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 			"application/json",
 			g_opl1000_status_body);
 	}
+	else if(strncmp(buf, "GET /cfg", 8) == 0 ||
+		strncmp(buf, "GET /index", 10) == 0)
+	{
+		return opl1000_http_write_response(fd,
+			"503 Service Unavailable",
+			"text/plain",
+			"OpenOPL1000 v22: full GUI route is intentionally disabled in this transport-hardening build. Try /cm?cmnd=status.\n");
+	}
+
+	*handled = false;
 	return 0;
 }
 
@@ -271,6 +298,7 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 	http_request_t *request = &g_opl1000_request;
 	int sendRc = 0;
 	int lenret = 0;
+	bool handled = false;
 
 	memset(request, 0, sizeof(*request));
 	memset(g_opl1000_obk_req, 0, OPL1000_OBK_REQ_SIZE);
@@ -306,40 +334,55 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 
 	if(request->receivedLen <= 0)
 	{
-		ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 OBK client disconnected before request, fd: %d", fd);
+		/* Normal browsers may open speculative/keepalive sockets and close them
+		 * without sending a request.  On OPL1000 this must not become a server
+		 * restart path; just close the accepted socket and continue.
+		 */
+		ADDLOG_INFO(LOG_FEATURE_HTTP,
+			"OPL1000 empty client connection closed, fd %d heap %u",
+			fd,
+			(unsigned int)xPortGetFreeHeapSize());
 		goto exit;
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 OBK request len %i heap %u first='%.*s'",
+		"OPL1000 request len %i heap %u",
 		request->receivedLen,
-		(unsigned int)xPortGetFreeHeapSize(),
-		(request->receivedLen > 48) ? 48 : request->receivedLen,
-		request->received);
+		(unsigned int)xPortGetFreeHeapSize());
 
-	/* Keep a tiny known-good fallback endpoint for diagnostics, but use the real
-	 * OpenBeken HTTP parser/routes for normal / and /cm requests.
-	 */
-	sendRc = opl1000_micro_fallback(fd, request->received);
-	if(sendRc == 0)
+	if(opl1000_is_cmd_request(request->received))
 	{
 		lenret = HTTP_ProcessPacket(request);
 		if(lenret > 0)
 		{
-			sendRc = send(fd, request->reply, lenret, 0);
+			sendRc = opl1000_send_all(fd, request->reply, lenret);
 		}
 		else
 		{
 			/* Some OBK handlers stream via postany()/send() and return 0. */
 			sendRc = lenret;
 		}
+		ADDLOG_INFO(LOG_FEATURE_HTTP,
+			"OPL1000 OBK command reply rc %i lenret %i heap %u",
+			sendRc,
+			lenret,
+			(unsigned int)xPortGetFreeHeapSize());
 	}
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 OBK reply rc %i lenret %i heap %u",
-		sendRc,
-		lenret,
-		(unsigned int)xPortGetFreeHeapSize());
+	else
+	{
+		sendRc = opl1000_micro_fallback(fd, request->received, &handled);
+		if(!handled)
+		{
+			sendRc = opl1000_http_write_response(fd,
+				"404 Not Found",
+				"text/plain",
+				"OpenOPL1000 v22: endpoint not enabled in hardened transport build. Try /status or /cm?cmnd=status.\n");
+		}
+		ADDLOG_INFO(LOG_FEATURE_HTTP,
+			"OPL1000 micro reply rc %i heap %u",
+			sendRc,
+			(unsigned int)xPortGetFreeHeapSize());
+	}
 
 exit:
 	if(fd != INVALID_SOCK)
@@ -350,6 +393,7 @@ exit:
 	arg->thread = NULL;
 	arg->isCompleted = false;
 }
+
 #endif
 
 static inline char* get_clientaddr(struct sockaddr_storage* source_addr)
@@ -469,7 +513,11 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 	}
 	ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "Socket bound on 0.0.0.0:%i", HTTP_SERVER_PORT);
 
+	#if PLATFORM_OPL1000
+	err = listen(listen_sock, 1);
+#else
 	err = listen(listen_sock, 0);
+#endif
 	if(err != 0)
 	{
 		ADDLOG_ERROR(LOG_FEATURE_HTTP, "Error occurred during listen");
@@ -512,19 +560,21 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 		{
 			sock[new_idx].fd = accept(listen_sock, (struct sockaddr*)source_addr_ptr, &addr_len);
 
-#if LWIP_SO_RCVTIMEO
-#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
-			int tv = 30 * 1000;
-#else
-			struct timeval tv;
-			tv.tv_sec = 30;
-			tv.tv_usec = 0;
-#endif
-			setsockopt(sock[new_idx].fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-#endif
-
 			if(sock[new_idx].fd < 0)
 			{
+#if PLATFORM_OPL1000
+				/* Do not enter the restart path on transient accept behaviour.  The
+				 * OPL1000 socket layer/browser interaction can report short-lived
+				 * errors while clients are opening/closing speculative connections.
+				 */
+				if(errno != EWOULDBLOCK)
+				{
+					ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 accept failed err %i", errno);
+				}
+				sock[new_idx].fd = INVALID_SOCK;
+				rtos_delay_milliseconds(50);
+				continue;
+#else
 				switch(errno)
 				{
 					//case EAGAIN:
@@ -534,9 +584,28 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 						ADDLOG_ERROR(LOG_FEATURE_HTTP, "[sock=%d]: Error when accepting connection, err: %i", sock[new_idx].fd, errno);
 						break;
 				}
+#endif
 			}
 			else
 			{
+#if LWIP_SO_RCVTIMEO
+#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
+#if PLATFORM_OPL1000
+				int tv = 3 * 1000;
+#else
+				int tv = 30 * 1000;
+#endif
+#else
+				struct timeval tv;
+#if PLATFORM_OPL1000
+				tv.tv_sec = 3;
+#else
+				tv.tv_sec = 30;
+#endif
+				tv.tv_usec = 0;
+#endif
+				setsockopt(sock[new_idx].fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+#endif
 				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
 #if PLATFORM_OPL1000
 				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
@@ -581,12 +650,21 @@ error:
 			sock[i].fd = INVALID_SOCK;
 		}
 	}
+#if PLATFORM_OPL1000
+	/* Do not create a restart loop on OPL1000.  A real fatal listener error should
+	 * leave a clear log and stop the HTTP task rather than eating heap/stack until
+	 * the watchdog resets the chip.
+	 */
+	g_http_thread = NULL;
+	rtos_delete_thread(NULL);
+#else
 	rtos_delay_milliseconds(2000);
 	rtos_create_thread(NULL, BEKEN_APPLICATION_PRIORITY,
 		"TCP Restart",
 		(beken_thread_function_t)restart_tcp_server,
 		2048,
 		(beken_thread_arg_t)0);
+#endif
 }
 
 void HTTPServer_Start()

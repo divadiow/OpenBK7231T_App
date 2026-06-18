@@ -8,7 +8,7 @@ Current scope:
 - real OpenBeken `Main_Init()` task
 - STA-only Wi-Fi bring-up through the OPL1000 HAL
 - hardcoded test Wi-Fi defaults for bring-up: `test` / `1234abcd`
-- normal OpenBeken HTTP/command path, trimmed to fit the A2 M3 patch image
+- hardened OPL1000 HTTP transport with real OpenBeken `/cm?...` command path under test
 
 Still intentionally incomplete:
 
@@ -180,3 +180,37 @@ Expected test URLs:
 This is still deliberately single-client and synchronous on OPL1000. It avoids
 heap allocation and per-client HTTP tasks because those were the source of the
 pre-v20 browser crashes.
+
+## v22 notes
+
+v21 proved that the first `/status` browser request could be answered, but a
+normal browser then opened another socket and closed it without sending a full
+HTTP request.  The OPL1000 TCP server treated that client-level condition as a
+server-level error and entered the HTTP restart path.
+
+v22 is a transport-hardening build, not a full-GUI build.  It keeps the stable
+v20 base and the v21 static/synchronous socket model, but changes the OPL1000
+HTTP path as follows:
+
+- empty/closed browser client sockets are treated as normal and simply closed
+- transient `accept()` errors no longer enter the HTTP server restart path
+- the receive timeout for accepted OPL1000 sockets is shortened to 3 seconds
+- the listen backlog is raised from 0 to 1 for OPL1000
+- `/`, `/status`, `/opl1000`, and `/favicon.ico` are handled by tiny static
+  micro responses
+- only `/cm?...` is routed through the real OpenBeken `HTTP_ProcessPacket()`
+  command path
+- `/cfg` and heavier GUI routes deliberately return a small diagnostic response
+
+Initial test order:
+
+```text
+http://<device-ip>/
+http://<device-ip>/status
+http://<device-ip>/cm?cmnd=status
+http://<device-ip>/cfg
+```
+
+The expected result is that repeated browser requests do not reset the TCP
+server or the module.  If `/cm?cmnd=status` works repeatedly, the next step is to
+recover more heap/stack and then enable selected lightweight OpenBeken pages.
