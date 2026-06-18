@@ -8,6 +8,7 @@
 #include "lwip/inet.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "../logging/logging.h"
 #include "../hal/hal_ota.h"
 #include "new_http.h"
@@ -163,14 +164,15 @@ exit:
 extern size_t xPortGetFreeHeapSize(void);
 
 /*
- * v24 keeps the v23 direct-command approach and adds a tiny micro UI.
- * v20 proved Wi-Fi/DHCP/TCP/browser micro-HTTP is stable with BLE disabled.
- * v21/v22 proved that pulling the fuller OBK HTTP path into this constrained
- * build is still too fragile. Keep the transport static and small, expose
- * a direct /cm?cmnd= bridge, and provide a tiny form-based UI.
+ * v28 keeps the proven v25 micro-HTTP path, but moves the small request/reply
+ * scratch buffers out of the normal M3 patch .bss and into the 16 KB shared
+ * memory window demonstrated by the SDK at 0x80000000.
  *
- * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
- * that large locals can overflow the TCP_server stack.
+ * This deliberately does NOT call vPortHeapRegionInit(). v27b proved that the
+ * region is writable, but also proved that initialising it as the FreeRTOS heap
+ * at the wrong time can replace/poison the normal heap. v27c proved the late
+ * call is not additive. Here we treat 0x80000000 as a private manual scratch
+ * arena for the single-client OPL1000 micro HTTP path only.
  */
 #define OPL1000_MICRO_REQ_SIZE    512
 #define OPL1000_MICRO_REPLY_SIZE  768
@@ -178,14 +180,47 @@ extern size_t xPortGetFreeHeapSize(void);
 #define OPL1000_PAGE_BODY_SIZE    640
 #define OPL1000_CMD_SIZE          128
 
-static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
-static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
-static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE];
-static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE];
-static char g_opl1000_cmd[OPL1000_CMD_SIZE];
-static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE];
+#define OPL1000_SHM_SCRATCH_BASE      0x80000000u
+#define OPL1000_SHM_REQ_OFFSET        0x0000u
+#define OPL1000_SHM_REPLY_OFFSET      0x0200u
+#define OPL1000_SHM_STATUS_OFFSET     0x0500u
+#define OPL1000_SHM_PAGE_OFFSET       0x0640u
+#define OPL1000_SHM_CMD_OFFSET        0x08C0u
+#define OPL1000_SHM_CMD_ESC_OFFSET    0x0940u
+#define OPL1000_SHM_USED_SIZE         0x09C0u
+
+#define g_opl1000_micro_req       ((char *)(uintptr_t)(OPL1000_SHM_SCRATCH_BASE + OPL1000_SHM_REQ_OFFSET))
+#define g_opl1000_micro_reply     ((char *)(uintptr_t)(OPL1000_SHM_SCRATCH_BASE + OPL1000_SHM_REPLY_OFFSET))
+#define g_opl1000_status_body     ((char *)(uintptr_t)(OPL1000_SHM_SCRATCH_BASE + OPL1000_SHM_STATUS_OFFSET))
+#define g_opl1000_page_body       ((char *)(uintptr_t)(OPL1000_SHM_SCRATCH_BASE + OPL1000_SHM_PAGE_OFFSET))
+#define g_opl1000_cmd             ((char *)(uintptr_t)(OPL1000_SHM_SCRATCH_BASE + OPL1000_SHM_CMD_OFFSET))
+#define g_opl1000_cmd_escaped     ((char *)(uintptr_t)(OPL1000_SHM_SCRATCH_BASE + OPL1000_SHM_CMD_ESC_OFFSET))
+
 static http_request_t g_opl1000_request_probe;
 static struct sockaddr_storage g_opl1000_source_addr;
+static bool g_opl1000_shm_scratch_probed = false;
+
+static void opl1000_shm_scratch_probe(const char *where)
+{
+	if(g_opl1000_shm_scratch_probed)
+	{
+		return;
+	}
+	g_opl1000_shm_scratch_probed = true;
+
+	memset(g_opl1000_micro_req, 0, OPL1000_SHM_USED_SIZE);
+	g_opl1000_micro_req[0] = (char)0x28;
+	g_opl1000_cmd_escaped[OPL1000_CMD_SIZE - 1] = (char)0x82;
+	ADDLOG_INFO(LOG_FEATURE_HTTP,
+		"OPL1000 v28 SHM scratch %s base=0x%08x used=0x%x first=0x%02x last=0x%02x heap=%u",
+		where,
+		(unsigned int)OPL1000_SHM_SCRATCH_BASE,
+		(unsigned int)OPL1000_SHM_USED_SIZE,
+		(unsigned int)(unsigned char)g_opl1000_micro_req[0],
+		(unsigned int)(unsigned char)g_opl1000_cmd_escaped[OPL1000_CMD_SIZE - 1],
+		(unsigned int)xPortGetFreeHeapSize());
+	memset(g_opl1000_micro_req, 0, OPL1000_SHM_USED_SIZE);
+}
 
 static int opl1000_send_all(int fd, const char *data, int len)
 {
@@ -326,7 +361,7 @@ static void opl1000_json_escape_small(const char *src, char *dst, int dstMax)
 
 static int opl1000_write_status(int fd, const char *httpTag)
 {
-	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
+	snprintf(g_opl1000_status_body, OPL1000_STATUS_BODY_SIZE,
 		"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n",
 		HAL_GetMyIPString(),
 		(unsigned int)xPortGetFreeHeapSize(),
@@ -350,8 +385,8 @@ static int opl1000_handle_direct_cmnd(int fd, const char *buf)
 	}
 
 	cr = CMD_ExecuteCommand(g_opl1000_cmd, COMMAND_FLAG_SOURCE_HTTP);
-	opl1000_json_escape_small(g_opl1000_cmd, g_opl1000_cmd_escaped, sizeof(g_opl1000_cmd_escaped));
-	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
+	opl1000_json_escape_small(g_opl1000_cmd, g_opl1000_cmd_escaped, OPL1000_CMD_SIZE);
+	snprintf(g_opl1000_status_body, OPL1000_STATUS_BODY_SIZE,
 		"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
 		g_opl1000_cmd_escaped,
 		(int)cr,
@@ -379,7 +414,7 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 	}
 	else if(strncmp(buf, "GET /status", 11) == 0)
 	{
-		return opl1000_write_status(fd, "v23-micro");
+		return opl1000_write_status(fd, "v28-shm-scratch");
 	}
 	else if(strncmp(buf, "GET /cfg", 8) == 0 ||
 		strncmp(buf, "GET /index", 10) == 0)
@@ -387,14 +422,14 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 		return opl1000_http_write_response(fd,
 			"503 Service Unavailable",
 			"text/html",
-			"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled in v24.</p><p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n");
+			"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled in v28.</p><p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n");
 	}
 
-	snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
+	snprintf(g_opl1000_page_body, OPL1000_PAGE_BODY_SIZE,
 		"<html><body><h1>OpenOPL1000</h1>"
 		"<p>IP: %s</p>"
 		"<p>Heap: %u</p>"
-		"<p>v24 direct-command micro UI</p>"
+		"<p>v28 direct-command micro UI using SHM scratch buffers</p>"
 		"<p><a href='/status'>status json</a></p>"
 		"<p><a href='/cm?cmnd=Status'>Status command</a></p>"
 		"<p><a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a></p>"
@@ -536,6 +571,7 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 	int reuse = 1;
 
 #if PLATFORM_OPL1000
+	opl1000_shm_scratch_probe("tcp_server_start");
 	/*
 	 * OBK starts the HTTP task during Main_Init_After_Delay, but on OPL1000
 	 * the vendor lwIP/socket layer is not usable until the STA event path has

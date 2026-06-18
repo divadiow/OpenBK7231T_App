@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
 
 #include "at_cmd_common_patch.h"
 #include "boot_sequence.h"
@@ -26,7 +25,6 @@ void __Patch_EntryPoint(void) __attribute__((used));
 static void Main_PinMuxUpdate(void);
 static void Main_FlashLayoutUpdate(void);
 static void Main_ServiceInitNoBle(void);
-static void OpenOPL1000_SharedHeapProbeDeferred(void);
 static void Main_MiscModulesInit(void);
 static void Main_MiscDriverConfigSetup(void);
 static void Main_AtUartDbgUartSwitch(void);
@@ -38,9 +36,6 @@ static void OpenOPL1000_EarlyLog(const char *text);
 
 extern void Main_Init(void);
 extern void Main_OnEverySecond(void);
-extern size_t xPortGetFreeHeapSize(void);
-extern void vPortHeapRegionInit(uint8_t *pucAddr, uint32_t ulSize);
-/* pvPortMalloc/vPortFree are SDK macros in cmsis_os.h; do not redeclare them. */
 
 typedef void (*T_Main_AppInit_fp)(void);
 extern T_Main_AppInit_fp Main_AppInit;
@@ -113,75 +108,6 @@ static void Main_PinMuxUpdate(void)
 
 static void Main_FlashLayoutUpdate(void)
 {
-}
-
-static void OpenOPL1000_SharedHeapProbeDeferred(void)
-{
-    static int s_done = 0;
-    const uint32_t shmBase = 0x80000000u;
-    const uint32_t shmSize = 0x00004000u;
-    const size_t testSize = 0x3000u;
-    size_t before;
-    size_t afterAdd;
-    size_t afterAlloc;
-    size_t afterFree;
-    uint8_t *testBlock;
-
-    if (s_done)
-    {
-        return;
-    }
-    s_done = 1;
-
-    before = xPortGetFreeHeapSize();
-    printf("[OpenOPL1000] SHM heap probe v27c: deferred before=%u\r\n", (unsigned int)before);
-    printf("[OpenOPL1000] SHM heap probe v27c: adding base=0x%08x size=0x%08x\r\n",
-           (unsigned int)shmBase,
-           (unsigned int)shmSize);
-
-    /* v27b proved that calling this at patch entry creates a one-region heap
-     * at 0x80000000 and prevents the normal SDK heap from being usable.  v27c
-     * waits until the SDK has created its service tasks and the normal heap is
-     * already live.  If this function is additive, free heap should rise by
-     * roughly 16 KB.  If it resets the heap instead, the delta will be small or
-     * negative and we do not stress-test it further.
-     */
-    vPortHeapRegionInit((uint8_t *)shmBase, shmSize);
-
-    afterAdd = xPortGetFreeHeapSize();
-    printf("[OpenOPL1000] SHM heap probe v27c: deferred after_add=%u delta=%d\r\n",
-           (unsigned int)afterAdd,
-           (int)(afterAdd - before));
-
-    if (afterAdd > (before + 8192u))
-    {
-        testBlock = (uint8_t *)pvPortMalloc(testSize);
-        afterAlloc = xPortGetFreeHeapSize();
-        printf("[OpenOPL1000] SHM heap probe v27c: test_alloc size=%u ptr=%p after_alloc=%u\r\n",
-               (unsigned int)testSize,
-               testBlock,
-               (unsigned int)afterAlloc);
-
-        if (testBlock != NULL)
-        {
-            testBlock[0] = 0x27;
-            testBlock[testSize - 1] = 0x73;
-            printf("[OpenOPL1000] SHM heap probe v27c: test_touch first=0x%02x last=0x%02x\r\n",
-                   testBlock[0],
-                   testBlock[testSize - 1]);
-            vPortFree(testBlock);
-            afterFree = xPortGetFreeHeapSize();
-            printf("[OpenOPL1000] SHM heap probe v27c: after_free=%u\r\n", (unsigned int)afterFree);
-        }
-        else
-        {
-            printf("[OpenOPL1000] SHM heap probe v27c: test_alloc failed\r\n");
-        }
-    }
-    else
-    {
-        printf("[OpenOPL1000] SHM heap probe v27c: not additive; skipping stress allocation\r\n");
-    }
 }
 
 static void Main_ServiceInitNoBle(void)
@@ -400,7 +326,6 @@ static void Main_AppInit_patch(void)
     Hal_DbgUart_RxIntEn(1);
     OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO0/IO1 @115200\r\n");
     OpenOPL1000_EarlyLog("[OpenOPL1000] OpenBeken platform port\r\n");
-    OpenOPL1000_SharedHeapProbeDeferred();
 
     memset(&threadDef, 0, sizeof(threadDef));
     threadDef.name = "openbeken";

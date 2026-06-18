@@ -254,3 +254,8 @@ The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the 
 ## v25 note
 
 v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
+
+
+## v28 note
+
+This test keeps the v25 Wi-Fi/HTTP baseline and uses the 0x80000000 shared-memory window as a manual scratch arena for the OPL1000 micro HTTP request/reply buffers. It does not call `vPortHeapRegionInit()`.
