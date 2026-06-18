@@ -254,3 +254,37 @@ The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the 
 ## v25 note
 
 v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
+
+## v26 full OBK HTTP experiment
+
+v26 is intentionally a risky one-change experiment based on the stable v25 base.
+It keeps the v25 Wi-Fi, BLE-disabled service init, `nl_scrt_Init()`, DHCP polling,
+worker termination, and synchronous/static TCP server path.
+
+The deliberate change is that normal HTTP requests are routed through the real
+OpenBeken `HTTP_ProcessPacket()` path again. The small `/status` and `/opl1000`
+endpoints remain local diagnostic fallbacks; everything else, including `/`,
+`/cfg`, `/cm?...`, and normal OBK web assets, goes through the real OBK HTTP
+router.
+
+Suggested test order:
+
+```text
+http://<device-ip>/status
+http://<device-ip>/opl1000
+http://<device-ip>/cm?cmnd=Status
+http://<device-ip>/
+http://<device-ip>/cfg
+```
+
+Useful log markers:
+
+```text
+OPL1000 v26 request len ...
+OPL1000 v26 full OBK before HTTP_ProcessPacket ...
+OPL1000 v26 full OBK final send rc ...
+OPL1000 v26 full OBK done ...
+```
+
+If this regresses, discard v26 and continue from v25. v25 remains the stable
+checkpoint.
