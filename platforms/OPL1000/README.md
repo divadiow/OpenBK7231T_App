@@ -255,12 +255,12 @@ The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the 
 
 v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
 
-## v29 split-M3 RAM packaging probe
+## v29b split-M3 RAM packaging probe
 
-v29 is based on the stable v25 OpenOPL1000 line and deliberately does **not**
+v29b is based on the stable v25 OpenOPL1000 line and deliberately does **not**
 re-enable the full stock OpenBeken HTTP UI.
 
-The only architectural experiment in v29 is the vendor `Expand_M3_RAM` style
+The only architectural experiment in v29b is the vendor `Expand_M3_RAM` style
 split-M3 packaging path:
 
 - normal M3 patch image is linked for `0x004164A0`
@@ -273,7 +273,7 @@ split-M3 packaging path:
 Expected boot marker if the split-M3 binary was packed and loaded correctly:
 
 ```text
-[OpenOPL1000] split-M3 v29: shm_fn=0x80000001 result=0x........
+[OpenOPL1000] split-M3 v29b: shm_fn=0x80000001 result=0x........
 ```
 
 If the marker does not appear, or the device resets immediately after the

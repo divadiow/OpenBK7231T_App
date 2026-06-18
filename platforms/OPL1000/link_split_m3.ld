@@ -60,8 +60,18 @@ SECTIONS
         *(.bss)
         *(.bss*)
         *(COMMON)
+        . = ALIGN(4);
         __bss_end__ = .;
     } > IRAM1
+
+    /*
+     * libnosys.a's _sbrk() references the plain symbol "end".  The stock
+     * Opulinks linker script provides it, and the split-M3 script must do the
+     * same even though the runtime allocator is supplied by the SDK/CMSIS layer.
+     */
+    PROVIDE(end = __bss_end__);
+    PROVIDE(_end = __bss_end__);
+    PROVIDE(__end__ = __bss_end__);
 
     ASSERT(__bss_end__ <= ORIGIN(IRAM1) + LENGTH(IRAM1), "Error: IRAM1 patch window overflow")
 
