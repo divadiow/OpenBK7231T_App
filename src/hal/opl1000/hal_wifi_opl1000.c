@@ -228,30 +228,47 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
     return rc;
 }
 
-static void OpenOPL1000_StartLwipAndWaitForIp(void)
+static bool OpenOPL1000_StartLwipAndPollForIp(void)
 {
-    if (g_lwipStarted)
+    if (!g_lwipStarted)
     {
-        return;
+        g_lwipStarted = true;
+        printf("[OpenOPL1000] worker: lwIP network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+        lwip_network_init(WIFI_MODE_STA);
+        printf("[OpenOPL1000] worker: lwIP net_start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+        lwip_net_start(WIFI_MODE_STA);
+
+        /* Do not call lwip_net_ready() here. On OPL1000 A2 it blocks the
+         * temporary Wi-Fi worker indefinitely after DHCP succeeds, so the
+         * worker stack is never returned. v24 proved DHCP/IP works via
+         * lwip_net_start() plus the SDK event path; v25 polls the netif
+         * directly and terminates the worker once a non-zero IPv4 address
+         * appears.
+         */
+        printf("[OpenOPL1000] worker: polling for DHCP address, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
     }
 
-    g_lwipStarted = true;
-    printf("[OpenOPL1000] worker: lwIP network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
-    lwip_network_init(WIFI_MODE_STA);
-    printf("[OpenOPL1000] worker: lwIP net_start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
-    lwip_net_start(WIFI_MODE_STA);
-    printf("[OpenOPL1000] worker: lwIP net_ready wait, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
-    lwip_net_ready();
+    for (int i = 0; i < 40; i++)
+    {
+        OpenOPL1000_UpdateNetifStrings();
+        if (strcmp(g_ip, "0.0.0.0") != 0)
+        {
+            g_haveIp = true;
+            printf("[OpenOPL1000] worker: got IP %s GW=%s MASK=%s heap=%u\r\n",
+                   g_ip,
+                   g_gw,
+                   g_mask,
+                   OpenOPL1000_GetFreeHeap());
+            lwip_get_ip_info("st1");
+            OpenOPL1000_ReportStatus(WIFI_STA_CONNECTED);
+            return true;
+        }
+        osDelay(500);
+    }
 
-    g_haveIp = true;
-    OpenOPL1000_UpdateNetifStrings();
-    printf("[OpenOPL1000] worker: got IP %s GW=%s MASK=%s heap=%u\r\n",
-           g_ip,
-           g_gw,
-           g_mask,
+    printf("[OpenOPL1000] worker: DHCP address not ready yet, heap=%u\r\n",
            OpenOPL1000_GetFreeHeap());
-    lwip_get_ip_info("st1");
-    OpenOPL1000_ReportStatus(WIFI_STA_CONNECTED);
+    return false;
 }
 
 static void OpenOPL1000_WifiWorker(void *args)
@@ -293,7 +310,7 @@ static void OpenOPL1000_WifiWorker(void *args)
 
         if (g_associated && !g_haveIp)
         {
-            OpenOPL1000_StartLwipAndWaitForIp();
+            OpenOPL1000_StartLwipAndPollForIp();
         }
 
         if (g_haveIp)
@@ -308,9 +325,9 @@ static void OpenOPL1000_WifiWorker(void *args)
             else
             {
                 /* Once DHCP has completed the worker has no more critical work.
-                 * Terminate it so its stack is returned before the first HTTP
-                 * request arrives.  v15 proved the HTTP listener could start,
-                 * but the per-client path failed with only ~728 bytes free.
+                 * Terminate it so its stack is returned before HTTP requests
+                 * arrive. v24 showed lwip_net_ready() did not return here;
+                 * v25 avoids that blocking waiter and reclaims this stack.
                  */
                 printf("[OpenOPL1000] worker: network ready, terminating worker to free stack, heap=%u\r\n",
                        OpenOPL1000_GetFreeHeap());

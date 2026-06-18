@@ -249,3 +249,8 @@ full GUI pages again.
 V24 keeps the stable v23 transport: BLE/LE remains disabled, `nl_scrt_Init()` remains enabled, HTTP stays single-client and synchronous, and the full OpenBeken HTTP/page router is still not used by default.
 
 The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the already-registered OpenBeken command engine directly and returns compact JSON with the command return code. This deliberately does not capture full Tasmota JSON command output yet; it proves stable command dispatch without pulling the full HTTP router back into the constrained OPL1000 build.
+
+
+## v25 note
+
+v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
