@@ -40,8 +40,7 @@ extern void Main_Init(void);
 extern void Main_OnEverySecond(void);
 extern size_t xPortGetFreeHeapSize(void);
 extern void vPortHeapRegionInit(uint8_t *pucAddr, uint32_t ulSize);
-extern void *pvPortMalloc(size_t xWantedSize);
-extern void vPortFree(void *pv);
+/* pvPortMalloc/vPortFree are SDK macros in cmsis_os.h.  Do not redeclare them here. */
 
 typedef void (*T_Main_AppInit_fp)(void);
 extern T_Main_AppInit_fp Main_AppInit;
@@ -79,7 +78,7 @@ void __Patch_EntryPoint(void)
 
     Sys_SetUnsuedSramEndBound(0x440000);
 
-    /* Controlled v27 experiment: try to add the 16 KB M3 shared-memory window
+    /* Controlled v27b experiment: try to add the 16 KB M3 shared-memory window
      * shown by the SDK Expand_M3_RAM demo to the FreeRTOS heap, without changing
      * the pack format or moving code/data there.  If this proves unsafe, v25 is
      * still the stable base.
@@ -144,21 +143,21 @@ static void OpenOPL1000_SharedHeapProbe(void)
     s_done = 1;
 
     before = xPortGetFreeHeapSize();
-    printf("[OpenOPL1000] SHM heap probe v27: before=%u\r\n", (unsigned int)before);
-    printf("[OpenOPL1000] SHM heap probe v27: adding base=0x%08x size=0x%08x\r\n",
+    printf("[OpenOPL1000] SHM heap probe v27b: before=%u\r\n", (unsigned int)before);
+    printf("[OpenOPL1000] SHM heap probe v27b: adding base=0x%08x size=0x%08x\r\n",
            (unsigned int)shmBase,
            (unsigned int)shmSize);
 
     vPortHeapRegionInit((uint8_t *)shmBase, shmSize);
 
     afterAdd = xPortGetFreeHeapSize();
-    printf("[OpenOPL1000] SHM heap probe v27: after_add=%u delta=%d\r\n",
+    printf("[OpenOPL1000] SHM heap probe v27b: after_add=%u delta=%d\r\n",
            (unsigned int)afterAdd,
            (int)(afterAdd - before));
 
     testBlock = (uint8_t *)pvPortMalloc(testSize);
     afterAlloc = xPortGetFreeHeapSize();
-    printf("[OpenOPL1000] SHM heap probe v27: test_alloc size=%u ptr=%p after_alloc=%u\r\n",
+    printf("[OpenOPL1000] SHM heap probe v27b: test_alloc size=%u ptr=%p after_alloc=%u\r\n",
            (unsigned int)testSize,
            testBlock,
            (unsigned int)afterAlloc);
@@ -167,16 +166,16 @@ static void OpenOPL1000_SharedHeapProbe(void)
     {
         testBlock[0] = 0x27;
         testBlock[testSize - 1] = 0x72;
-        printf("[OpenOPL1000] SHM heap probe v27: test_touch first=0x%02x last=0x%02x\r\n",
+        printf("[OpenOPL1000] SHM heap probe v27b: test_touch first=0x%02x last=0x%02x\r\n",
                testBlock[0],
                testBlock[testSize - 1]);
         vPortFree(testBlock);
         afterFree = xPortGetFreeHeapSize();
-        printf("[OpenOPL1000] SHM heap probe v27: after_free=%u\r\n", (unsigned int)afterFree);
+        printf("[OpenOPL1000] SHM heap probe v27b: after_free=%u\r\n", (unsigned int)afterFree);
     }
     else
     {
-        printf("[OpenOPL1000] SHM heap probe v27: test_alloc failed\r\n");
+        printf("[OpenOPL1000] SHM heap probe v27b: test_alloc failed\r\n");
     }
 }
 
