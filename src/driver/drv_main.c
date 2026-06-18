@@ -2,6 +2,7 @@
 #include "../logging/logging.h"
 #include "drv_bl0937.h"
 #include "drv_bl0942.h"
+#include "drv_bl0939.h"
 #include "drv_bl_shared.h"
 #include "drv_neo6m.h"
 #include "drv_cse7766.h"
@@ -608,6 +609,22 @@ static driver_t g_drivers[] = {
 	NULL,                                    // stopFunction
 	NULL,                                    // onChannelChanged
 	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_BL0939SPI
+	//drvdetail:{"name":"BL0939SPI",
+	//drvdetail:"title":"BL0939 SPI dual-channel bidirectional power meter",
+	//drvdetail:"descr":"BL0939 SPI driver for dual CT clamp bidirectional power meters. Provides voltage, current/power A/B, import/export A/B, and total import/export energy.",
+	//drvdetail:"requires":""}
+	{ "BL0939SPI",                           // Driver Name
+	BL0939_SPI_Init,                         // Init
+	BL0939_SPI_RunEverySecond,               // onEverySecond
+	BL0939_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	BL0939_SPI_Stop,                         // stopFunction
+	NULL,                                    // onChannelChanged
+	BL0939_OnHassDiscovery,                  // onHassDiscovery
 	false,                                   // loaded
 	},
 #endif
