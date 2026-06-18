@@ -214,3 +214,31 @@ http://<device-ip>/cfg
 The expected result is that repeated browser requests do not reset the TCP
 server or the module.  If `/cm?cmnd=status` works repeatedly, the next step is to
 recover more heap/stack and then enable selected lightweight OpenBeken pages.
+
+## v23 notes
+
+v22 was intended to harden browser/socket lifecycle handling, but the larger
+real `HTTP_ProcessPacket()` command route made the build regress before DHCP on
+some boots.  v23 deliberately returns to the v20-style micro HTTP transport and
+keeps the v22 socket hardening, but does **not** route any request through
+`HTTP_ProcessPacket()`.
+
+Instead, `/cm?cmnd=...` is a minimal direct bridge into the already-running
+OpenBeken command engine via `CMD_ExecuteCommand()`.  This is not yet the normal
+Tasmota/OpenBeken JSON command response, but it proves command dispatch over
+HTTP without pulling in the full web route/page machinery.
+
+Expected test order:
+
+```text
+http://<device-ip>/
+http://<device-ip>/status
+http://<device-ip>/cm?cmnd=WifiState
+http://<device-ip>/cm?cmnd=backlog%20led_enableAll%201;led_basecolor_rgb%20FF0000
+http://<device-ip>/cfg
+```
+
+`/cfg` remains intentionally disabled.  The next goal after v23 is to confirm
+that repeated requests and direct command dispatch are stable, then add only the
+specific command/status response features needed for integration before trying
+full GUI pages again.

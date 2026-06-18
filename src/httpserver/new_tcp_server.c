@@ -159,31 +159,31 @@ exit:
 
 #if PLATFORM_OPL1000
 #include "../hal/hal_wifi.h"
+#include "../cmnds/cmd_public.h"
 extern size_t xPortGetFreeHeapSize(void);
 
 /*
- * v20 proved that Wi-Fi, DHCP, TCP accept and static micro HTTP all work once
- * BLE is disabled. v22 keeps the stable single-client/static-buffer transport,
- * treats empty browser connections as normal, and only routes lightweight /cm
- * command requests through the real OpenBeken HTTP parser. Full UI pages are
- * deliberately kept behind micro fallback responses until the server lifecycle
- * is proven stable.
+ * v23 deliberately backs away from routing through HTTP_ProcessPacket().
+ * v20 proved Wi-Fi/DHCP/TCP/browser micro-HTTP is stable with BLE disabled.
+ * v21/v22 proved that pulling the fuller OBK HTTP path into this constrained
+ * build is still too fragile.  Keep the transport static and small, and expose
+ * only a direct /cm?cmnd= bridge into the already-running command engine.
  *
  * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
  * that large locals can overflow the TCP_server stack.
  */
-#define OPL1000_OBK_REQ_SIZE      768
-#define OPL1000_OBK_REPLY_SIZE    1024
+#define OPL1000_MICRO_REQ_SIZE    512
 #define OPL1000_MICRO_REPLY_SIZE  768
-#define OPL1000_STATUS_BODY_SIZE  192
-#define OPL1000_PAGE_BODY_SIZE    256
+#define OPL1000_STATUS_BODY_SIZE  224
+#define OPL1000_PAGE_BODY_SIZE    288
+#define OPL1000_CMD_SIZE          128
 
-static char g_opl1000_obk_req[OPL1000_OBK_REQ_SIZE];
-static char g_opl1000_obk_reply[OPL1000_OBK_REPLY_SIZE];
+static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
 static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
 static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE];
 static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE];
-static http_request_t g_opl1000_request;
+static char g_opl1000_cmd[OPL1000_CMD_SIZE];
+static http_request_t g_opl1000_request_probe;
 static struct sockaddr_storage g_opl1000_source_addr;
 
 static int opl1000_send_all(int fd, const char *data, int len)
@@ -229,20 +229,102 @@ static int opl1000_http_write_response(int fd, const char *status, const char *c
 	return opl1000_send_all(fd, g_opl1000_micro_reply, len);
 }
 
-static bool opl1000_is_cmd_request(const char *buf)
+static int opl1000_hex_nibble(char c)
 {
-	/* First OBK target for OPL1000: command endpoint only.  The normal GUI can
-	 * allocate/format substantially more data and is enabled later, once the
-	 * socket lifecycle is stable under normal browser behaviour.
-	 */
-	return strncmp(buf, "GET /cm?", 8) == 0 ||
-		strncmp(buf, "POST /cm", 8) == 0;
+	if(c >= '0' && c <= '9') return c - '0';
+	if(c >= 'a' && c <= 'f') return c - 'a' + 10;
+	if(c >= 'A' && c <= 'F') return c - 'A' + 10;
+	return -1;
 }
 
-static int opl1000_micro_fallback(int fd, const char *buf, bool *handled)
+static int opl1000_url_decode_token(const char *src, char *dst, int dstMax)
 {
-	*handled = true;
+	int out = 0;
+	if(dstMax <= 0)
+	{
+		return 0;
+	}
+	while(*src && *src != ' ' && *src != '&' && *src != '\r' && *src != '\n' && out < (dstMax - 1))
+	{
+		if(*src == '+')
+		{
+			dst[out++] = ' ';
+			src++;
+		}
+		else if(*src == '%' && src[1] && src[2])
+		{
+			int hi = opl1000_hex_nibble(src[1]);
+			int lo = opl1000_hex_nibble(src[2]);
+			if(hi >= 0 && lo >= 0)
+			{
+				dst[out++] = (char)((hi << 4) | lo);
+				src += 3;
+			}
+			else
+			{
+				dst[out++] = *src++;
+			}
+		}
+		else
+		{
+			dst[out++] = *src++;
+		}
+	}
+	dst[out] = 0;
+	return out;
+}
 
+static bool opl1000_extract_cmnd(const char *buf, char *cmd, int cmdMax)
+{
+	const char *p = strstr(buf, "cmnd=");
+	if(p == NULL)
+	{
+		cmd[0] = 0;
+		return false;
+	}
+	p += 5;
+	return opl1000_url_decode_token(p, cmd, cmdMax) > 0;
+}
+
+static int opl1000_write_status(int fd, const char *httpTag)
+{
+	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
+		"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n",
+		HAL_GetMyIPString(),
+		(unsigned int)xPortGetFreeHeapSize(),
+		Main_IsConnectedToWiFi() ? 1 : 0,
+		httpTag);
+	return opl1000_http_write_response(fd,
+		"200 OK",
+		"application/json",
+		g_opl1000_status_body);
+}
+
+static int opl1000_handle_direct_cmnd(int fd, const char *buf)
+{
+	commandResult_t cr;
+	if(!opl1000_extract_cmnd(buf, g_opl1000_cmd, OPL1000_CMD_SIZE))
+	{
+		return opl1000_http_write_response(fd,
+			"400 Bad Request",
+			"application/json",
+			"{\"error\":\"missing cmnd\"}\n");
+	}
+
+	cr = CMD_ExecuteCommand(g_opl1000_cmd, COMMAND_FLAG_SOURCE_HTTP);
+	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
+		"{\"app\":\"OpenOPL1000\",\"cmd_rc\":%d,\"heap\":%u,\"wifi\":%d}\n",
+		(int)cr,
+		(unsigned int)xPortGetFreeHeapSize(),
+		Main_IsConnectedToWiFi() ? 1 : 0);
+	return opl1000_http_write_response(fd,
+		"200 OK",
+		"application/json",
+		g_opl1000_status_body);
+}
+
+static int opl1000_micro_fallback(int fd, const char *buf)
+{
 	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
 	{
 		return opl1000_http_write_response(fd,
@@ -250,34 +332,13 @@ static int opl1000_micro_fallback(int fd, const char *buf, bool *handled)
 			"text/plain",
 			"not found\n");
 	}
-	else if(strncmp(buf, "GET / ", 6) == 0 ||
-		strncmp(buf, "GET /opl1000", 12) == 0)
+	else if(strncmp(buf, "GET /cm?", 8) == 0)
 	{
-		snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
-			"<html><body><h1>OpenOPL1000</h1>"
-			"<p>IP: %s</p>"
-			"<p>Heap: %u</p>"
-			"<p>v22 hardened HTTP transport build</p>"
-			"<p>Try <code>/status</code> or <code>/cm?cmnd=status</code>.</p>"
-			"</body></html>\n",
-			HAL_GetMyIPString(),
-			(unsigned int)xPortGetFreeHeapSize());
-		return opl1000_http_write_response(fd,
-			"200 OK",
-			"text/html",
-			g_opl1000_page_body);
+		return opl1000_handle_direct_cmnd(fd, buf);
 	}
 	else if(strncmp(buf, "GET /status", 11) == 0)
 	{
-		snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-			"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"v22\"}\n",
-			HAL_GetMyIPString(),
-			(unsigned int)xPortGetFreeHeapSize(),
-			Main_IsConnectedToWiFi() ? 1 : 0);
-		return opl1000_http_write_response(fd,
-			"200 OK",
-			"application/json",
-			g_opl1000_status_body);
+		return opl1000_write_status(fd, "v23-micro");
 	}
 	else if(strncmp(buf, "GET /cfg", 8) == 0 ||
 		strncmp(buf, "GET /index", 10) == 0)
@@ -285,59 +346,62 @@ static int opl1000_micro_fallback(int fd, const char *buf, bool *handled)
 		return opl1000_http_write_response(fd,
 			"503 Service Unavailable",
 			"text/plain",
-			"OpenOPL1000 v22: full GUI route is intentionally disabled in this transport-hardening build. Try /cm?cmnd=status.\n");
+			"OpenOPL1000 v23: full GUI route is disabled. Try /status or /cm?cmnd=WifiState.\n");
 	}
 
-	*handled = false;
-	return 0;
+	snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
+		"<html><body><h1>OpenOPL1000</h1>"
+		"<p>IP: %s</p>"
+		"<p>Heap: %u</p>"
+		"<p>v23 direct-command micro HTTP build</p>"
+		"<p><a href='/status'>status</a></p>"
+		"<p><a href='/cm?cmnd=WifiState'>WifiState</a></p>"
+		"</body></html>\n",
+		HAL_GetMyIPString(),
+		(unsigned int)xPortGetFreeHeapSize());
+	return opl1000_http_write_response(fd,
+		"200 OK",
+		"text/html",
+		g_opl1000_page_body);
 }
 
 static void tcp_client_process_sync(tcp_thread_t* arg)
 {
 	int fd = arg->fd;
-	http_request_t *request = &g_opl1000_request;
+	char *buf = g_opl1000_micro_req;
+	http_request_t *requestProbe = &g_opl1000_request_probe;
 	int sendRc = 0;
-	int lenret = 0;
-	bool handled = false;
 
-	memset(request, 0, sizeof(*request));
-	memset(g_opl1000_obk_req, 0, OPL1000_OBK_REQ_SIZE);
-	memset(g_opl1000_obk_reply, 0, OPL1000_OBK_REPLY_SIZE);
+	memset(requestProbe, 0, sizeof(*requestProbe));
+	memset(buf, 0, OPL1000_MICRO_REQ_SIZE);
 
-	request->fd = fd;
-	request->received = g_opl1000_obk_req;
-	request->receivedLenmax = OPL1000_OBK_REQ_SIZE - 2;
-	request->responseCode = HTTP_RESPONSE_OK;
-	request->receivedLen = 0;
-	request->reply = g_opl1000_obk_reply;
-	request->replylen = 0;
-	request->replymaxlen = OPL1000_OBK_REPLY_SIZE - 1;
+	requestProbe->fd = fd;
+	requestProbe->received = buf;
+	requestProbe->receivedLenmax = OPL1000_MICRO_REQ_SIZE - 2;
+	requestProbe->responseCode = HTTP_RESPONSE_OK;
+	requestProbe->receivedLen = 0;
 
 	while(1)
 	{
-		int remaining = request->receivedLenmax - request->receivedLen;
-		int received = recv(fd, request->received + request->receivedLen, remaining, 0);
+		int remaining = requestProbe->receivedLenmax - requestProbe->receivedLen;
+		int received = recv(fd, requestProbe->received + requestProbe->receivedLen, remaining, 0);
 		if(received <= 0)
 		{
 			break;
 		}
-		request->receivedLen += received;
-		request->received[request->receivedLen] = 0;
-		if(strstr(request->received, "\r\n\r\n") != NULL ||
-			strstr(request->received, "\n\n") != NULL ||
+		requestProbe->receivedLen += received;
+		requestProbe->received[requestProbe->receivedLen] = 0;
+		if(strstr(requestProbe->received, "\r\n\r\n") != NULL ||
+			strstr(requestProbe->received, "\n\n") != NULL ||
 			received < remaining ||
-			request->receivedLen >= request->receivedLenmax)
+			requestProbe->receivedLen >= requestProbe->receivedLenmax)
 		{
 			break;
 		}
 	}
 
-	if(request->receivedLen <= 0)
+	if(requestProbe->receivedLen <= 0)
 	{
-		/* Normal browsers may open speculative/keepalive sockets and close them
-		 * without sending a request.  On OPL1000 this must not become a server
-		 * restart path; just close the accepted socket and continue.
-		 */
 		ADDLOG_INFO(LOG_FEATURE_HTTP,
 			"OPL1000 empty client connection closed, fd %d heap %u",
 			fd,
@@ -346,43 +410,12 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 request len %i heap %u",
-		request->receivedLen,
+		"OPL1000 micro request len %i heap %u",
+		requestProbe->receivedLen,
 		(unsigned int)xPortGetFreeHeapSize());
 
-	if(opl1000_is_cmd_request(request->received))
-	{
-		lenret = HTTP_ProcessPacket(request);
-		if(lenret > 0)
-		{
-			sendRc = opl1000_send_all(fd, request->reply, lenret);
-		}
-		else
-		{
-			/* Some OBK handlers stream via postany()/send() and return 0. */
-			sendRc = lenret;
-		}
-		ADDLOG_INFO(LOG_FEATURE_HTTP,
-			"OPL1000 OBK command reply rc %i lenret %i heap %u",
-			sendRc,
-			lenret,
-			(unsigned int)xPortGetFreeHeapSize());
-	}
-	else
-	{
-		sendRc = opl1000_micro_fallback(fd, request->received, &handled);
-		if(!handled)
-		{
-			sendRc = opl1000_http_write_response(fd,
-				"404 Not Found",
-				"text/plain",
-				"OpenOPL1000 v22: endpoint not enabled in hardened transport build. Try /status or /cm?cmnd=status.\n");
-		}
-		ADDLOG_INFO(LOG_FEATURE_HTTP,
-			"OPL1000 micro reply rc %i heap %u",
-			sendRc,
-			(unsigned int)xPortGetFreeHeapSize());
-	}
+	sendRc = opl1000_micro_fallback(fd, requestProbe->received);
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
 
 exit:
 	if(fd != INVALID_SOCK)
