@@ -163,19 +163,19 @@ exit:
 extern size_t xPortGetFreeHeapSize(void);
 
 /*
- * v23 deliberately backs away from routing through HTTP_ProcessPacket().
+ * v24 keeps the v23 direct-command approach and adds a tiny micro UI.
  * v20 proved Wi-Fi/DHCP/TCP/browser micro-HTTP is stable with BLE disabled.
  * v21/v22 proved that pulling the fuller OBK HTTP path into this constrained
- * build is still too fragile.  Keep the transport static and small, and expose
- * only a direct /cm?cmnd= bridge into the already-running command engine.
+ * build is still too fragile. Keep the transport static and small, expose
+ * a direct /cm?cmnd= bridge, and provide a tiny form-based UI.
  *
  * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
  * that large locals can overflow the TCP_server stack.
  */
 #define OPL1000_MICRO_REQ_SIZE    512
 #define OPL1000_MICRO_REPLY_SIZE  768
-#define OPL1000_STATUS_BODY_SIZE  224
-#define OPL1000_PAGE_BODY_SIZE    288
+#define OPL1000_STATUS_BODY_SIZE  320
+#define OPL1000_PAGE_BODY_SIZE    640
 #define OPL1000_CMD_SIZE          128
 
 static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
@@ -183,6 +183,7 @@ static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
 static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE];
 static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE];
 static char g_opl1000_cmd[OPL1000_CMD_SIZE];
+static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE];
 static http_request_t g_opl1000_request_probe;
 static struct sockaddr_storage g_opl1000_source_addr;
 
@@ -286,6 +287,43 @@ static bool opl1000_extract_cmnd(const char *buf, char *cmd, int cmdMax)
 	return opl1000_url_decode_token(p, cmd, cmdMax) > 0;
 }
 
+static const char *opl1000_cmd_rc_name(commandResult_t cr)
+{
+	switch(cr)
+	{
+	case CMD_RES_OK: return "OK";
+	case CMD_RES_UNKNOWN_COMMAND: return "UNKNOWN_COMMAND";
+	case CMD_RES_NOT_ENOUGH_ARGUMENTS: return "NOT_ENOUGH_ARGUMENTS";
+	case CMD_RES_EMPTY_STRING: return "EMPTY_STRING";
+	case CMD_RES_BAD_ARGUMENT: return "BAD_ARGUMENT";
+	case CMD_RES_ERROR: return "ERROR";
+	default: return "UNKNOWN_RESULT";
+	}
+}
+
+static void opl1000_json_escape_small(const char *src, char *dst, int dstMax)
+{
+	int out = 0;
+	if(dstMax <= 0)
+	{
+		return;
+	}
+	while(*src && out < (dstMax - 1))
+	{
+		char c = *src++;
+		if((c == '\"' || c == '\\') && out < (dstMax - 2))
+		{
+			dst[out++] = '\\';
+			dst[out++] = c;
+		}
+		else if(c >= 32 && c < 127)
+		{
+			dst[out++] = c;
+		}
+	}
+	dst[out] = 0;
+}
+
 static int opl1000_write_status(int fd, const char *httpTag)
 {
 	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
@@ -312,9 +350,12 @@ static int opl1000_handle_direct_cmnd(int fd, const char *buf)
 	}
 
 	cr = CMD_ExecuteCommand(g_opl1000_cmd, COMMAND_FLAG_SOURCE_HTTP);
+	opl1000_json_escape_small(g_opl1000_cmd, g_opl1000_cmd_escaped, sizeof(g_opl1000_cmd_escaped));
 	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-		"{\"app\":\"OpenOPL1000\",\"cmd_rc\":%d,\"heap\":%u,\"wifi\":%d}\n",
+		"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
+		g_opl1000_cmd_escaped,
 		(int)cr,
+		opl1000_cmd_rc_name(cr),
 		(unsigned int)xPortGetFreeHeapSize(),
 		Main_IsConnectedToWiFi() ? 1 : 0);
 	return opl1000_http_write_response(fd,
@@ -345,17 +386,23 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 	{
 		return opl1000_http_write_response(fd,
 			"503 Service Unavailable",
-			"text/plain",
-			"OpenOPL1000 v23: full GUI route is disabled. Try /status or /cm?cmnd=WifiState.\n");
+			"text/html",
+			"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled in v24.</p><p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n");
 	}
 
 	snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
 		"<html><body><h1>OpenOPL1000</h1>"
 		"<p>IP: %s</p>"
 		"<p>Heap: %u</p>"
-		"<p>v23 direct-command micro HTTP build</p>"
-		"<p><a href='/status'>status</a></p>"
-		"<p><a href='/cm?cmnd=WifiState'>WifiState</a></p>"
+		"<p>v24 direct-command micro UI</p>"
+		"<p><a href='/status'>status json</a></p>"
+		"<p><a href='/cm?cmnd=Status'>Status command</a></p>"
+		"<p><a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a></p>"
+		"<form action='/cm' method='get'>"
+		"<input name='cmnd' value='Status' style='width:220px'>"
+		"<button type='submit'>Run command</button>"
+		"</form>"
+		"<p><small>Full GUI remains disabled until transport and heap are proven stable.</small></p>"
 		"</body></html>\n",
 		HAL_GetMyIPString(),
 		(unsigned int)xPortGetFreeHeapSize());

@@ -215,11 +215,11 @@ The expected result is that repeated browser requests do not reset the TCP
 server or the module.  If `/cm?cmnd=status` works repeatedly, the next step is to
 recover more heap/stack and then enable selected lightweight OpenBeken pages.
 
-## v23 notes
+## v24 notes
 
 v22 was intended to harden browser/socket lifecycle handling, but the larger
 real `HTTP_ProcessPacket()` command route made the build regress before DHCP on
-some boots.  v23 deliberately returns to the v20-style micro HTTP transport and
+some boots.  v24 deliberately returns to the v20-style micro HTTP transport and
 keeps the v22 socket hardening, but does **not** route any request through
 `HTTP_ProcessPacket()`.
 
@@ -238,7 +238,14 @@ http://<device-ip>/cm?cmnd=backlog%20led_enableAll%201;led_basecolor_rgb%20FF000
 http://<device-ip>/cfg
 ```
 
-`/cfg` remains intentionally disabled.  The next goal after v23 is to confirm
+`/cfg` remains intentionally disabled.  The next goal after v24 is to confirm
 that repeated requests and direct command dispatch are stable, then add only the
 specific command/status response features needed for integration before trying
 full GUI pages again.
+
+
+## v24 micro UI notes
+
+V24 keeps the stable v23 transport: BLE/LE remains disabled, `nl_scrt_Init()` remains enabled, HTTP stays single-client and synchronous, and the full OpenBeken HTTP/page router is still not used by default.
+
+The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the already-registered OpenBeken command engine directly and returns compact JSON with the command return code. This deliberately does not capture full Tasmota JSON command output yet; it proves stable command dispatch without pulling the full HTTP router back into the constrained OPL1000 build.
