@@ -11,15 +11,19 @@
 #include "../cmnds/cmd_public.h"
 #include "../hal/hal_flashVars.h"
 #include "../hal/hal_ota.h"
+#include "../hal/hal_pins.h"
+#include "../hal/hal_generic.h"
 #include "../httpserver/hass.h"
 #include "../logging/logging.h"
 #include "../mqtt/new_mqtt.h"
 #include "../new_cfg.h"
 #include "../new_pins.h"
 #include "drv_public.h"
-#include "drv_spi.h"
 
-#define BL0939_SPI_BAUD_RATE              800000
+#define BL0939_PIN_SCLK                   26
+#define BL0939_PIN_MOSI                   24
+#define BL0939_PIN_MISO                   6
+#define BL0939_SW_SPI_DELAY_US            1
 #define BL0939_SPI_CMD_READ               0x55
 #define BL0939_SPI_CMD_WRITE              0xA5
 
@@ -50,19 +54,20 @@
 #define BL0939_SAVE_COUNTER               3600
 #define BL0939_INVALID_CF_CNT             0xFFFFFFFFu
 
-#define BL0939_CHANNEL_VOLTAGE            0
-#define BL0939_CHANNEL_CURRENT_A          1
-#define BL0939_CHANNEL_POWER_A            2
-#define BL0939_CHANNEL_IMPORT_A           3
-#define BL0939_CHANNEL_EXPORT_A           4
-#define BL0939_CHANNEL_CURRENT_B          5
-#define BL0939_CHANNEL_POWER_B            6
-#define BL0939_CHANNEL_IMPORT_B           7
-#define BL0939_CHANNEL_EXPORT_B           8
-#define BL0939_CHANNEL_IMPORT_TOTAL       9
-#define BL0939_CHANNEL_EXPORT_TOTAL       10
-#define BL0939_CHANNEL_POWER_FACTOR_A     11
-#define BL0939_CHANNEL_POWER_FACTOR_B     12
+#define BL0939_CHANNEL_BASE               1
+#define BL0939_CHANNEL_VOLTAGE            (BL0939_CHANNEL_BASE + 0)
+#define BL0939_CHANNEL_CURRENT_A          (BL0939_CHANNEL_BASE + 1)
+#define BL0939_CHANNEL_POWER_A            (BL0939_CHANNEL_BASE + 2)
+#define BL0939_CHANNEL_IMPORT_A           (BL0939_CHANNEL_BASE + 3)
+#define BL0939_CHANNEL_EXPORT_A           (BL0939_CHANNEL_BASE + 4)
+#define BL0939_CHANNEL_CURRENT_B          (BL0939_CHANNEL_BASE + 5)
+#define BL0939_CHANNEL_POWER_B            (BL0939_CHANNEL_BASE + 6)
+#define BL0939_CHANNEL_IMPORT_B           (BL0939_CHANNEL_BASE + 7)
+#define BL0939_CHANNEL_EXPORT_B           (BL0939_CHANNEL_BASE + 8)
+#define BL0939_CHANNEL_IMPORT_TOTAL       (BL0939_CHANNEL_BASE + 9)
+#define BL0939_CHANNEL_EXPORT_TOTAL       (BL0939_CHANNEL_BASE + 10)
+#define BL0939_CHANNEL_POWER_FACTOR_A     (BL0939_CHANNEL_BASE + 11)
+#define BL0939_CHANNEL_POWER_FACTOR_B     (BL0939_CHANNEL_BASE + 12)
 
 #define BL0939_CHANSET_FLAGS              (CHANNEL_SET_FLAG_SILENT)
 #define BL0939_CHANSET_FLAGS_FORCE        (CHANNEL_SET_FLAG_SILENT | CHANNEL_SET_FLAG_FORCE)
@@ -100,7 +105,6 @@ static BL0939_RawData_t last_raw;
 static BL0939_UpdateData_t last_update;
 static ENERGY_DATA energy_acc_a = { .Import = 0, .Export = 0 };
 static ENERGY_DATA energy_acc_b = { .Import = 0, .Export = 0 };
-static portTickType last_energy_tick;
 static int save_count_down = BL0939_SAVE_COUNTER;
 static uint32_t checksum_errors;
 static uint32_t read_errors;
@@ -173,22 +177,64 @@ static void BL0939_RestoreStats(void) {
     HAL_FlashVars_GetEnergy(&energy_acc_b, ENERGY_CHANNEL_B);
 }
 
-static int BL0939_SPI_ReadReg(uint8_t reg, uint32_t *val) {
-    uint8_t send[2];
-    uint8_t recv[4];
+static void BL0939_SPI_Delay(void) {
+#if BL0939_SW_SPI_DELAY_US > 0
+    HAL_Delay_us(BL0939_SW_SPI_DELAY_US);
+#endif
+}
 
-    send[0] = BL0939_SPI_CMD_READ;
-    send[1] = reg;
-    memset(recv, 0, sizeof(recv));
+static void BL0939_SPI_SetClock(int value) {
+    HAL_PIN_SetOutputValue(BL0939_PIN_SCLK, value ? 1 : 0);
+}
 
-    int result = SPI_Transmit(send, sizeof(send), recv, sizeof(recv));
-    if (result < 0) {
-        read_errors++;
-        ADDLOG_WARN(LOG_FEATURE_ENERGYMETER, "BL0939: SPI read reg %02X failed result=%d", reg, result);
-        return result;
+static void BL0939_SPI_SetMosi(int value) {
+    HAL_PIN_SetOutputValue(BL0939_PIN_MOSI, value ? 1 : 0);
+}
+
+static int BL0939_SPI_GetMiso(void) {
+    return HAL_PIN_ReadDigitalInput(BL0939_PIN_MISO) ? 1 : 0;
+}
+
+static uint8_t BL0939_SPI_TransferByte(uint8_t out) {
+    uint8_t in = 0;
+    int bit;
+
+    for (bit = 7; bit >= 0; bit--) {
+        BL0939_SPI_SetClock(0);
+        BL0939_SPI_SetMosi((out >> bit) & 1);
+        BL0939_SPI_Delay();
+        BL0939_SPI_SetClock(1);
+        BL0939_SPI_Delay();
+        in = (uint8_t)((in << 1) | BL0939_SPI_GetMiso());
+        BL0939_SPI_SetClock(0);
+        BL0939_SPI_Delay();
     }
 
-    uint8_t checksum = send[0] + send[1] + recv[0] + recv[1] + recv[2];
+    return in;
+}
+
+static void BL0939_SPI_SetupPins(void) {
+    // Matches the original Tuya WMDL application bit-bang callback:
+    // op1/write GPIO26 = SCLK, op2/write GPIO24 = MOSI/SDI, op3/read GPIO6 = MISO/SDO.
+    // There is no chip-select operation in the Tuya callback; op0 is a no-op.
+    HAL_PIN_Setup_Output(BL0939_PIN_SCLK);
+    HAL_PIN_Setup_Output(BL0939_PIN_MOSI);
+    HAL_PIN_Setup_Input(BL0939_PIN_MISO);
+    BL0939_SPI_SetClock(0);
+    BL0939_SPI_SetMosi(0);
+}
+
+static int BL0939_SPI_ReadReg(uint8_t reg, uint32_t *val) {
+    uint8_t recv[4];
+
+    BL0939_SPI_TransferByte(BL0939_SPI_CMD_READ);
+    BL0939_SPI_TransferByte(reg);
+    recv[0] = BL0939_SPI_TransferByte(0x00);
+    recv[1] = BL0939_SPI_TransferByte(0x00);
+    recv[2] = BL0939_SPI_TransferByte(0x00);
+    recv[3] = BL0939_SPI_TransferByte(0x00);
+
+    uint8_t checksum = BL0939_SPI_CMD_READ + reg + recv[0] + recv[1] + recv[2];
     checksum ^= 0xFF;
     if (recv[3] != checksum) {
         checksum_errors++;
@@ -212,11 +258,13 @@ static int BL0939_SPI_WriteReg(uint8_t reg, uint32_t val) {
     send[4] = val & 0xFF;
     send[5] = (send[0] + send[1] + send[2] + send[3] + send[4]) ^ 0xFF;
 
-    int result = SPI_WriteBytes(send, sizeof(send));
-    if (result < 0) {
-        ADDLOG_WARN(LOG_FEATURE_ENERGYMETER, "BL0939: SPI write reg %02X failed result=%d", reg, result);
-    }
-    return result;
+    BL0939_SPI_TransferByte(send[0]);
+    BL0939_SPI_TransferByte(send[1]);
+    BL0939_SPI_TransferByte(send[2]);
+    BL0939_SPI_TransferByte(send[3]);
+    BL0939_SPI_TransferByte(send[4]);
+    BL0939_SPI_TransferByte(send[5]);
+    return 0;
 }
 
 static int BL0939_ReadRaw(BL0939_RawData_t *data) {
@@ -298,33 +346,21 @@ static void BL0939_PublishChannelsForce(void) {
     BL0939_PublishChannelsEx(1);
 }
 
-static void BL0939_IntegrateEnergy(void) {
-    portTickType now = xTaskGetTickCount();
-    if (last_energy_tick == 0) {
-        last_energy_tick = now;
+static void BL0939_AddCounterEnergy(int32_t delta, float power_cal, ENERGY_DATA *energy) {
+    if (delta == 0) {
         return;
     }
 
-    int ticks = (int)(now - last_energy_tick);
-    if (ticks <= 0) {
-        ticks = 1;
-    }
-    last_energy_tick = now;
+    // BL0939 CFA_CNT/CFB_CNT are signed/algebraic energy pulse counters.
+    // Use the same counter-to-Wh scaling shape as the existing BL0942 driver, but preserve sign.
+    // The power calibration coefficient remains the user-facing calibration control for each CT channel.
+    float energy_wh = fabsf(BL0939_SafeDivide((float)delta, power_cal)) * 1638.4f * 256.0f / 3600.0f;
+    float energy_kwh = energy_wh / 1000.0f;
 
-    float hours = (ticks * portTICK_PERIOD_MS) / 3600000.0f;
-    float energy_a_kwh = fabsf(last_update.power_a) * hours / 1000.0f;
-    float energy_b_kwh = fabsf(last_update.power_b) * hours / 1000.0f;
-
-    if (last_update.power_a >= 0.0f) {
-        energy_acc_a.Import += energy_a_kwh;
+    if (delta > 0) {
+        energy->Import += energy_kwh;
     } else {
-        energy_acc_a.Export += energy_a_kwh;
-    }
-
-    if (last_update.power_b >= 0.0f) {
-        energy_acc_b.Import += energy_b_kwh;
-    } else {
-        energy_acc_b.Export += energy_b_kwh;
+        energy->Export += energy_kwh;
     }
 }
 
@@ -348,12 +384,13 @@ static void BL0939_ScaleAndUpdate(const BL0939_RawData_t *data) {
     if (prev_cfa_cnt != BL0939_INVALID_CF_CNT) {
         int32_t cfa_delta = BL0939_CalcSignedCounterDelta(data->cfa_cnt, prev_cfa_cnt);
         int32_t cfb_delta = BL0939_CalcSignedCounterDelta(data->cfb_cnt, prev_cfb_cnt);
+        BL0939_AddCounterEnergy(cfa_delta, cal_power_a, &energy_acc_a);
+        BL0939_AddCounterEnergy(cfb_delta, cal_power_b, &energy_acc_b);
         ADDLOG_DEBUG(LOG_FEATURE_ENERGYMETER, "BL0939: cf delta A=%ld B=%ld", (long)cfa_delta, (long)cfb_delta);
     }
     prev_cfa_cnt = data->cfa_cnt;
     prev_cfb_cnt = data->cfb_cnt;
 
-    BL0939_IntegrateEnergy();
     BL0939_PublishChannels();
 }
 
@@ -504,33 +541,25 @@ void BL0939_SPI_Init(void) {
     prev_cfb_cnt = BL0939_INVALID_CF_CNT;
     checksum_errors = 0;
     read_errors = 0;
-    last_energy_tick = 0;
 
     BL0939_LoadCalibration();
     BL0939_RestoreStats();
     BL0939_SetChannelTypes();
     BL0939_AddCommands();
 
-    SPI_DriverInit();
-    spi_config_t cfg;
-    cfg.role = SPI_ROLE_MASTER;
-    cfg.bit_width = SPI_BIT_WIDTH_8BITS;
-    cfg.polarity = SPI_POLARITY_LOW;
-    cfg.phase = SPI_PHASE_2ND_EDGE;
-    cfg.wire_mode = SPI_3WIRE_MODE;
-    cfg.baud_rate = BL0939_SPI_BAUD_RATE;
-    cfg.bit_order = SPI_MSB_FIRST;
-    OBK_SPI_Init(&cfg);
+    BL0939_SPI_SetupPins();
 
     BL0939_SPI_WriteReg(BL0939_REG_USR_WRPROT, BL0939_USR_WRPROT_DISABLE);
     BL0939_PublishChannelsForce();
-    ADDLOG_INFO(LOG_FEATURE_ENERGYMETER, "BL0939SPI initialized");
+    ADDLOG_INFO(LOG_FEATURE_ENERGYMETER,
+                "BL0939SPI initialized using fixed Tuya-style bit-bang pins SCLK=P%d MOSI=P%d MISO=P%d",
+                BL0939_PIN_SCLK, BL0939_PIN_MOSI, BL0939_PIN_MISO);
 }
 
 void BL0939_SPI_Stop(void) {
     BL0939_SaveStats(1);
-    SPI_Deinit();
-    SPI_DriverDeinit();
+    BL0939_SPI_SetClock(0);
+    BL0939_SPI_SetMosi(0);
 }
 
 void BL0939_SPI_RunEverySecond(void) {
