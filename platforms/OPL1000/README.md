@@ -255,25 +255,25 @@ The root page now exposes a tiny form-based command UI. `/cm?cmnd=...` runs the 
 
 v25 keeps the v24 micro-HTTP/direct-command approach but changes the Wi-Fi worker DHCP phase. It no longer blocks forever inside `lwip_net_ready()`. After `lwip_net_start(WIFI_MODE_STA)`, it polls the `st1` netif for a non-zero IPv4 address, logs the acquired address, then terminates the temporary Wi-Fi worker so its stack can be reclaimed. Expected heap after DHCP should be higher than v24's ~6648 bytes if the SDK releases the worker stack cleanly.
 
-## v34 split-M3 high-tail 14 KB SHM probe
+## v35 split-M3 high-tail 15 KB SHM probe
 
-v34 is based on the stable v25 OpenOPL1000 line and deliberately does **not**
+v35 is based on the stable v25 OpenOPL1000 line and deliberately does **not**
 re-enable the full stock OpenBeken HTTP UI.
 
-The only architectural experiment in v34 is the vendor `Expand_M3_RAM` style
+The only architectural experiment in v35 is the vendor `Expand_M3_RAM` style
 split-M3 packaging path:
 
 - normal M3 patch image is linked for `0x004164A0`
-- a tiny probe function is linked into section `SHM_REGION` at `0x80000800`, the high 14 KB tail of the 16 KB SHM block
+- a tiny probe function is linked into section `SHM_REGION` at `0x80000400`, the high 15 KB tail of the 16 KB SHM block
 - the build emits two M3 binaries from one ELF:
   - `opl1000_app_m3_main.bin` loaded at `0x004164A0`
-  - `opl1000_app_m3_shm.bin` loaded at `0x80000800`
+  - `opl1000_app_m3_shm.bin` loaded at `0x80000400`
 - `pack/PatchData.txt` references both M3 binaries
 
 Expected boot marker if the split-M3 binary was packed and loaded correctly:
 
 ```text
-[OpenOPL1000] split-M3 v34-tail14k: shm_fn=0x80000801 result=0x........
+[OpenOPL1000] split-M3 v35-tail15k: shm_fn=0x80000401 result=0x........
 ```
 
 If the marker does not appear, or the device resets immediately after the
@@ -294,16 +294,31 @@ and include both M3 binary files.  This is intentionally different from the
 single-M3 v25 pack-ready layout.
 
 
-## v34 note
+## v35 note
 
 v29b proved the split-M3 pack path and executable SHM code at `0x80000000`, but repeated resets occurred immediately after `wifi_connection_connect rc=0`. v29c, v30, and v31 proved the high 1 KB, 2 KB, and 3 KB tails. v33 then jumped to `0x80001800` and proved the high 10 KB tail survives Wi-Fi association, lwIP, DHCP, worker termination, and TCP server startup.
 
-v34 keeps the same v25 runtime base and split-M3 pack format but jumps down to `0x80000800` to test whether the high 14 KB tail is safe. This intentionally leaves only the low 2 KB of the 16 KB SHM block unused.
+v35 keeps the same v25 runtime base and split-M3 pack format but jumps down to `0x80000400` to test whether the high 15 KB tail is safe. This intentionally leaves only the low 1 KB of the 16 KB SHM block unused.
 
 Expected marker:
 
 ```text
-[OpenOPL1000] split-M3 v34-tail14k: shm_fn=0x80000801 result=0x........
+[OpenOPL1000] split-M3 v35-tail15k: shm_fn=0x80000401 result=0x........
 ```
 
-If Wi-Fi connects and reaches DHCP, the high 14 KB SHM tail is potentially usable. If it resets after `wifi_connection_connect rc=0`, the boundary is somewhere between the proven high 10 KB tail and this 14 KB probe; continue with a binary-search style probe rather than 1 KB increments.
+If Wi-Fi connects and reaches DHCP, the high 15 KB SHM tail is potentially usable. If it resets after `wifi_connection_connect rc=0`, the boundary is somewhere between the proven high 10 KB tail and this 15 KB probe; continue with a binary-search style probe rather than 1 KB increments.
+
+
+## v35 note
+
+v34 proved that the high 14 KB SHM tail at `0x80000800-0x80004000` can execute split-M3 code and survive Wi-Fi association, lwIP, DHCP, worker termination, and TCP server startup.
+
+v35 moves the split-M3 SHM region down to `0x80000400`, testing the high 15 KB tail and leaving only the low 1 KB of the 16 KB SHM block unused.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v35-tail15k: shm_fn=0x80000401 result=0x........
+```
+
+If this survives to DHCP and TCP server startup, the remaining unsafe/owned area is likely below `0x80000400`. If it resets after `wifi_connection_connect rc=0`, use v34/high-14-KB as the proven-safe split-M3 boundary.
