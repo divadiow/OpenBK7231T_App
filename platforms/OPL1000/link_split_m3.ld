@@ -5,19 +5,19 @@
  *
  * A second explicit output section is placed at the high end of the 16 KB M3
  * shared-memory window used by the vendor Expand_M3_RAM demo.  v29b proved code at 0x80000000 executes but the Wi-Fi connect path resets afterwards.
- * v29c proved the upper 1 KB survives Wi-Fi/DHCP.
- * v31 probes the upper 3 KB tail:
- *   0x80003400 .. 0x80004000
+ * v29c proved the upper 1 KB survives Wi-Fi/DHCP; v30 proved 2 KB; v31 proved 3 KB.
+ * v33 probes the upper 10 KB tail:
+ *   0x80001800 .. 0x80004000
  *
  * The build emits two M3 binaries from the same ELF:
  *   opl1000_app_m3_main.bin -> loaded at 0x004164A0
- *   opl1000_app_m3_shm.bin  -> loaded at 0x80003400
+ *   opl1000_app_m3_shm.bin  -> loaded at 0x80001800
  */
 
 MEMORY
 {
     IRAM1 (rwx) : ORIGIN = 0x004164a0, LENGTH = 0x00029B60
-    SHM   (rwx) : ORIGIN = 0x80003400, LENGTH = 0x00000C00
+    SHM   (rwx) : ORIGIN = 0x80001800, LENGTH = 0x00002800
 }
 
 SECTIONS
