@@ -21,6 +21,7 @@ typedef enum ColorChannel {
 } ColorChannel_t;
 
 void LEDS_InitShared(ledStrip_t *api);
+void LEDS_InitSharedBackendOnly(ledStrip_t *api);
 void LEDS_ShutdownShared();
 
 #endif

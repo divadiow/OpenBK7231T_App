@@ -321,6 +321,11 @@ static commandResult_t Strip_CMD_StartTX(const void *context, const char *cmd, c
 	return CMD_RES_OK;
 }
 
+
+void LEDS_InitSharedBackendOnly(ledStrip_t *api) {
+	led_backend = *api;
+}
+
 // startDriver SM16703P
 // backlog startDriver SM16703P; SM16703P_Test
 void LEDS_InitShared(ledStrip_t *api) {

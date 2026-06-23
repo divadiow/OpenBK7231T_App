@@ -128,7 +128,7 @@ void DDP_Parse(byte *data, int len) {
 		// data type 0x1B (formerly 0x1A) is RGBW (type 3, 8 bit/channel)
 		byte bytesPerPixel = ((data[2] & 0b00111000) >> 3 == 0b011) ? 4 : 3;
 
-#if ENABLE_DRIVER_SM16703P
+#if ENABLE_DRIVER_SM16703P || ENABLE_DRIVER_ADDRLED_BB
 		if (Strip_IsActive()) {
 			// Note that this is limited by DDP msgbuf size
 			uint32_t numPixels = (len - 10) / 3;
