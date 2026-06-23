@@ -832,7 +832,7 @@ HassDeviceInfo* hass_init_light_device_info(ENTITY_TYPE type) {
 	cJSON_AddNumberToObject(info->root, "bri_scl", brightness_scale);	//brightness_scale
 
 #if ENABLE_DRIVER_PIXELANIM
-	if((DRV_IsRunning("SM16703P") || DRV_IsRunning("DMX")) && DRV_IsRunning("PixelAnim"))
+	if((DRV_IsRunning("SM16703P") || DRV_IsRunning("AddrLED_BB") || DRV_IsRunning("DMX")) && DRV_IsRunning("PixelAnim"))
 	{
 		cJSON_AddStringToObject(info->root, "fx_stat_t", "~/currentAnim/get");
 		sprintf(g_hassBuffer, "cmnd/%s/anim", CFG_GetMQTTClientId());

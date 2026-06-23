@@ -679,6 +679,13 @@ typedef enum ioRole_e {
 	//iodetail:"file":"new_pins.h",
 	//iodetail:"driver":"RC"}
 	IOR_Button_ShutterDown,
+	//iodetail:{"name":"AddrLED_BB_DIN",
+	//iodetail:"title":"AddrLED_BB Data Pin",
+	//iodetail:"descr":"Data output pin for the experimental AddrLED_BB software bit-bang addressable LED driver.",
+	//iodetail:"enum":"IOR_AddrLED_BB_DIN",
+	//iodetail:"file":"new_pins.h",
+	//iodetail:"driver":"AddrLED_BB"}
+	IOR_AddrLED_BB_DIN,
 	//iodetail:{"name":"Total_Options",
 	//iodetail:"title":"TODO",
 	//iodetail:"descr":"Current total number of available IOR roles",

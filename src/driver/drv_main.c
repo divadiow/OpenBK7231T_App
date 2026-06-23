@@ -756,6 +756,22 @@ static driver_t g_drivers[] = {
 	false,                                   // loaded
 	},
 #endif
+#if ENABLE_DRIVER_ADDRLED_BB
+	//drvdetail:{"name":"AddrLED_BB",
+	//drvdetail:"title":"Addressable LED Bit-Bang",
+	//drvdetail:"descr":"Experimental software bit-bang addressable LED driver. Initially supports WS2812B-compatible RGB LEDs on a user-selected AddrLED_BB_DIN GPIO. BK7231N only.",
+	//drvdetail:"requires":"AddrLED_BB_DIN"}
+	{ "AddrLED_BB",                           // Driver Name
+	AddrLED_BB_Init,                          // Init
+	NULL,                                     // onEverySecond
+	NULL,                                     // appendInformationToHTTPIndexPage
+	NULL,                                     // runQuickTick
+	AddrLED_BB_Shutdown,                      // stopFunction
+	NULL,                                     // onChannelChanged
+	NULL,                                     // onHassDiscovery
+	false,                                    // loaded
+	},
+#endif
 #if ENABLE_DRIVER_SM16703P
 	//drvdetail:{"name":"SM16703P",
 	//drvdetail:"title":"TODO",

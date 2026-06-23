@@ -147,6 +147,7 @@ bool LED_IsLedDriverChipRunning()
 		|| DRV_IsRunning("TESTLED") || DRV_IsRunning("SM2235") || DRV_IsRunning("BP1658CJ")
 		|| DRV_IsRunning("KP18058")
 		|| DRV_IsRunning("SM16703P")
+		|| DRV_IsRunning("AddrLED_BB")
 		|| DRV_IsRunning("SM15155E")
 		|| DRV_IsRunning("DMX")
 		; 
@@ -372,7 +373,7 @@ void LED_RunQuickColorLerp(int deltaMS) {
 			CHANNEL_Set_FloatPWM(firstChannelIndex + 0, led_rawLerpCurrent[3] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 			CHANNEL_Set_FloatPWM(firstChannelIndex + 1, led_rawLerpCurrent[4] * g_cfg_colorScaleToChannel, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 		}
-#if	ENABLE_DRIVER_SM16703P
+#if	ENABLE_DRIVER_SM16703P || ENABLE_DRIVER_ADDRLED_BB
 		else if (pixel_count > 0 && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
 			// Not CW mode (not WS2812+ CW), but WS2812 + single PWM
 			CHANNEL_Set_FloatPWM(firstChannelIndex + 0, 
@@ -652,7 +653,7 @@ void apply_smart_light() {
 						CHANNEL_Set_FloatPWM(firstChannelIndex + 1, chVal, CHANNEL_SET_FLAG_SKIP_MQTT | CHANNEL_SET_FLAG_SILENT);
 					}
 				}
-#if	ENABLE_DRIVER_SM16703P
+#if	ENABLE_DRIVER_SM16703P || ENABLE_DRIVER_ADDRLED_BB
 				else if (pixel_count > 0 && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
 					// Not CW mode (not WS2812+ CW), but WS2812 + single PWM
 					if (i == 4) {
@@ -695,7 +696,7 @@ void apply_smart_light() {
 #if	ENABLE_DRIVER_TUYAMCU
 	TuyaMCU_OnRGBCWChange(finalColors, g_lightEnableAll, g_lightMode, g_brightness0to100*g_brightnessScale*0.01f, LED_GetTemperature0to1Range());
 #endif
-#if	ENABLE_DRIVER_SM16703P
+#if	ENABLE_DRIVER_SM16703P || ENABLE_DRIVER_ADDRLED_BB
 	if (pixel_count > 0 && (g_lightMode != Light_Anim || g_lightEnableAll == 0)) {
 		Strip_setAllPixels(finalColors[0], finalColors[1], finalColors[2], finalColors[3], finalColors[4]);
 		Strip_Apply();

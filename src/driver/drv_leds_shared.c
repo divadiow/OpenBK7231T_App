@@ -24,6 +24,50 @@ enum ColorChannel *color_channel_order = default_color_channel_order;
 int pixel_size = DEFAULT_PIXEL_SIZE; // default is RGB -> 3 bytes per pixel
 // Number of pixels that can be addressed
 uint32_t pixel_count;
+static int led_backend_max_pixel_count = 255;
+
+static bool Strip_SetColorOrderFromString(const char *format) {
+	if (!format || !format[0]) {
+		return false;
+	}
+	size_t format_length = strlen(format);
+	enum ColorChannel *new_channel_order = os_malloc(sizeof(enum ColorChannel) * (format_length + 1));
+	if (!new_channel_order) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "Failed to allocate memory for color channel order");
+		return false;
+	}
+	int i = 0;
+	for (const char *sp = format; *sp; sp++) {
+		switch (*sp) {
+		case 'R':
+			new_channel_order[i++] = COLOR_CHANNEL_RED;
+			break;
+		case 'G':
+			new_channel_order[i++] = COLOR_CHANNEL_GREEN;
+			break;
+		case 'B':
+			new_channel_order[i++] = COLOR_CHANNEL_BLUE;
+			break;
+		case 'C':
+			new_channel_order[i++] = COLOR_CHANNEL_COLD_WHITE;
+			break;
+		case 'W':
+			new_channel_order[i++] = COLOR_CHANNEL_WARM_WHITE;
+			break;
+		default:
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "Invalid color '%c' in format '%s', should be combination of R,G,B,C,W", *sp, format);
+			os_free(new_channel_order);
+			return false;
+		}
+	}
+	if (color_channel_order != default_color_channel_order) {
+		os_free(color_channel_order);
+	}
+	color_channel_order = new_channel_order;
+	pixel_size = i;
+	return true;
+}
+
 
 bool Strip_HasChannel(ColorChannel_t ch) {
 	for (int i = 0; i < pixel_size; i++) {
@@ -200,7 +244,7 @@ commandResult_t Strip_CMD_setPixel(const void *context, const char *cmd, const c
 
 	if (Tokenizer_GetArgsCount() < 4) {
 		// We need at least 4 arguments: pixel, red, green, blue - cold and warm white are optional
-		ADDLOG_INFO(LOG_FEATURE_CMD, "Not Enough Arguments for init SM16703P: Amount of LEDs missing");
+		ADDLOG_INFO(LOG_FEATURE_CMD, "%s: Amount of LEDs missing", cmd);
 		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	}
 
@@ -252,52 +296,30 @@ commandResult_t Strip_CMD_InitForLEDCount(const void *context, const char *cmd, 
 	Tokenizer_TokenizeString(args, 0);
 
 	if (Tokenizer_GetArgsCount() == 0) {
-		ADDLOG_INFO(LOG_FEATURE_CMD, "Not Enough Arguments for init SM16703P: Amount of LEDs missing");
+		ADDLOG_INFO(LOG_FEATURE_CMD, "%s: Amount of LEDs missing", cmd);
 		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	}
 
 	//SM16703P_Shutdown();
 
 	// First arg: number of pixel to address
-	pixel_count = Tokenizer_GetArgIntegerRange(0, 0, 255);
+	if (led_backend_max_pixel_count < 255) {
+		int requested_pixel_count = Tokenizer_GetArgInteger(0);
+		if (requested_pixel_count < 1 || requested_pixel_count > led_backend_max_pixel_count) {
+			ADDLOG_INFO(LOG_FEATURE_CMD, "%s: LED count must be 1..%i", cmd, led_backend_max_pixel_count);
+			return CMD_RES_BAD_ARGUMENT;
+		}
+		pixel_count = requested_pixel_count;
+	}
+	else {
+		pixel_count = Tokenizer_GetArgIntegerRange(0, 0, 255);
+	}
 	// Second arg (optional, default "RGB"): pixel format of "RGB" or "GRB"
 	if (Tokenizer_GetArgsCount() > 1) {
 		const char *format = Tokenizer_GetArg(1);
-		size_t format_length = strlen(format);
-		enum ColorChannel *new_channel_order = os_malloc(sizeof(enum ColorChannel) * (format_length + 1));
-		if (!new_channel_order) {
-			ADDLOG_ERROR(LOG_FEATURE_CMD, "Failed to allocate memory for color channel order");
+		if (!Strip_SetColorOrderFromString(format)) {
 			return CMD_RES_ERROR;
 		}
-		int i = 0;
-		for (const char *p = format; *p; p++) {
-			switch (*p) {
-			case 'R':
-				new_channel_order[i++] = COLOR_CHANNEL_RED;
-				break;
-			case 'G':
-				new_channel_order[i++] = COLOR_CHANNEL_GREEN;
-				break;
-			case 'B':
-				new_channel_order[i++] = COLOR_CHANNEL_BLUE;
-				break;
-			case 'C':
-				new_channel_order[i++] = COLOR_CHANNEL_COLD_WHITE;
-				break;
-			case 'W':
-				new_channel_order[i++] = COLOR_CHANNEL_WARM_WHITE;
-				break;
-			default:
-				ADDLOG_ERROR(LOG_FEATURE_CMD, "Invalid color '%c' in format '%s', should be combination of R,G,B,C,W", *p, format);
-				os_free(new_channel_order);
-				return CMD_RES_ERROR;
-			}
-		}
-		pixel_size = i; // number of color channels
-		if (color_channel_order != default_color_channel_order) {
-			os_free(color_channel_order);
-		}
-		color_channel_order = new_channel_order;
 	}
 	led_backend.setLEDCount(pixel_count, pixel_size);
 
@@ -321,11 +343,39 @@ static commandResult_t Strip_CMD_StartTX(const void *context, const char *cmd, c
 	return CMD_RES_OK;
 }
 
+static void LEDS_RegisterSharedCommands(const ledStripCommands_t *commands) {
+	if (!commands) {
+		return;
+	}
+	if (commands->init) {
+		CMD_RegisterCommand(commands->init, Strip_CMD_InitForLEDCount, NULL);
+	}
+	if (commands->start) {
+		CMD_RegisterCommand(commands->start, Strip_CMD_StartTX, NULL);
+	}
+	if (commands->setPixel) {
+		CMD_RegisterCommand(commands->setPixel, Strip_CMD_setPixel, NULL);
+	}
+	if (commands->setRaw) {
+		CMD_RegisterCommand(commands->setRaw, Strip_CMD_setRaw, NULL);
+	}
+}
+
+void LEDS_InitSharedEx(ledStrip_t *api, const ledStripCommands_t *commands) {
+	led_backend = *api;
+	led_backend_max_pixel_count = commands && commands->maxPixelCount > 0 ? commands->maxPixelCount : 255;
+	if (commands && commands->defaultColorOrder) {
+		Strip_SetColorOrderFromString(commands->defaultColorOrder);
+	}
+	LEDS_RegisterSharedCommands(commands);
+}
+
 // startDriver SM16703P
 // backlog startDriver SM16703P; SM16703P_Test
 void LEDS_InitShared(ledStrip_t *api) {
 
 	led_backend = *api;
+	led_backend_max_pixel_count = 255;
 
 	//cmddetail:{"name":"SM16703P_Init","args":"[NumberOfLEDs][ColorOrder]",
 	//cmddetail:"descr":"This will setup LED driver for a strip with given number of LEDs. Please note that it also works for WS2812B and similiar LEDs. You can optionally set the color order with can be any combination of R, G, B, C and W (e.g. RGBW or GRBWC, default is RGB). See [tutorial](https://www.elektroda.com/rtvforum/topic4036716.html).",
@@ -362,5 +412,6 @@ void LEDS_ShutdownShared() {
 	}
 	pixel_size = DEFAULT_PIXEL_SIZE;
 	pixel_count = 0;
+	led_backend_max_pixel_count = 255;
 	memset(&led_backend, 0, sizeof(led_backend));
 }

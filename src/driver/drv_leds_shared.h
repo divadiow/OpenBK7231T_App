@@ -12,6 +12,15 @@ typedef struct ledStrip_s {
 	void (*setLEDCount)(int pixel_count, int pixel_size);
 } ledStrip_t;
 
+typedef struct ledStripCommands_s {
+	const char *init;
+	const char *start;
+	const char *setPixel;
+	const char *setRaw;
+	const char *defaultColorOrder;
+	int maxPixelCount;
+} ledStripCommands_t;
+
 typedef enum ColorChannel {
 	COLOR_CHANNEL_RED,
 	COLOR_CHANNEL_GREEN,
@@ -21,6 +30,7 @@ typedef enum ColorChannel {
 } ColorChannel_t;
 
 void LEDS_InitShared(ledStrip_t *api);
+void LEDS_InitSharedEx(ledStrip_t *api, const ledStripCommands_t *commands);
 void LEDS_ShutdownShared();
 
 #endif
