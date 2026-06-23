@@ -269,7 +269,6 @@
     <ClCompile Include="src\driver\drv_simpleEEPROM.c" />
     <ClCompile Include="src\driver\drv_sm15155e.c" />
     <ClCompile Include="src\driver\drv_sm16703P.c" />
-    <ClCompile Include="src\driver\drv_addrled_bb.c" />
     <ClCompile Include="src\driver\drv_sm2135.c" />
     <ClCompile Include="src\driver\drv_sm2235.c" />
     <ClCompile Include="src\driver\drv_soft_i2c.c" />
