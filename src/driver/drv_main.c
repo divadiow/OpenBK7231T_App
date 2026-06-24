@@ -17,11 +17,13 @@
 #include "drv_tuyaMCU.h"
 #include "drv_girierMCU.h"
 #include "drv_uart.h"
+#include "drv_gaitekAC.h"
 #include "drv_ds1820_simple.h"
 #include "drv_ds1820_full.h"
 #include "drv_ds1820_common.h"
 #include "drv_ds3231.h"
 #include "drv_hlw8112.h"
+#include "drv_DCF77.h"
 
 void DRV_MQTTServer_Init();
 void DRV_MQTTServer_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
@@ -153,6 +155,22 @@ static driver_t g_drivers[] = {
 	NULL,                                    // appendInformationToHTTPIndexPage
 	Freeze_RunFrame,                         // runQuickTick
 	NULL,                                    // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_ESPHOME_API
+	//drvdetail:{"name":"ESPHomeAPI",
+	//drvdetail:"title":"ESPHome Protocol Bridge",
+	//drvdetail:"descr":"Native ESPHome API server (port 6053) for discovering and controlling BT Proxy and other entities seamlessly in Home Assistant.",
+	//drvdetail:"requires":"BT Proxy"}
+	{ "ESPHomeAPI",                          // Driver Name
+	DRV_ESPHome_API_Init,                    // Init
+	DRV_ESPHome_API_OnEverySecond,           // onEverySecond
+	NULL,                                    // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	DRV_ESPHome_API_Deinit,                  // stopFunction
 	NULL,                                    // onChannelChanged
 	NULL,                                    // onHassDiscovery
 	false,                                   // loaded
@@ -382,6 +400,22 @@ static driver_t g_drivers[] = {
    	false,                                   // loaded
 	},
 #endif
+#if ENABLE_DRIVER_DCF77
+	//drvdetail:{"name":"DSCF77",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"Decoding DCF77 signal (german radio time source sending near Frankfurt Main, Germany)",
+	//drvdetail:"requires":""}
+	{ "DCF77",                              // Driver Name
+   	DCF77_Init,                              // Init
+   	DCF77_OnEverySecond,                     // onEverySecond
+   	DCF77_AppendInformationToHTTPIndexPage,  // appendInformationToHTTPIndexPage
+   	DCF77_QuickTick,                         // runQuickTick
+   	DCF77_Stop,                              // stopFunction
+   	NULL,                                    // onChannelChanged
+   	NULL,                                    // onHassDiscovery
+   	false,                                   // loaded
+	},
+#endif
 #if ENABLE_DRIVER_HTTPBUTTONS
 	//drvdetail:{"name":"HTTPButtons",
 	//drvdetail:"title":"TODO",
@@ -394,7 +428,11 @@ static driver_t g_drivers[] = {
 	NULL,                                    // runQuickTick
 	NULL,                                    // stopFunction
 	NULL,                                    // onChannelChanged
+#if ENABLE_HA_DISCOVERY
+	DRV_HTTPButtons_OnHassDiscovery,        // onHassDiscovery
+#else
 	NULL,                                    // onHassDiscovery
+#endif
 	false,                                   // loaded
 	},
 #endif
@@ -1409,6 +1447,18 @@ static driver_t g_drivers[] = {
 	false,                                   // loaded
 	},
 #endif
+#if ENABLE_DRIVER_GAITEKAC
+	{ "GaitekAC",
+	GaitekAC_Init,
+	GaitekAC_RunEverySecond,
+	NULL,
+	GaitekAC_RunQuickTick,
+	GaitekAC_Shutdown,
+	GaitekAC_OnChannelChanged,
+	NULL,
+	false,
+	},
+#endif
 #if PLATFORM_TXW81X
 	//drvdetail:{"name":"TXWCAM",
 	//drvdetail:"title":"TODO",
@@ -1624,28 +1674,29 @@ void DRV_StartDriver(const char* name) {
 #if (ENABLE_DRIVER_DS1820) && (ENABLE_DRIVER_DS1820_FULL)
 			twinrunning=false;
 			if (!stricmp("DS1820", name) && DRV_IsRunning("DS1820_FULL")){
-				addLogAdv(LOG_ERROR, LOG_FEATURE_MAIN, "Drv DS1820_FULL is already loaded - can't start DS1820, too.\n", name);
+				addLogAdv(LOG_ERROR, LOG_FEATURE_MAIN, "Drv DS1820_FULL is already loaded - can't start DS1820, too.", name);
 				twinrunning=true;
 				break;
 			}
 			if (!stricmp("DS1820_FULL", name) && DRV_IsRunning("DS1820")){
-				addLogAdv(LOG_ERROR, LOG_FEATURE_MAIN, "Drv DS1820 is already loaded - can't start DS1820_FULL, too.\n", name);
+				addLogAdv(LOG_ERROR, LOG_FEATURE_MAIN, "Drv DS1820 is already loaded - can't start DS1820_FULL, too.", name);
 				twinrunning=true;
 				break;
 			}
 #endif
 			if (g_drivers[i].bLoaded) {
-				addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Drv %s is already loaded.\n", name);
+				addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Drv %s is already loaded.", name);
 				bStarted = 1;
 				break;
 
 			}
 			else {
+				addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Starting %s.", name);
 				if (g_drivers[i].initFunc) {
 					g_drivers[i].initFunc();
 				}
 				g_drivers[i].bLoaded = true;
-				addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Started %s.\n", name);
+				addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Started %s.", name);
 				bStarted = 1;
 				break;
 			}
@@ -1656,7 +1707,7 @@ void DRV_StartDriver(const char* name) {
 #else
 	if (!bStarted) {
 #endif
-		addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Driver %s is not known in this build.\n", name);
+		addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Driver %s is not known in this build.", name);
 		addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Available drivers: ");
 		for (i = 0; i < g_numDrivers; i++) {
 			if (i == 0) {
