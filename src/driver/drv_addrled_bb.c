@@ -21,19 +21,70 @@
 #include "intc_pub.h"
 #include "icu_pub.h"
 
-#define ADDRLED_BB_DEFAULT_T0H_NOPS      3
-#define ADDRLED_BB_DEFAULT_T1H_NOPS      8
-#define ADDRLED_BB_DEFAULT_T0L_NOPS      8
-#define ADDRLED_BB_DEFAULT_T1L_NOPS      3
-#define ADDRLED_BB_DEFAULT_RESET_US      80
+#define ADDRLED_BB_DEFAULT_RESET_US      150
 #define ADDRLED_BB_MAX_PIXELS            20
 #define ADDRLED_BB_FAST_HIGH             0x02
 #define ADDRLED_BB_FAST_LOW              0x00
 #define ADDRLED_BB_ALWAYS_INLINE static inline __attribute__((always_inline))
+#ifndef ADDRLED_BB_USE_ITCM
+#define ADDRLED_BB_USE_ITCM 1
+#endif
+#if ADDRLED_BB_USE_ITCM
+#define ADDRLED_BB_RAMFUNC __attribute__((section(".itcm"), noinline))
+#else
+#define ADDRLED_BB_RAMFUNC __attribute__((noinline))
+#endif
+
+
+/*
+ * Fixed TX profiles.
+ * Values are GCC assembler NOP repeat counts used inside the critical section.
+ * The GPIO writes themselves also consume time; these are profile numbers, not ns/us.
+ */
+#define ADDRLED_BB_P0_T0H  0
+#define ADDRLED_BB_P0_T1H  1
+#define ADDRLED_BB_P0_T0L  1
+#define ADDRLED_BB_P0_T1L  0
+
+#define ADDRLED_BB_P1_T0H  1
+#define ADDRLED_BB_P1_T1H  2
+#define ADDRLED_BB_P1_T0L  2
+#define ADDRLED_BB_P1_T1L  1
+
+#define ADDRLED_BB_P2_T0H  1
+#define ADDRLED_BB_P2_T1H  3
+#define ADDRLED_BB_P2_T0L  3
+#define ADDRLED_BB_P2_T1L  1
+
+#define ADDRLED_BB_P3_T0H  2
+#define ADDRLED_BB_P3_T1H  5
+#define ADDRLED_BB_P3_T0L  5
+#define ADDRLED_BB_P3_T1L  2
+
+#define ADDRLED_BB_P4_T0H  3
+#define ADDRLED_BB_P4_T1H  8
+#define ADDRLED_BB_P4_T0L  8
+#define ADDRLED_BB_P4_T1L  3
+
+#define ADDRLED_BB_P5_T0H  5
+#define ADDRLED_BB_P5_T1H  12
+#define ADDRLED_BB_P5_T0L  12
+#define ADDRLED_BB_P5_T1L  5
+
+#define ADDRLED_BB_P6_T0H  8
+#define ADDRLED_BB_P6_T1H  18
+#define ADDRLED_BB_P6_T0L  18
+#define ADDRLED_BB_P6_T1L  8
+
 
 typedef enum addrledBBProtocol_e {
 	ADDRLED_BB_PROTOCOL_WS2812B = 0,
 } addrledBBProtocol_t;
+
+typedef enum addrledBBGPIOMode_e {
+	ADDRLED_BB_GPIO_RAW = 0,
+	ADDRLED_BB_GPIO_PRESERVE = 1,
+} addrledBBGPIOMode_t;
 
 extern commandResult_t Strip_CMD_InitForLEDCount(const void *context, const char *cmd, const char *args, int flags);
 extern commandResult_t Strip_CMD_setPixel(const void *context, const char *cmd, const char *args, int flags);
@@ -43,16 +94,35 @@ static byte *g_addrled_bb_buf;
 static uint32_t g_addrled_bb_len;
 static int g_addrled_bb_pin = -1;
 static volatile unsigned int *g_addrled_bb_gpio_cfg;
-static int g_addrled_bb_t0h_nops = ADDRLED_BB_DEFAULT_T0H_NOPS;
-static int g_addrled_bb_t1h_nops = ADDRLED_BB_DEFAULT_T1H_NOPS;
-static int g_addrled_bb_t0l_nops = ADDRLED_BB_DEFAULT_T0L_NOPS;
-static int g_addrled_bb_t1l_nops = ADDRLED_BB_DEFAULT_T1L_NOPS;
+static volatile unsigned int g_addrled_bb_reg_high = ADDRLED_BB_FAST_HIGH;
+static volatile unsigned int g_addrled_bb_reg_low = ADDRLED_BB_FAST_LOW;
 static int g_addrled_bb_reset_us = ADDRLED_BB_DEFAULT_RESET_US;
+static int g_addrled_bb_profile = 2;
+static int g_addrled_bb_custom_t0h = ADDRLED_BB_P2_T0H;
+static int g_addrled_bb_custom_t1h = ADDRLED_BB_P2_T1H;
+static int g_addrled_bb_custom_t0l = ADDRLED_BB_P2_T0L;
+static int g_addrled_bb_custom_t1l = ADDRLED_BB_P2_T1L;
 static addrledBBProtocol_t g_addrled_bb_protocol = ADDRLED_BB_PROTOCOL_WS2812B;
+static addrledBBGPIOMode_t g_addrled_bb_gpio_mode = ADDRLED_BB_GPIO_RAW;
 
-ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_NopDelay(int nops) {
+ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_NopDelayVariable(int nops) {
 	while (nops-- > 0) {
 		__asm__ __volatile__("nop");
+	}
+}
+
+static void AddrLED_BB_UpdateGPIOValues(void) {
+	if (!g_addrled_bb_gpio_cfg) {
+		return;
+	}
+	if (g_addrled_bb_gpio_mode == ADDRLED_BB_GPIO_PRESERVE) {
+		unsigned int reg_val = REG_READ(g_addrled_bb_gpio_cfg);
+		g_addrled_bb_reg_high = (reg_val & ~GCFG_OUTPUT_BIT) | ((0x01 & 0x01) << GCFG_OUTPUT_POS);
+		g_addrled_bb_reg_low = (reg_val & ~GCFG_OUTPUT_BIT) | ((0x00 & 0x01) << GCFG_OUTPUT_POS);
+	}
+	else {
+		g_addrled_bb_reg_high = ADDRLED_BB_FAST_HIGH;
+		g_addrled_bb_reg_low = ADDRLED_BB_FAST_LOW;
 	}
 }
 
@@ -64,36 +134,57 @@ static void AddrLED_BB_PrepareFastGPIO(int pin) {
 	}
 #endif
 	g_addrled_bb_gpio_cfg = (volatile unsigned int *)(REG_GPIO_CFG_BASE_ADDR + id * 4);
+	AddrLED_BB_UpdateGPIOValues();
 }
 
-ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_SetHigh(void) {
-	REG_WRITE(g_addrled_bb_gpio_cfg, ADDRLED_BB_FAST_HIGH);
+ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_SetHighFast(void) {
+	REG_WRITE(g_addrled_bb_gpio_cfg, g_addrled_bb_reg_high);
 }
 
-ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_SetLow(void) {
-	REG_WRITE(g_addrled_bb_gpio_cfg, ADDRLED_BB_FAST_LOW);
+ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_SetLowFast(void) {
+	REG_WRITE(g_addrled_bb_gpio_cfg, g_addrled_bb_reg_low);
 }
 
-ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_SendWS2812BBit0(void) {
-	AddrLED_BB_SetHigh();
-	AddrLED_BB_NopDelay(g_addrled_bb_t0h_nops);
-	AddrLED_BB_SetLow();
-	AddrLED_BB_NopDelay(g_addrled_bb_t0l_nops);
-}
-
-ADDRLED_BB_ALWAYS_INLINE void AddrLED_BB_SendWS2812BBit1(void) {
-	AddrLED_BB_SetHigh();
-	AddrLED_BB_NopDelay(g_addrled_bb_t1h_nops);
-	AddrLED_BB_SetLow();
-	AddrLED_BB_NopDelay(g_addrled_bb_t1l_nops);
-}
-
-static void __attribute__((noinline)) AddrLED_BB_SendWS2812BBytes(const byte *data, uint32_t len) {
+static void ADDRLED_BB_RAMFUNC AddrLED_BB_SendWS2812BBytes(const byte *data, uint32_t len) {
 	if (!data || len == 0 || !g_addrled_bb_gpio_cfg) {
 		return;
 	}
 
-	AddrLED_BB_SetLow();
+	volatile unsigned int *gpio_cfg_addr = g_addrled_bb_gpio_cfg;
+	unsigned int reg_val_HIGH = g_addrled_bb_reg_high;
+	unsigned int reg_val_LOW = g_addrled_bb_reg_low;
+	int t0h = g_addrled_bb_custom_t0h;
+	int t1h = g_addrled_bb_custom_t1h;
+	int t0l = g_addrled_bb_custom_t0l;
+	int t1l = g_addrled_bb_custom_t1l;
+
+	switch (g_addrled_bb_profile) {
+	case 0:
+		t0h = ADDRLED_BB_P0_T0H; t1h = ADDRLED_BB_P0_T1H; t0l = ADDRLED_BB_P0_T0L; t1l = ADDRLED_BB_P0_T1L;
+		break;
+	case 1:
+		t0h = ADDRLED_BB_P1_T0H; t1h = ADDRLED_BB_P1_T1H; t0l = ADDRLED_BB_P1_T0L; t1l = ADDRLED_BB_P1_T1L;
+		break;
+	case 2:
+		t0h = ADDRLED_BB_P2_T0H; t1h = ADDRLED_BB_P2_T1H; t0l = ADDRLED_BB_P2_T0L; t1l = ADDRLED_BB_P2_T1L;
+		break;
+	case 3:
+		t0h = ADDRLED_BB_P3_T0H; t1h = ADDRLED_BB_P3_T1H; t0l = ADDRLED_BB_P3_T0L; t1l = ADDRLED_BB_P3_T1L;
+		break;
+	case 4:
+		t0h = ADDRLED_BB_P4_T0H; t1h = ADDRLED_BB_P4_T1H; t0l = ADDRLED_BB_P4_T0L; t1l = ADDRLED_BB_P4_T1L;
+		break;
+	case 5:
+		t0h = ADDRLED_BB_P5_T0H; t1h = ADDRLED_BB_P5_T1H; t0l = ADDRLED_BB_P5_T0L; t1l = ADDRLED_BB_P5_T1L;
+		break;
+	case 6:
+		t0h = ADDRLED_BB_P6_T0H; t1h = ADDRLED_BB_P6_T1H; t0l = ADDRLED_BB_P6_T0L; t1l = ADDRLED_BB_P6_T1L;
+		break;
+	default:
+		break;
+	}
+
+	REG_WRITE(gpio_cfg_addr, reg_val_LOW);
 	HAL_Delay_us(g_addrled_bb_reset_us);
 
 	GLOBAL_INT_DECLARATION();
@@ -103,15 +194,21 @@ static void __attribute__((noinline)) AddrLED_BB_SendWS2812BBytes(const byte *da
 		byte b = data[i];
 		for (int bit = 7; bit >= 0; bit--) {
 			if (b & (1 << bit)) {
-				AddrLED_BB_SendWS2812BBit1();
+				REG_WRITE(gpio_cfg_addr, reg_val_HIGH);
+				AddrLED_BB_NopDelayVariable(t1h);
+				REG_WRITE(gpio_cfg_addr, reg_val_LOW);
+				AddrLED_BB_NopDelayVariable(t1l);
 			}
 			else {
-				AddrLED_BB_SendWS2812BBit0();
+				REG_WRITE(gpio_cfg_addr, reg_val_HIGH);
+				AddrLED_BB_NopDelayVariable(t0h);
+				REG_WRITE(gpio_cfg_addr, reg_val_LOW);
+				AddrLED_BB_NopDelayVariable(t0l);
 			}
 		}
 	}
 
-	AddrLED_BB_SetLow();
+	REG_WRITE(gpio_cfg_addr, reg_val_LOW);
 
 	GLOBAL_INT_RESTORE();
 
@@ -163,7 +260,6 @@ static void AddrLED_BB_SetLEDCount(int new_pixel_count, int new_pixel_size) {
 	memset(g_addrled_bb_buf, 0, new_len);
 	g_addrled_bb_len = new_len;
 }
-
 
 static bool AddrLED_BB_IsValidRGBOrder(const char *format) {
 	bool seen_r = false;
@@ -261,19 +357,74 @@ static commandResult_t AddrLED_BB_CMD_SetRaw(const void *context, const char *cm
 static commandResult_t AddrLED_BB_CMD_Timing(const void *context, const char *cmd, const char *args, int flags) {
 	Tokenizer_TokenizeString(args, 0);
 	if (Tokenizer_GetArgsCount() == 0) {
-		ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB timing: T0H=%i T1H=%i T0L=%i T1L=%i ResetUs=%i", g_addrled_bb_t0h_nops, g_addrled_bb_t1h_nops, g_addrled_bb_t0l_nops, g_addrled_bb_t1l_nops, g_addrled_bb_reset_us);
+		ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB custom timing: T0H=%i T1H=%i T0L=%i T1L=%i ResetUs=%i. Use AddrLED_BB_Profile for fixed-profile TX.", g_addrled_bb_custom_t0h, g_addrled_bb_custom_t1h, g_addrled_bb_custom_t0l, g_addrled_bb_custom_t1l, g_addrled_bb_reset_us);
 		return CMD_RES_OK;
 	}
 	if (Tokenizer_GetArgsCount() < 5) {
 		ADDLOG_INFO(LOG_FEATURE_CMD, "Usage: AddrLED_BB_Timing [T0Hnops] [T1Hnops] [T0Lnops] [T1Lnops] [ResetUs]");
 		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	}
-	g_addrled_bb_t0h_nops = Tokenizer_GetArgIntegerRange(0, 0, 80);
-	g_addrled_bb_t1h_nops = Tokenizer_GetArgIntegerRange(1, 0, 80);
-	g_addrled_bb_t0l_nops = Tokenizer_GetArgIntegerRange(2, 0, 80);
-	g_addrled_bb_t1l_nops = Tokenizer_GetArgIntegerRange(3, 0, 80);
-	g_addrled_bb_reset_us = Tokenizer_GetArgIntegerRange(4, 50, 300);
-	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB timing set: T0H=%i T1H=%i T0L=%i T1L=%i ResetUs=%i", g_addrled_bb_t0h_nops, g_addrled_bb_t1h_nops, g_addrled_bb_t0l_nops, g_addrled_bb_t1l_nops, g_addrled_bb_reset_us);
+	g_addrled_bb_custom_t0h = Tokenizer_GetArgIntegerRange(0, 0, 200);
+	g_addrled_bb_custom_t1h = Tokenizer_GetArgIntegerRange(1, 0, 200);
+	g_addrled_bb_custom_t0l = Tokenizer_GetArgIntegerRange(2, 0, 200);
+	g_addrled_bb_custom_t1l = Tokenizer_GetArgIntegerRange(3, 0, 200);
+	g_addrled_bb_reset_us = Tokenizer_GetArgIntegerRange(4, 50, 500);
+	g_addrled_bb_profile = -1;
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB custom timing set and selected: T0H=%i T1H=%i T0L=%i T1L=%i ResetUs=%i", g_addrled_bb_custom_t0h, g_addrled_bb_custom_t1h, g_addrled_bb_custom_t0l, g_addrled_bb_custom_t1l, g_addrled_bb_reset_us);
+	return CMD_RES_OK;
+}
+
+static void AddrLED_BB_LogProfile(int profile) {
+	switch (profile) {
+	case 0: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 0: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P0_T0H, ADDRLED_BB_P0_T1H, ADDRLED_BB_P0_T0L, ADDRLED_BB_P0_T1L); break;
+	case 1: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 1: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P1_T0H, ADDRLED_BB_P1_T1H, ADDRLED_BB_P1_T0L, ADDRLED_BB_P1_T1L); break;
+	case 2: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 2: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P2_T0H, ADDRLED_BB_P2_T1H, ADDRLED_BB_P2_T0L, ADDRLED_BB_P2_T1L); break;
+	case 3: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 3: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P3_T0H, ADDRLED_BB_P3_T1H, ADDRLED_BB_P3_T0L, ADDRLED_BB_P3_T1L); break;
+	case 4: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 4: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P4_T0H, ADDRLED_BB_P4_T1H, ADDRLED_BB_P4_T0L, ADDRLED_BB_P4_T1L); break;
+	case 5: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 5: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P5_T0H, ADDRLED_BB_P5_T1H, ADDRLED_BB_P5_T0L, ADDRLED_BB_P5_T1L); break;
+	case 6: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile 6: T0H=%i T1H=%i T0L=%i T1L=%i", ADDRLED_BB_P6_T0H, ADDRLED_BB_P6_T1H, ADDRLED_BB_P6_T0L, ADDRLED_BB_P6_T1L); break;
+	default: ADDLOG_INFO(LOG_FEATURE_CMD, "Profile custom: T0H=%i T1H=%i T0L=%i T1L=%i", g_addrled_bb_custom_t0h, g_addrled_bb_custom_t1h, g_addrled_bb_custom_t0l, g_addrled_bb_custom_t1l); break;
+	}
+}
+
+static commandResult_t AddrLED_BB_CMD_Profile(const void *context, const char *cmd, const char *args, int flags) {
+	Tokenizer_TokenizeString(args, 0);
+	if (Tokenizer_GetArgsCount() == 0) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB profile=%i resetUs=%i gpioMode=%s", g_addrled_bb_profile, g_addrled_bb_reset_us, g_addrled_bb_gpio_mode == ADDRLED_BB_GPIO_RAW ? "raw" : "preserve");
+		for (int i = 0; i <= 6; i++) {
+			AddrLED_BB_LogProfile(i);
+		}
+		return CMD_RES_OK;
+	}
+	int profile = Tokenizer_GetArgIntegerRange(0, 0, 6);
+	g_addrled_bb_profile = profile;
+	if (Tokenizer_GetArgsCount() > 1) {
+		g_addrled_bb_reset_us = Tokenizer_GetArgIntegerRange(1, 50, 500);
+	}
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB selected fixed profile %i resetUs=%i", g_addrled_bb_profile, g_addrled_bb_reset_us);
+	AddrLED_BB_LogProfile(g_addrled_bb_profile);
+	return CMD_RES_OK;
+}
+
+static commandResult_t AddrLED_BB_CMD_GPIOMode(const void *context, const char *cmd, const char *args, int flags) {
+	Tokenizer_TokenizeString(args, 0);
+	if (Tokenizer_GetArgsCount() == 0) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB GPIO mode: %s", g_addrled_bb_gpio_mode == ADDRLED_BB_GPIO_RAW ? "raw" : "preserve");
+		return CMD_RES_OK;
+	}
+	const char *mode = Tokenizer_GetArg(0);
+	if (!stricmp(mode, "raw")) {
+		g_addrled_bb_gpio_mode = ADDRLED_BB_GPIO_RAW;
+	}
+	else if (!stricmp(mode, "preserve") || !stricmp(mode, "rmw")) {
+		g_addrled_bb_gpio_mode = ADDRLED_BB_GPIO_PRESERVE;
+	}
+	else {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "Usage: AddrLED_BB_GPIOMode [raw|preserve]");
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	AddrLED_BB_UpdateGPIOValues();
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB GPIO mode set to %s high=0x%08x low=0x%08x", g_addrled_bb_gpio_mode == ADDRLED_BB_GPIO_RAW ? "raw" : "preserve", g_addrled_bb_reg_high, g_addrled_bb_reg_low);
 	return CMD_RES_OK;
 }
 
@@ -318,6 +469,117 @@ static commandResult_t AddrLED_BB_CMD_SendRaw(const void *context, const char *c
 	return CMD_RES_OK;
 }
 
+static commandResult_t AddrLED_BB_CMD_PinHigh(const void *context, const char *cmd, const char *args, int flags) {
+	if (g_addrled_bb_pin < 0 || !g_addrled_bb_gpio_cfg) {
+		return CMD_RES_ERROR;
+	}
+	HAL_PIN_Setup_Output(g_addrled_bb_pin);
+	AddrLED_BB_SetHighFast();
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB pin %i HIGH", g_addrled_bb_pin);
+	return CMD_RES_OK;
+}
+
+static commandResult_t AddrLED_BB_CMD_PinLow(const void *context, const char *cmd, const char *args, int flags) {
+	if (g_addrled_bb_pin < 0 || !g_addrled_bb_gpio_cfg) {
+		return CMD_RES_ERROR;
+	}
+	HAL_PIN_Setup_Output(g_addrled_bb_pin);
+	AddrLED_BB_SetLowFast();
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB pin %i LOW", g_addrled_bb_pin);
+	return CMD_RES_OK;
+}
+
+static commandResult_t AddrLED_BB_CMD_TestPulse(const void *context, const char *cmd, const char *args, int flags) {
+	Tokenizer_TokenizeString(args, 0);
+	int count = 10;
+	int high_us = 10;
+	int low_us = 10;
+	if (Tokenizer_GetArgsCount() > 0) count = Tokenizer_GetArgIntegerRange(0, 1, 1000);
+	if (Tokenizer_GetArgsCount() > 1) high_us = Tokenizer_GetArgIntegerRange(1, 1, 100000);
+	if (Tokenizer_GetArgsCount() > 2) low_us = Tokenizer_GetArgIntegerRange(2, 1, 100000);
+	for (int i = 0; i < count; i++) {
+		AddrLED_BB_SetHighFast();
+		HAL_Delay_us(high_us);
+		AddrLED_BB_SetLowFast();
+		HAL_Delay_us(low_us);
+	}
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB pulse test complete: count=%i highUs=%i lowUs=%i", count, high_us, low_us);
+	return CMD_RES_OK;
+}
+
+static void AddrLED_BB_FillPattern(byte *tmp, int count, const char *pattern) {
+	memset(tmp, 0, count * 3);
+	if (!stricmp(pattern, "ones") || !stricmp(pattern, "white")) {
+		memset(tmp, 0xff, count * 3);
+	}
+	else if (!stricmp(pattern, "red")) {
+		for (int i = 0; i < count; i++) {
+			tmp[(i * 3) + 0] = 0x00;
+			tmp[(i * 3) + 1] = 0xff;
+			tmp[(i * 3) + 2] = 0x00;
+		}
+	}
+	else if (!stricmp(pattern, "green")) {
+		for (int i = 0; i < count; i++) {
+			tmp[(i * 3) + 0] = 0xff;
+			tmp[(i * 3) + 1] = 0x00;
+			tmp[(i * 3) + 2] = 0x00;
+		}
+	}
+	else if (!stricmp(pattern, "blue")) {
+		for (int i = 0; i < count; i++) {
+			tmp[(i * 3) + 0] = 0x00;
+			tmp[(i * 3) + 1] = 0x00;
+			tmp[(i * 3) + 2] = 0xff;
+		}
+	}
+	else if (!stricmp(pattern, "single-red")) {
+		tmp[0] = 0x00;
+		tmp[1] = 0xff;
+		tmp[2] = 0x00;
+	}
+	else if (!stricmp(pattern, "single-green")) {
+		tmp[0] = 0xff;
+		tmp[1] = 0x00;
+		tmp[2] = 0x00;
+	}
+	else if (!stricmp(pattern, "single-blue")) {
+		tmp[0] = 0x00;
+		tmp[1] = 0x00;
+		tmp[2] = 0xff;
+	}
+	else if (!stricmp(pattern, "rgb")) {
+		if (count > 0) { tmp[0] = 0x00; tmp[1] = 0xff; tmp[2] = 0x00; }
+		if (count > 1) { tmp[3] = 0xff; tmp[4] = 0x00; tmp[5] = 0x00; }
+		if (count > 2) { tmp[6] = 0x00; tmp[7] = 0x00; tmp[8] = 0xff; }
+	}
+}
+
+static commandResult_t AddrLED_BB_CMD_TestPattern(const void *context, const char *cmd, const char *args, int flags) {
+	Tokenizer_TokenizeString(args, 0);
+	if (Tokenizer_GetArgsCount() < 1) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "Usage: AddrLED_BB_TestPattern [zeros|ones|red|green|blue|single-red|single-green|single-blue|rgb] [count 1..20]");
+		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+	}
+	const char *pattern = Tokenizer_GetArg(0);
+	int count = 1;
+	if (Tokenizer_GetArgsCount() > 1) {
+		count = Tokenizer_GetArgIntegerRange(1, 1, ADDRLED_BB_MAX_PIXELS);
+	}
+	if (stricmp(pattern, "zeros") && stricmp(pattern, "ones") && stricmp(pattern, "white") && stricmp(pattern, "red") && stricmp(pattern, "green") && stricmp(pattern, "blue") && stricmp(pattern, "single-red") && stricmp(pattern, "single-green") && stricmp(pattern, "single-blue") && stricmp(pattern, "rgb")) {
+		ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB_TestPattern: unsupported pattern '%s'", pattern);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	byte *tmp = (byte *)os_malloc(count * 3);
+	if (!tmp) {
+		return CMD_RES_ERROR;
+	}
+	AddrLED_BB_FillPattern(tmp, count, pattern);
+	AddrLED_BB_SendBytes(tmp, count * 3);
+	os_free(tmp);
+	return CMD_RES_OK;
+}
+
 void AddrLED_BB_Init() {
 	if (DRV_IsRunning("SM16703P")) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD, "AddrLED_BB: SM16703P is already running; stop it before starting AddrLED_BB");
@@ -333,6 +595,7 @@ void AddrLED_BB_Init() {
 	HAL_PIN_Setup_Output(g_addrled_bb_pin);
 	HAL_PIN_SetOutputValue(g_addrled_bb_pin, 0);
 	AddrLED_BB_PrepareFastGPIO(g_addrled_bb_pin);
+	AddrLED_BB_SetLowFast();
 
 	ledStrip_t addrled_bb_export;
 	addrled_bb_export.apply = AddrLED_BB_Show;
@@ -347,10 +610,16 @@ void AddrLED_BB_Init() {
 	CMD_RegisterCommand("AddrLED_BB_SetPixel", Strip_CMD_setPixel, NULL);
 	CMD_RegisterCommand("AddrLED_BB_SetRaw", AddrLED_BB_CMD_SetRaw, NULL);
 	CMD_RegisterCommand("AddrLED_BB_Timing", AddrLED_BB_CMD_Timing, NULL);
+	CMD_RegisterCommand("AddrLED_BB_Profile", AddrLED_BB_CMD_Profile, NULL);
+	CMD_RegisterCommand("AddrLED_BB_GPIOMode", AddrLED_BB_CMD_GPIOMode, NULL);
 	CMD_RegisterCommand("AddrLED_BB_Protocol", AddrLED_BB_CMD_Protocol, NULL);
 	CMD_RegisterCommand("AddrLED_BB_SendRaw", AddrLED_BB_CMD_SendRaw, NULL);
+	CMD_RegisterCommand("AddrLED_BB_PinHigh", AddrLED_BB_CMD_PinHigh, NULL);
+	CMD_RegisterCommand("AddrLED_BB_PinLow", AddrLED_BB_CMD_PinLow, NULL);
+	CMD_RegisterCommand("AddrLED_BB_TestPulse", AddrLED_BB_CMD_TestPulse, NULL);
+	CMD_RegisterCommand("AddrLED_BB_TestPattern", AddrLED_BB_CMD_TestPattern, NULL);
 
-	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB started on pin %i; protocol WS2812B; max LEDs %i; default color order GRB", g_addrled_bb_pin, ADDRLED_BB_MAX_PIXELS);
+	ADDLOG_INFO(LOG_FEATURE_CMD, "AddrLED_BB v5 started on pin %i; protocol WS2812B; max LEDs %i; profile %i; default color order GRB", g_addrled_bb_pin, ADDRLED_BB_MAX_PIXELS, g_addrled_bb_profile);
 }
 
 void AddrLED_BB_Shutdown() {
