@@ -19,7 +19,7 @@
 
 static E_IO01_UART_MODE s_io01UartMode;
 
-#define OPENOPL1000_SHM_CODE __attribute__((section("SHM_REGION"), noinline, used, long_call))
+#define OPENOPL1000_SHM_CODE __attribute__((section(".shm_text"), noinline, used, long_call))
 
 void __Patch_EntryPoint(void) __attribute__((section("ENTRY_POINT")));
 void __Patch_EntryPoint(void) __attribute__((used));
@@ -345,7 +345,7 @@ static void Main_AppInit_patch(void)
 
     {
         uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);
-        printf("[OpenOPL1000] split-M3 v37-shm-ui: shm_fn=0x%08x result=0x%08x\r\n",
+        printf("[OpenOPL1000] split-M3 v37b-shm-ui: shm_fn=0x%08x result=0x%08x\r\n",
                (unsigned int)(uintptr_t)OpenOPL1000_ShmProbeFn,
                (unsigned int)shmProbe);
     }

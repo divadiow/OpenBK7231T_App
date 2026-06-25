@@ -162,11 +162,12 @@ exit:
 #include "../cmnds/cmd_public.h"
 extern size_t xPortGetFreeHeapSize(void);
 
-#define OPENOPL1000_SHM_HTTP __attribute__((section("SHM_REGION"), noinline, used, long_call))
-#define OPENOPL1000_SHM_DATA __attribute__((section("SHM_REGION"), used, aligned(4)))
+#define OPENOPL1000_SHM_HTTP   __attribute__((section(".shm_text"), noinline, used, long_call))
+#define OPENOPL1000_SHM_DATA   __attribute__((section(".shm_data"), used, aligned(4)))
+#define OPENOPL1000_SHM_RODATA __attribute__((section(".shm_rodata"), used, aligned(4)))
 
 /*
- * v37 builds on v36 and the proven v35/v36 split-M3 layout:
+ * v37b builds on v36 and the proven v35/v36 split-M3 layout:
  *   usable application-owned SHM tail: 0x80000400 .. 0x80003fff
  *   avoided vendor/IPC-owned bottom:   0x80000000 .. 0x800003ff
  *
@@ -181,7 +182,7 @@ extern size_t xPortGetFreeHeapSize(void);
 #define OPL1000_PAGE_BODY_SIZE    1152
 #define OPL1000_CMD_SIZE          128
 
-/* v37: keep the live micro-HTTP working set in the split-M3 SHM tail. */
+/* v37b: keep the live micro-HTTP working set in the split-M3 SHM tail. */
 static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE] OPENOPL1000_SHM_DATA = {0};
 static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE] OPENOPL1000_SHM_DATA = {0};
 static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE] OPENOPL1000_SHM_DATA = {0};
@@ -191,22 +192,22 @@ static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE] OPENOPL1000_SHM_DATA = {0};
 static http_request_t g_opl1000_request_probe OPENOPL1000_SHM_DATA = {0};
 static struct sockaddr_storage g_opl1000_source_addr OPENOPL1000_SHM_DATA = {0};
 
-static const char g_opl1000_http_200[] OPENOPL1000_SHM_DATA = "200 OK";
-static const char g_opl1000_http_400[] OPENOPL1000_SHM_DATA = "400 Bad Request";
-static const char g_opl1000_http_404[] OPENOPL1000_SHM_DATA = "404 Not Found";
-static const char g_opl1000_http_503[] OPENOPL1000_SHM_DATA = "503 Service Unavailable";
-static const char g_opl1000_ctype_json[] OPENOPL1000_SHM_DATA = "application/json";
-static const char g_opl1000_ctype_html[] OPENOPL1000_SHM_DATA = "text/html";
-static const char g_opl1000_ctype_plain[] OPENOPL1000_SHM_DATA = "text/plain";
-static const char g_opl1000_missing_cmnd_json[] OPENOPL1000_SHM_DATA = "{\"error\":\"missing cmnd\"}\n";
-static const char g_opl1000_not_found_body[] OPENOPL1000_SHM_DATA = "not found\n";
-static const char g_opl1000_status_tag[] OPENOPL1000_SHM_DATA = "v37-shm-ui";
-static const char g_opl1000_get_favicon[] OPENOPL1000_SHM_DATA = "GET /favicon.ico";
-static const char g_opl1000_get_cm[] OPENOPL1000_SHM_DATA = "GET /cm?";
-static const char g_opl1000_get_status[] OPENOPL1000_SHM_DATA = "GET /status";
-static const char g_opl1000_get_cfg[] OPENOPL1000_SHM_DATA = "GET /cfg";
-static const char g_opl1000_get_index[] OPENOPL1000_SHM_DATA = "GET /index";
-static const char g_opl1000_http_header_fmt[] OPENOPL1000_SHM_DATA =
+static const char g_opl1000_http_200[] OPENOPL1000_SHM_RODATA = "200 OK";
+static const char g_opl1000_http_400[] OPENOPL1000_SHM_RODATA = "400 Bad Request";
+static const char g_opl1000_http_404[] OPENOPL1000_SHM_RODATA = "404 Not Found";
+static const char g_opl1000_http_503[] OPENOPL1000_SHM_RODATA = "503 Service Unavailable";
+static const char g_opl1000_ctype_json[] OPENOPL1000_SHM_RODATA = "application/json";
+static const char g_opl1000_ctype_html[] OPENOPL1000_SHM_RODATA = "text/html";
+static const char g_opl1000_ctype_plain[] OPENOPL1000_SHM_RODATA = "text/plain";
+static const char g_opl1000_missing_cmnd_json[] OPENOPL1000_SHM_RODATA = "{\"error\":\"missing cmnd\"}\n";
+static const char g_opl1000_not_found_body[] OPENOPL1000_SHM_RODATA = "not found\n";
+static const char g_opl1000_status_tag[] OPENOPL1000_SHM_RODATA = "v37b-shm-ui";
+static const char g_opl1000_get_favicon[] OPENOPL1000_SHM_RODATA = "GET /favicon.ico";
+static const char g_opl1000_get_cm[] OPENOPL1000_SHM_RODATA = "GET /cm?";
+static const char g_opl1000_get_status[] OPENOPL1000_SHM_RODATA = "GET /status";
+static const char g_opl1000_get_cfg[] OPENOPL1000_SHM_RODATA = "GET /cfg";
+static const char g_opl1000_get_index[] OPENOPL1000_SHM_RODATA = "GET /index";
+static const char g_opl1000_http_header_fmt[] OPENOPL1000_SHM_RODATA =
 	"HTTP/1.1 %s\r\n"
 	"Connection: close\r\n"
 	"Content-Type: %s\r\n"
@@ -214,18 +215,18 @@ static const char g_opl1000_http_header_fmt[] OPENOPL1000_SHM_DATA =
 	"Cache-Control: no-store\r\n"
 	"\r\n"
 	"%s";
-static const char g_opl1000_status_json_fmt[] OPENOPL1000_SHM_DATA =
+static const char g_opl1000_status_json_fmt[] OPENOPL1000_SHM_RODATA =
 	"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n";
-static const char g_opl1000_cmd_json_fmt[] OPENOPL1000_SHM_DATA =
+static const char g_opl1000_cmd_json_fmt[] OPENOPL1000_SHM_RODATA =
 	"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n";
-static const char g_opl1000_cfg_disabled_html[] OPENOPL1000_SHM_DATA =
-	"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled on this constrained v37 path.</p>"
+static const char g_opl1000_cfg_disabled_html[] OPENOPL1000_SHM_RODATA =
+	"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled on this constrained v37b path.</p>"
 	"<p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n";
-static const char g_opl1000_home_fmt[] OPENOPL1000_SHM_DATA =
+static const char g_opl1000_home_fmt[] OPENOPL1000_SHM_RODATA =
 	"<html><body><h1>OpenOPL1000</h1>"
 	"<p><b>IP:</b> %s</p>"
 	"<p><b>Heap:</b> %u</p>"
-	"<p><b>Build path:</b> v37 split-M3 micro UI</p>"
+	"<p><b>Build path:</b> v37b split-M3 micro UI</p>"
 	"<p><b>SHM:</b> HTTP helpers, UI strings and micro buffers are in 0x80000400..0x80003fff.</p>"
 	"<p><a href='/status'>status json</a></p>"
 	"<p>Commands:</p>"

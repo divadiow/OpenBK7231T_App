@@ -6,7 +6,7 @@
  * A second explicit output section is placed at the high end of the 16 KB M3
  * shared-memory window used by the vendor Expand_M3_RAM demo.  v29b proved code at 0x80000000 executes but the Wi-Fi connect path resets afterwards.
  * v29c proved the upper 1 KB survives Wi-Fi/DHCP; v30 proved 2 KB; v31 proved 3 KB; v33 proved 10 KB; v34 proved 14 KB; v35 proved 15 KB.
- * v35 proved the upper 15 KB tail; v36 proved selected micro-HTTP helpers can execute from it; v37 also moves the micro-UI strings and live HTTP buffers there:
+ * v35 proved the upper 15 KB tail; v36 proved selected micro-HTTP helpers can execute from it; v37b also moves the micro-UI strings and live HTTP buffers there using separate SHM text/rodata/data input sections:
  *   0x80000400 .. 0x80004000
  *
  * The build emits two M3 binaries from the same ELF:
@@ -80,9 +80,25 @@ SECTIONS
     .shm_region ORIGIN(SHM) :
     {
         __shm_region_start__ = .;
+        . = ALIGN(4);
+        /* Legacy name retained for older probe objects, then typed sections.
+         * GCC/LTO does not allow code and const/data with different section
+         * flags to share the same input-section name, so v37b splits them.
+         */
         KEEP(*(SHM_REGION))
         KEEP(*(.SHM_REGION))
         KEEP(*(.SHM_REGION*))
+        . = ALIGN(4);
+        KEEP(*(.shm_text))
+        KEEP(*(.shm_text*))
+        . = ALIGN(4);
+        KEEP(*(.shm_rodata))
+        KEEP(*(.shm_rodata*))
+        . = ALIGN(4);
+        KEEP(*(.shm_data))
+        KEEP(*(.shm_data*))
+        KEEP(*(.shm_bss))
+        KEEP(*(.shm_bss*))
         . = ALIGN(4);
         __shm_region_end__ = .;
     } > SHM
