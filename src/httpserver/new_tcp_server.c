@@ -163,31 +163,84 @@ exit:
 extern size_t xPortGetFreeHeapSize(void);
 
 #define OPENOPL1000_SHM_HTTP __attribute__((section("SHM_REGION"), noinline, used, long_call))
+#define OPENOPL1000_SHM_DATA __attribute__((section("SHM_REGION"), used, aligned(4)))
 
 /*
- * v24 keeps the v23 direct-command approach and adds a tiny micro UI.
- * v20 proved Wi-Fi/DHCP/TCP/browser micro-HTTP is stable with BLE disabled.
- * v21/v22 proved that pulling the fuller OBK HTTP path into this constrained
- * build is still too fragile. Keep the transport static and small, expose
- * a direct /cm?cmnd= bridge, and provide a tiny form-based UI.
+ * v37 builds on v36 and the proven v35/v36 split-M3 layout:
+ *   usable application-owned SHM tail: 0x80000400 .. 0x80003fff
+ *   avoided vendor/IPC-owned bottom:   0x80000000 .. 0x800003ff
  *
- * Keep these buffers static: heap is valuable after Wi-Fi/lwIP, and v17 showed
- * that large locals can overflow the TCP_server stack.
+ * Keep the transport path small and synchronous.  Do not call the full
+ * HTTP_ProcessPacket() path here; v26 proved that route overflows the TCP_server
+ * stack on OPL1000.  Instead, expose a larger but still controlled micro UI and
+ * direct /cm?cmnd= command bridge.
  */
-#define OPL1000_MICRO_REQ_SIZE    512
-#define OPL1000_MICRO_REPLY_SIZE  768
+#define OPL1000_MICRO_REQ_SIZE    768
+#define OPL1000_MICRO_REPLY_SIZE  1408
 #define OPL1000_STATUS_BODY_SIZE  320
-#define OPL1000_PAGE_BODY_SIZE    640
+#define OPL1000_PAGE_BODY_SIZE    1152
 #define OPL1000_CMD_SIZE          128
 
-static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE];
-static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE];
-static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE];
-static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE];
-static char g_opl1000_cmd[OPL1000_CMD_SIZE];
-static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE];
-static http_request_t g_opl1000_request_probe;
-static struct sockaddr_storage g_opl1000_source_addr;
+/* v37: keep the live micro-HTTP working set in the split-M3 SHM tail. */
+static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE] OPENOPL1000_SHM_DATA = {0};
+static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE] OPENOPL1000_SHM_DATA = {0};
+static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE] OPENOPL1000_SHM_DATA = {0};
+static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE] OPENOPL1000_SHM_DATA = {0};
+static char g_opl1000_cmd[OPL1000_CMD_SIZE] OPENOPL1000_SHM_DATA = {0};
+static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE] OPENOPL1000_SHM_DATA = {0};
+static http_request_t g_opl1000_request_probe OPENOPL1000_SHM_DATA = {0};
+static struct sockaddr_storage g_opl1000_source_addr OPENOPL1000_SHM_DATA = {0};
+
+static const char g_opl1000_http_200[] OPENOPL1000_SHM_DATA = "200 OK";
+static const char g_opl1000_http_400[] OPENOPL1000_SHM_DATA = "400 Bad Request";
+static const char g_opl1000_http_404[] OPENOPL1000_SHM_DATA = "404 Not Found";
+static const char g_opl1000_http_503[] OPENOPL1000_SHM_DATA = "503 Service Unavailable";
+static const char g_opl1000_ctype_json[] OPENOPL1000_SHM_DATA = "application/json";
+static const char g_opl1000_ctype_html[] OPENOPL1000_SHM_DATA = "text/html";
+static const char g_opl1000_ctype_plain[] OPENOPL1000_SHM_DATA = "text/plain";
+static const char g_opl1000_missing_cmnd_json[] OPENOPL1000_SHM_DATA = "{\"error\":\"missing cmnd\"}\n";
+static const char g_opl1000_not_found_body[] OPENOPL1000_SHM_DATA = "not found\n";
+static const char g_opl1000_status_tag[] OPENOPL1000_SHM_DATA = "v37-shm-ui";
+static const char g_opl1000_get_favicon[] OPENOPL1000_SHM_DATA = "GET /favicon.ico";
+static const char g_opl1000_get_cm[] OPENOPL1000_SHM_DATA = "GET /cm?";
+static const char g_opl1000_get_status[] OPENOPL1000_SHM_DATA = "GET /status";
+static const char g_opl1000_get_cfg[] OPENOPL1000_SHM_DATA = "GET /cfg";
+static const char g_opl1000_get_index[] OPENOPL1000_SHM_DATA = "GET /index";
+static const char g_opl1000_http_header_fmt[] OPENOPL1000_SHM_DATA =
+	"HTTP/1.1 %s\r\n"
+	"Connection: close\r\n"
+	"Content-Type: %s\r\n"
+	"Content-Length: %d\r\n"
+	"Cache-Control: no-store\r\n"
+	"\r\n"
+	"%s";
+static const char g_opl1000_status_json_fmt[] OPENOPL1000_SHM_DATA =
+	"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n";
+static const char g_opl1000_cmd_json_fmt[] OPENOPL1000_SHM_DATA =
+	"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n";
+static const char g_opl1000_cfg_disabled_html[] OPENOPL1000_SHM_DATA =
+	"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled on this constrained v37 path.</p>"
+	"<p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n";
+static const char g_opl1000_home_fmt[] OPENOPL1000_SHM_DATA =
+	"<html><body><h1>OpenOPL1000</h1>"
+	"<p><b>IP:</b> %s</p>"
+	"<p><b>Heap:</b> %u</p>"
+	"<p><b>Build path:</b> v37 split-M3 micro UI</p>"
+	"<p><b>SHM:</b> HTTP helpers, UI strings and micro buffers are in 0x80000400..0x80003fff.</p>"
+	"<p><a href='/status'>status json</a></p>"
+	"<p>Commands:</p>"
+	"<p>"
+	"<a href='/cm?cmnd=Status'>Status</a> | "
+	"<a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a> | "
+	"<a href='/cm?cmnd=Power%%20On'>Power On</a> | "
+	"<a href='/cm?cmnd=Power%%20Off'>Power Off</a>"
+	"</p>"
+	"<form action='/cm' method='get'>"
+	"<input name='cmnd' value='Status' style='width:260px'>"
+	"<button type='submit'>Run command</button>"
+	"</form>"
+	"<p><small>Full OBK HTTP_ProcessPacket remains disabled; this is the safe OPL1000 micro path.</small></p>"
+	"</body></html>\n";
 
 static int OPENOPL1000_SHM_HTTP opl1000_send_all(int fd, const char *data, int len)
 {
@@ -209,13 +262,7 @@ static int OPENOPL1000_SHM_HTTP opl1000_http_write_response(int fd, const char *
 	int bodyLen = (int)strlen(body);
 	int len = snprintf(g_opl1000_micro_reply,
 		OPL1000_MICRO_REPLY_SIZE,
-		"HTTP/1.1 %s\r\n"
-		"Connection: close\r\n"
-		"Content-Type: %s\r\n"
-		"Content-Length: %d\r\n"
-		"Cache-Control: no-store\r\n"
-		"\r\n"
-		"%s",
+		g_opl1000_http_header_fmt,
 		status,
 		ctype,
 		bodyLen,
@@ -313,7 +360,7 @@ static void OPENOPL1000_SHM_HTTP opl1000_json_escape_small(const char *src, char
 	while(*src && out < (dstMax - 1))
 	{
 		char c = *src++;
-		if((c == '\"' || c == '\\') && out < (dstMax - 2))
+		if((c == '"' || c == '\\') && out < (dstMax - 2))
 		{
 			dst[out++] = '\\';
 			dst[out++] = c;
@@ -329,14 +376,14 @@ static void OPENOPL1000_SHM_HTTP opl1000_json_escape_small(const char *src, char
 static int OPENOPL1000_SHM_HTTP opl1000_write_status(int fd, const char *httpTag)
 {
 	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-		"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n",
+		g_opl1000_status_json_fmt,
 		HAL_GetMyIPString(),
 		(unsigned int)xPortGetFreeHeapSize(),
 		Main_IsConnectedToWiFi() ? 1 : 0,
 		httpTag);
 	return opl1000_http_write_response(fd,
-		"200 OK",
-		"application/json",
+		g_opl1000_http_200,
+		g_opl1000_ctype_json,
 		g_opl1000_status_body);
 }
 
@@ -346,71 +393,59 @@ static int OPENOPL1000_SHM_HTTP opl1000_handle_direct_cmnd(int fd, const char *b
 	if(!opl1000_extract_cmnd(buf, g_opl1000_cmd, OPL1000_CMD_SIZE))
 	{
 		return opl1000_http_write_response(fd,
-			"400 Bad Request",
-			"application/json",
-			"{\"error\":\"missing cmnd\"}\n");
+			g_opl1000_http_400,
+			g_opl1000_ctype_json,
+			g_opl1000_missing_cmnd_json);
 	}
 
 	cr = CMD_ExecuteCommand(g_opl1000_cmd, COMMAND_FLAG_SOURCE_HTTP);
 	opl1000_json_escape_small(g_opl1000_cmd, g_opl1000_cmd_escaped, sizeof(g_opl1000_cmd_escaped));
 	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-		"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n",
+		g_opl1000_cmd_json_fmt,
 		g_opl1000_cmd_escaped,
 		(int)cr,
 		opl1000_cmd_rc_name(cr),
 		(unsigned int)xPortGetFreeHeapSize(),
 		Main_IsConnectedToWiFi() ? 1 : 0);
 	return opl1000_http_write_response(fd,
-		"200 OK",
-		"application/json",
+		g_opl1000_http_200,
+		g_opl1000_ctype_json,
 		g_opl1000_status_body);
 }
 
 static int OPENOPL1000_SHM_HTTP opl1000_micro_fallback(int fd, const char *buf)
 {
-	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
+	if(strncmp(buf, g_opl1000_get_favicon, sizeof(g_opl1000_get_favicon) - 1) == 0)
 	{
 		return opl1000_http_write_response(fd,
-			"404 Not Found",
-			"text/plain",
-			"not found\n");
+			g_opl1000_http_404,
+			g_opl1000_ctype_plain,
+			g_opl1000_not_found_body);
 	}
-	else if(strncmp(buf, "GET /cm?", 8) == 0)
+	else if(strncmp(buf, g_opl1000_get_cm, sizeof(g_opl1000_get_cm) - 1) == 0)
 	{
 		return opl1000_handle_direct_cmnd(fd, buf);
 	}
-	else if(strncmp(buf, "GET /status", 11) == 0)
+	else if(strncmp(buf, g_opl1000_get_status, sizeof(g_opl1000_get_status) - 1) == 0)
 	{
-		return opl1000_write_status(fd, "v36-shm-http");
+		return opl1000_write_status(fd, g_opl1000_status_tag);
 	}
-	else if(strncmp(buf, "GET /cfg", 8) == 0 ||
-		strncmp(buf, "GET /index", 10) == 0)
+	else if(strncmp(buf, g_opl1000_get_cfg, sizeof(g_opl1000_get_cfg) - 1) == 0 ||
+		strncmp(buf, g_opl1000_get_index, sizeof(g_opl1000_get_index) - 1) == 0)
 	{
 		return opl1000_http_write_response(fd,
-			"503 Service Unavailable",
-			"text/html",
-			"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled in v24.</p><p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n");
+			g_opl1000_http_503,
+			g_opl1000_ctype_html,
+			g_opl1000_cfg_disabled_html);
 	}
 
 	snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
-		"<html><body><h1>OpenOPL1000</h1>"
-		"<p>IP: %s</p>"
-		"<p>Heap: %u</p>"
-		"<p>v36 split-M3 micro UI</p>"
-		"<p><a href='/status'>status json</a></p>"
-		"<p><a href='/cm?cmnd=Status'>Status command</a></p>"
-		"<p><a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a></p>"
-		"<form action='/cm' method='get'>"
-		"<input name='cmnd' value='Status' style='width:220px'>"
-		"<button type='submit'>Run command</button>"
-		"</form>"
-		"<p><small>Selected micro-HTTP helpers are executing from the split-M3 SHM tail.</small></p>"
-		"</body></html>\n",
+		g_opl1000_home_fmt,
 		HAL_GetMyIPString(),
 		(unsigned int)xPortGetFreeHeapSize());
 	return opl1000_http_write_response(fd,
-		"200 OK",
-		"text/html",
+		g_opl1000_http_200,
+		g_opl1000_ctype_html,
 		g_opl1000_page_body);
 }
 
