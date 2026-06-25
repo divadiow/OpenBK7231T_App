@@ -345,7 +345,7 @@ static void Main_AppInit_patch(void)
 
     {
         uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);
-        printf("[OpenOPL1000] split-M3 v40-targeted-scan: shm_fn=0x%08x result=0x%08x\r\n",
+        printf("[OpenOPL1000] split-M3 v40b-targeted-scan: shm_fn=0x%08x result=0x%08x\r\n",
                (unsigned int)(uintptr_t)OpenOPL1000_ShmProbeFn,
                (unsigned int)shmProbe);
     }

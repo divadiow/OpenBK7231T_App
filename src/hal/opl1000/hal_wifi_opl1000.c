@@ -33,6 +33,7 @@
 #define OPENOPL1000_SCAN_RESULT_WAIT_MS      3500
 #define OPENOPL1000_ASSOC_WAIT_SECONDS       20
 #define OPENOPL1000_SCAN_RETRY_DELAY_MS      7000
+#define OPENOPL1000_SCAN_PASS_COUNT          5
 
 extern size_t xPortGetFreeHeapSize(void);
 
