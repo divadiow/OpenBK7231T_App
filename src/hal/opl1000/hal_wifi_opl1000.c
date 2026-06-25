@@ -30,13 +30,9 @@
 #endif
 
 #define OPENOPL1000_WIFI_READY_DELAY_MS      3000
-#define OPENOPL1000_SCAN_RESULT_WAIT_MS      4500
+#define OPENOPL1000_SCAN_RESULT_WAIT_MS      3500
 #define OPENOPL1000_ASSOC_WAIT_SECONDS       20
 #define OPENOPL1000_SCAN_RETRY_DELAY_MS      7000
-#define OPENOPL1000_EXPANDED_SCAN_MAX_APS    12
-
-#define OPENOPL1000_SHM_DATA __attribute__((section(".shm_data"), used, aligned(4)))
-#define OPENOPL1000_SHM_BSS  __attribute__((section(".shm_bss"), used, aligned(4)))
 
 extern size_t xPortGetFreeHeapSize(void);
 
@@ -62,21 +58,6 @@ static char g_dns[16] = "0.0.0.0";
  * allocation is not safe in the real OBK runtime.
  */
 static wifi_scan_list_t g_scanList;
-
-/*
- * The vendor default scan path only keeps a small RSSI-sorted set of APs in
- * crowded RF environments.  If the requested test AP is not one of the
- * strongest few, it can be missing from wifi_get_scan_result() even though it
- * is present on-air.  Use the lower-level MLME scan request so we can raise
- * u8MaxScanApNum and provide our own scan_report_t buffer.
- *
- * Keep the large scan_info_t array in the proven-safe split-M3 SHM tail rather
- * than consuming the normal patch window.  This buffer is only needed during
- * initial association.
- */
-static scan_info_t g_expandedScanInfo[OPENOPL1000_EXPANDED_SCAN_MAX_APS] OPENOPL1000_SHM_BSS;
-static scan_report_t g_expandedScanReport OPENOPL1000_SHM_DATA;
-static S_WIFI_MLME_SCAN_CFG g_expandedScanCfg OPENOPL1000_SHM_DATA;
 
 static unsigned int OpenOPL1000_GetFreeHeap(void)
 {
@@ -136,89 +117,14 @@ static bool OpenOPL1000_IsAssociated(void)
     return false;
 }
 
-static int OpenOPL1000_DoDelayedScanAndConnect(void)
+static int OpenOPL1000_TryConnectFromReport(scan_report_t *report)
 {
     wifi_config_t wifiConfig;
-    scan_report_t *report;
     int rc;
-    int matched = 0;
-
-    memset(&g_scanList, 0, sizeof(g_scanList));
-    memset(g_expandedScanInfo, 0, sizeof(g_expandedScanInfo));
-    memset(&g_expandedScanReport, 0, sizeof(g_expandedScanReport));
-    memset(&g_expandedScanCfg, 0, sizeof(g_expandedScanCfg));
-
-    g_expandedScanReport.pScanInfo = g_expandedScanInfo;
-    g_expandedScanReport.uScanApNum = 0;
-
-    if (wifi_scan_cfg_init)
-    {
-        wifi_scan_cfg_init(&g_expandedScanCfg);
-    }
-
-    g_expandedScanCfg.ptScanReport = &g_expandedScanReport;
-    g_expandedScanCfg.u32ActiveScanDur = 180;
-    g_expandedScanCfg.u32PassiveScanDur = 180;
-    g_expandedScanCfg.tScanType = WIFI_MLME_SCAN_TYPE_ACTIVE;
-    g_expandedScanCfg.u8Channel = WIFI_MLME_SCAN_ALL_CHANNELS;
-    g_expandedScanCfg.u8MaxScanApNum = OPENOPL1000_EXPANDED_SCAN_MAX_APS;
-    g_expandedScanCfg.u8ResendCnt = 2;
-
-    printf("[OpenOPL1000] worker: expanded async scan for SSID '%s' max_ap=%u heap=%u\r\n",
-           g_ssid,
-           (unsigned int)OPENOPL1000_EXPANDED_SCAN_MAX_APS,
-           OpenOPL1000_GetFreeHeap());
-
-    /* Use the lower-level scan request so we can raise u8MaxScanApNum.  The
-     * standard wifi_scan_start() path appears to keep only a small strongest-AP
-     * set, which can hide the requested SSID in crowded RF environments.
-     */
-    rc = wifi_scan_req_by_cfg ? wifi_scan_req_by_cfg(&g_expandedScanCfg) : -99;
-    printf("[OpenOPL1000] worker: wifi_scan_req_by_cfg(expanded) rc=%d heap=%u\r\n",
-           rc,
-           OpenOPL1000_GetFreeHeap());
-
-    if (rc != 0)
-    {
-        wifi_scan_config_t scanConfig;
-        memset(&scanConfig, 0, sizeof(scanConfig));
-        scanConfig.ssid = (uint8_t *)g_ssid;
-        scanConfig.channel = 0;
-        scanConfig.show_hidden = true;
-        scanConfig.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-        scanConfig.scan_time.active.min = 100;
-        scanConfig.scan_time.active.max = 300;
-
-        printf("[OpenOPL1000] worker: expanded scan unavailable, fallback wifi_scan_start for SSID '%s'\r\n",
-               g_ssid);
-        rc = wifi_scan_start(&scanConfig, false);
-        printf("[OpenOPL1000] worker: wifi_scan_start(fallback) rc=%d heap=%u\r\n",
-               rc,
-               OpenOPL1000_GetFreeHeap());
-    }
-
-    osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
-
-    rc = wifi_scan_get_ap_list(&g_scanList);
-    printf("[OpenOPL1000] worker: public scan list rc=%d ap_count=%d heap=%u\r\n",
-           rc,
-           g_scanList.num,
-           OpenOPL1000_GetFreeHeap());
-
-    report = (g_expandedScanReport.pScanInfo != NULL && g_expandedScanReport.uScanApNum > 0)
-        ? &g_expandedScanReport
-        : (wifi_get_scan_result ? wifi_get_scan_result() : NULL);
-
-    printf("[OpenOPL1000] worker: selected scan report ptr=%p count=%u expanded_count=%u sdk_count=%u heap=%u\r\n",
-           report,
-           report ? (unsigned int)report->uScanApNum : 0,
-           (unsigned int)g_expandedScanReport.uScanApNum,
-           wifi_get_scan_result && wifi_get_scan_result() ? (unsigned int)wifi_get_scan_result()->uScanApNum : 0,
-           OpenOPL1000_GetFreeHeap());
 
     if (report == NULL || report->pScanInfo == NULL || report->uScanApNum == 0)
     {
-        printf("[OpenOPL1000] worker: selected scan report not ready; will retry\r\n");
+        printf("[OpenOPL1000] worker: raw scan report not ready; will retry\r\n");
         return -1;
     }
 
@@ -250,7 +156,6 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
                     wifiConfig.sta_config.ssid,
                     wifiConfig.sta_config.ssid_length) == 0))
         {
-            matched = 1;
             memcpy(g_bssid, rec->bssid, sizeof(g_bssid));
             g_channel = rec->ap_channel;
 
@@ -268,23 +173,129 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
                    (unsigned int)rec->ap_channel,
                    rec->rssi,
                    rc);
-            break;
+
+            OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
+            rc = wifi_connection_connect(&wifiConfig);
+            printf("[OpenOPL1000] worker: wifi_connection_connect rc=%d heap=%u\r\n",
+                   rc,
+                   OpenOPL1000_GetFreeHeap());
+            return rc;
         }
     }
 
-    if (!matched)
-    {
-        printf("[OpenOPL1000] worker: SSID '%s' not found in selected scan report\r\n",
-               g_ssid);
-        return -1;
-    }
+    return -1;
+}
+
+static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
+{
+    wifi_config_t wifiConfig;
+    int rc;
+
+    memset(&wifiConfig, 0, sizeof(wifiConfig));
+    wifi_get_config(WIFI_MODE_STA, &wifiConfig);
+
+    wifiConfig.sta_config.bssid_present = 0;
+    memset(wifiConfig.sta_config.bssid, 0, sizeof(wifiConfig.sta_config.bssid));
+    wifiConfig.sta_config.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wifiConfig.sta_config.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    wifiConfig.sta_config.threshold.authmode = WIFI_AUTH_OPEN;
+    wifiConfig.sta_config.threshold.rssi = -127;
+
+    rc = wifi_set_config(WIFI_MODE_STA, &wifiConfig);
+    printf("[OpenOPL1000] worker: direct no-BSSID connect fallback set_config rc=%d heap=%u\r\n",
+           rc,
+           OpenOPL1000_GetFreeHeap());
 
     OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
     rc = wifi_connection_connect(&wifiConfig);
-    printf("[OpenOPL1000] worker: wifi_connection_connect rc=%d heap=%u\r\n",
+    printf("[OpenOPL1000] worker: direct no-BSSID wifi_connection_connect rc=%d heap=%u\r\n",
            rc,
            OpenOPL1000_GetFreeHeap());
     return rc;
+}
+
+static int OpenOPL1000_DoDelayedScanAndConnect(void)
+{
+    wifi_scan_config_t scanConfig;
+    scan_report_t *report;
+    int rc = -1;
+
+    for (int pass = 0; pass < OPENOPL1000_SCAN_PASS_COUNT; pass++)
+    {
+        bool targeted = (pass < (OPENOPL1000_SCAN_PASS_COUNT - 1));
+
+        memset(&scanConfig, 0, sizeof(scanConfig));
+        memset(&g_scanList, 0, sizeof(g_scanList));
+
+        if (targeted)
+        {
+            scanConfig.ssid = (uint8_t *)g_ssid;
+        }
+        scanConfig.channel = 0;
+        scanConfig.show_hidden = true;
+        scanConfig.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+        scanConfig.scan_time.active.min = 120;
+        scanConfig.scan_time.active.max = 500;
+
+        printf("[OpenOPL1000] worker: %s scan pass %d/%d for SSID '%s' wait=%ums heap=%u\r\n",
+               targeted ? "targeted" : "broad fallback",
+               pass + 1,
+               OPENOPL1000_SCAN_PASS_COUNT,
+               g_ssid,
+               (unsigned int)OPENOPL1000_SCAN_RESULT_WAIT_MS,
+               OpenOPL1000_GetFreeHeap());
+
+        /* In crowded RF environments the SDK's retained all-SSID scan list is
+         * small and RSSI-sorted.  Filtering the scan request to the desired
+         * SSID is more useful than asking for a larger all-SSID list: it stops
+         * unrelated nearby APs from displacing the weak phone hotspot result.
+         */
+        rc = wifi_scan_start(&scanConfig, false);
+        printf("[OpenOPL1000] worker: wifi_scan_start(%s) rc=%d heap=%u\r\n",
+               targeted ? "targeted" : "broad",
+               rc,
+               OpenOPL1000_GetFreeHeap());
+
+        if (rc != 0)
+        {
+            osDelay(1000);
+            continue;
+        }
+
+        osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
+
+        rc = wifi_scan_get_ap_list(&g_scanList);
+        printf("[OpenOPL1000] worker: public scan list rc=%d ap_count=%d heap=%u\r\n",
+               rc,
+               g_scanList.num,
+               OpenOPL1000_GetFreeHeap());
+
+        report = wifi_get_scan_result ? wifi_get_scan_result() : NULL;
+        printf("[OpenOPL1000] worker: raw scan report ptr=%p count=%u heap=%u\r\n",
+               report,
+               report ? (unsigned int)report->uScanApNum : 0,
+               OpenOPL1000_GetFreeHeap());
+
+        rc = OpenOPL1000_TryConnectFromReport(report);
+        if (rc == 0)
+        {
+            return rc;
+        }
+
+        printf("[OpenOPL1000] worker: SSID '%s' not found on %s scan pass %d\r\n",
+               g_ssid,
+               targeted ? "targeted" : "broad",
+               pass + 1);
+
+        osDelay(1000);
+    }
+
+    /* Last resort: let the vendor connection code try a normal all-channel
+     * connection without a BSSID.  If the controller can find the SSID itself,
+     * this avoids our pre-scan cache limitation.  If it cannot, the existing
+     * association polling will fail and the worker will retry later.
+     */
+    return OpenOPL1000_TryDirectConnectWithoutBssid();
 }
 
 static bool OpenOPL1000_StartLwipAndPollForIp(void)
