@@ -346,18 +346,18 @@ http://172.16.62.218/cm?cmnd=Power%20Toggle
 This is not expected to increase `xPortGetFreeHeapSize()` by itself. The success criterion is that real HTTP requests execute through relocated helper code without resetting or corrupting Wi-Fi.
 
 
-## v38 split-M3 micro-UI and buffer migration probe
+## v37b split-M3 micro-UI and buffer migration probe
 
 v36 proved that selected OPL1000 micro-HTTP helper functions can execute from the proven-safe split-M3 SHM tail at `0x80000400-0x80003fff` while Wi-Fi, DHCP and HTTP traffic remain stable.
 
-v38 keeps the same split-M3 base and extends the experiment by moving the larger OPL1000 micro-UI working set into `SHM_REGION`:
+v37b keeps the same split-M3 base and extends the experiment by moving the larger OPL1000 micro-UI working set into `SHM_REGION`:
 
 ```text
 0x80000400-0x80003fff = split-M3 SHM tail used by OpenOPL1000
 0x80000000-0x800003ff = deliberately avoided vendor/IPC-owned bottom area
 ```
 
-Moved in v38:
+Moved in v37b:
 
 ```text
 - micro request buffer
@@ -373,7 +373,7 @@ Moved in v38:
 Expected boot marker:
 
 ```text
-[OpenOPL1000] split-M3 v38-shm-ui: shm_fn=0x80000401 result=0xb881be0b
+[OpenOPL1000] split-M3 v37b-shm-ui: shm_fn=0x80000401 result=0xb881be0b
 ```
 
 Expected test URLs after DHCP:
@@ -387,9 +387,34 @@ http://<device-ip>/cm?cmnd=Power%20On
 http://<device-ip>/cm?cmnd=Power%20Off
 ```
 
-This version still deliberately leaves full `HTTP_ProcessPacket()` disabled. v38 also fixes the GCC/LTO section-type conflict seen in v37 by using separate `.shm_text`, `.shm_rodata`, and `.shm_data` input sections that are all collected into the same split-M3 SHM output region. It tests whether meaningful UI code, constants and read/write HTTP buffers can live in the split-M3 SHM tail without destabilising Wi-Fi or the TCP server.
+This version still deliberately leaves full `HTTP_ProcessPacket()` disabled. v37b also fixes the GCC/LTO section-type conflict seen in v37 by using separate `.shm_text`, `.shm_rodata`, and `.shm_data` input sections that are all collected into the same split-M3 SHM output region. It tests whether meaningful UI code, constants and read/write HTTP buffers can live in the split-M3 SHM tail without destabilising Wi-Fi or the TCP server.
 
 
-### v38
+## v39 expanded Wi-Fi scan probe
 
-Adds a gated `/obk/` route that strips the `/obk` prefix and calls the real `HTTP_ProcessPacket()` path while keeping `/`, `/status`, and `/cm?cmnd=` on the known-stable micro HTTP path. Also increases the OPL1000 TCP server stack from 0x800 to 0x1000 for this controlled full-OBK experiment.
+v38 proved that the gated full-OBK route can be called without immediately crashing, but it costs roughly 2 KB of steady heap because the TCP server stack was raised from 0x800 to 0x1000. The full-OBK path also returned no useful full page in the observed log, so v39 returns to the v37b stable micro-UI baseline and focuses on a practical bring-up issue: crowded RF environments where the target `test` SSID may not be retained in the small default scan result set.
+
+v39 keeps the proven split-M3 memory layout:
+
+```text
+0x80000000-0x800003ff = avoided vendor/IPC-owned low SHM
+0x80000400-0x80003fff = OpenOPL1000 split-M3 SHM tail
+```
+
+Wi-Fi scanning now uses a lower-level `S_WIFI_MLME_SCAN_CFG` request with a custom `scan_report_t` buffer and `u8MaxScanApNum = 12`. The scan buffer is placed in `.shm_bss` so the larger result table does not consume the normal patch image area. If the expanded scan request is unavailable or rejected, the code falls back to the previous `wifi_scan_start()` path.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v39-expanded-scan: shm_fn=0x80000401 result=0xb881be0b
+```
+
+Expected scan diagnostics:
+
+```text
+[OpenOPL1000] worker: expanded async scan for SSID 'test' max_ap=12 ...
+[OpenOPL1000] worker: wifi_scan_req_by_cfg(expanded) rc=0 ...
+[OpenOPL1000] worker: selected scan report ptr=... count=... expanded_count=... sdk_count=...
+```
+
+Success criteria: the selected scan report should show up to 12 retained AP records, and the target `test` SSID should be matched even when it is not one of the strongest few APs nearby.

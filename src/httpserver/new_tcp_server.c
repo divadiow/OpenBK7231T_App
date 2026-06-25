@@ -167,7 +167,7 @@ extern size_t xPortGetFreeHeapSize(void);
 #define OPENOPL1000_SHM_RODATA __attribute__((section(".shm_rodata"), used, aligned(4)))
 
 /*
- * v38 builds on v37b and the proven v35/v36/v37b split-M3 layout:
+ * v37b builds on v36 and the proven v35/v36 split-M3 layout:
  *   usable application-owned SHM tail: 0x80000400 .. 0x80003fff
  *   avoided vendor/IPC-owned bottom:   0x80000000 .. 0x800003ff
  *
@@ -177,12 +177,12 @@ extern size_t xPortGetFreeHeapSize(void);
  * direct /cm?cmnd= command bridge.
  */
 #define OPL1000_MICRO_REQ_SIZE    768
-#define OPL1000_MICRO_REPLY_SIZE  3072
+#define OPL1000_MICRO_REPLY_SIZE  1408
 #define OPL1000_STATUS_BODY_SIZE  320
-#define OPL1000_PAGE_BODY_SIZE    1408
+#define OPL1000_PAGE_BODY_SIZE    1152
 #define OPL1000_CMD_SIZE          128
 
-/* v38: keep the live micro-HTTP working set in the split-M3 SHM tail. */
+/* v37b: keep the live micro-HTTP working set in the split-M3 SHM tail. */
 static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE] OPENOPL1000_SHM_DATA = {0};
 static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE] OPENOPL1000_SHM_DATA = {0};
 static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE] OPENOPL1000_SHM_DATA = {0};
@@ -201,13 +201,12 @@ static const char g_opl1000_ctype_html[] OPENOPL1000_SHM_RODATA = "text/html";
 static const char g_opl1000_ctype_plain[] OPENOPL1000_SHM_RODATA = "text/plain";
 static const char g_opl1000_missing_cmnd_json[] OPENOPL1000_SHM_RODATA = "{\"error\":\"missing cmnd\"}\n";
 static const char g_opl1000_not_found_body[] OPENOPL1000_SHM_RODATA = "not found\n";
-static const char g_opl1000_status_tag[] OPENOPL1000_SHM_RODATA = "v38-obk-gated";
+static const char g_opl1000_status_tag[] OPENOPL1000_SHM_RODATA = "v37b-shm-ui";
 static const char g_opl1000_get_favicon[] OPENOPL1000_SHM_RODATA = "GET /favicon.ico";
 static const char g_opl1000_get_cm[] OPENOPL1000_SHM_RODATA = "GET /cm?";
 static const char g_opl1000_get_status[] OPENOPL1000_SHM_RODATA = "GET /status";
 static const char g_opl1000_get_cfg[] OPENOPL1000_SHM_RODATA = "GET /cfg";
 static const char g_opl1000_get_index[] OPENOPL1000_SHM_RODATA = "GET /index";
-static const char g_opl1000_get_obk[] OPENOPL1000_SHM_RODATA = "GET /obk";
 static const char g_opl1000_http_header_fmt[] OPENOPL1000_SHM_RODATA =
 	"HTTP/1.1 %s\r\n"
 	"Connection: close\r\n"
@@ -221,13 +220,13 @@ static const char g_opl1000_status_json_fmt[] OPENOPL1000_SHM_RODATA =
 static const char g_opl1000_cmd_json_fmt[] OPENOPL1000_SHM_RODATA =
 	"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n";
 static const char g_opl1000_cfg_disabled_html[] OPENOPL1000_SHM_RODATA =
-	"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is available only through the experimental /obk/ gated path on v38.</p>"
+	"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled on this constrained v37b path.</p>"
 	"<p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n";
 static const char g_opl1000_home_fmt[] OPENOPL1000_SHM_RODATA =
 	"<html><body><h1>OpenOPL1000</h1>"
 	"<p><b>IP:</b> %s</p>"
 	"<p><b>Heap:</b> %u</p>"
-	"<p><b>Build path:</b> v38 split-M3 micro UI plus gated full-OBK probe</p>"
+	"<p><b>Build path:</b> v37b split-M3 micro UI</p>"
 	"<p><b>SHM:</b> HTTP helpers, UI strings and micro buffers are in 0x80000400..0x80003fff.</p>"
 	"<p><a href='/status'>status json</a></p>"
 	"<p>Commands:</p>"
@@ -241,8 +240,7 @@ static const char g_opl1000_home_fmt[] OPENOPL1000_SHM_RODATA =
 	"<input name='cmnd' value='Status' style='width:260px'>"
 	"<button type='submit'>Run command</button>"
 	"</form>"
-	"<p><small>Micro path is default. Experimental full OBK route is gated behind /obk/.</small></p>"
-	"<p><a href=\"/obk/\">Try /obk/ full OBK homepage</a> | <a href=\"/obk/cm?cmnd=Status\">/obk/cm?cmnd=Status</a></p>"
+	"<p><small>Full OBK HTTP_ProcessPacket remains disabled; this is the safe OPL1000 micro path.</small></p>"
 	"</body></html>\n";
 
 static int OPENOPL1000_SHM_HTTP opl1000_send_all(int fd, const char *data, int len)
@@ -416,65 +414,6 @@ static int OPENOPL1000_SHM_HTTP opl1000_handle_direct_cmnd(int fd, const char *b
 		g_opl1000_status_body);
 }
 
-
-/*
- * v38 experiment: keep the normal OPL1000 micro UI as the safe default, but add
- * a gated /obk/ prefix which strips the prefix and then calls the real OBK
- * HTTP_ProcessPacket() path.  This keeps the risky full-OBK route opt-in while
- * preserving /, /status and /cm?cmnd=... as the known-stable micro path.
- */
-static bool OPENOPL1000_SHM_HTTP opl1000_strip_obk_prefix(char *buf)
-{
-	if(strncmp(buf, "GET /obk/", 9) == 0)
-	{
-		/* "GET /obk/foo" -> "GET /foo" */
-		memmove(buf + 4, buf + 8, strlen(buf + 8) + 1);
-		return true;
-	}
-	if(strncmp(buf, "GET /obk ", 9) == 0)
-	{
-		/* "GET /obk HTTP/1.1" -> "GET / HTTP/1.1" */
-		memmove(buf + 5, buf + 8, strlen(buf + 8) + 1);
-		return true;
-	}
-	return false;
-}
-
-static int opl1000_try_full_obk_gated(int fd, http_request_t *request)
-{
-	int lenret;
-
-	if(!opl1000_strip_obk_prefix(request->received))
-	{
-		return 0;
-	}
-
-	memset(g_opl1000_micro_reply, 0, sizeof(g_opl1000_micro_reply));
-	request->fd = fd;
-	request->reply = g_opl1000_micro_reply;
-	request->replylen = 0;
-	request->replymaxlen = OPL1000_MICRO_REPLY_SIZE - 1;
-	request->responseCode = HTTP_RESPONSE_OK;
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 v38 gated full OBK before HTTP_ProcessPacket len %i heap %u",
-		request->receivedLen,
-		(unsigned int)xPortGetFreeHeapSize());
-
-	lenret = HTTP_ProcessPacket(request);
-
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 v38 gated full OBK rc %i heap %u",
-		lenret,
-		(unsigned int)xPortGetFreeHeapSize());
-
-	if(lenret > 0)
-	{
-		return opl1000_send_all(fd, request->reply, lenret);
-	}
-	return lenret;
-}
-
 static int OPENOPL1000_SHM_HTTP opl1000_micro_fallback(int fd, const char *buf)
 {
 	if(strncmp(buf, g_opl1000_get_favicon, sizeof(g_opl1000_get_favicon) - 1) == 0)
@@ -560,14 +499,7 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 		requestProbe->receivedLen,
 		(unsigned int)xPortGetFreeHeapSize());
 
-	if(strncmp(requestProbe->received, g_opl1000_get_obk, sizeof(g_opl1000_get_obk) - 1) == 0)
-	{
-		sendRc = opl1000_try_full_obk_gated(fd, requestProbe);
-	}
-	else
-	{
-		sendRc = opl1000_micro_fallback(fd, requestProbe->received);
-	}
+	sendRc = opl1000_micro_fallback(fd, requestProbe->received);
 	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
 
 exit:
@@ -865,11 +797,7 @@ void HTTPServer_Start()
 	err = rtos_create_thread(&g_http_thread, BEKEN_APPLICATION_PRIORITY,
 		"TCP_server",
 		(beken_thread_function_t)tcp_server_thread,
-#if PLATFORM_OPL1000
-		0x1000,
-#else
 		0x800,
-#endif
 		(beken_thread_arg_t)0);
 	if(err != kNoErr)
 	{
