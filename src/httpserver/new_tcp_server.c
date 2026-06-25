@@ -162,6 +162,8 @@ exit:
 #include "../cmnds/cmd_public.h"
 extern size_t xPortGetFreeHeapSize(void);
 
+#define OPENOPL1000_SHM_HTTP __attribute__((section("SHM_REGION"), noinline, used, long_call))
+
 /*
  * v24 keeps the v23 direct-command approach and adds a tiny micro UI.
  * v20 proved Wi-Fi/DHCP/TCP/browser micro-HTTP is stable with BLE disabled.
@@ -187,7 +189,7 @@ static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE];
 static http_request_t g_opl1000_request_probe;
 static struct sockaddr_storage g_opl1000_source_addr;
 
-static int opl1000_send_all(int fd, const char *data, int len)
+static int OPENOPL1000_SHM_HTTP opl1000_send_all(int fd, const char *data, int len)
 {
 	int sentTotal = 0;
 	while(sentTotal < len)
@@ -202,7 +204,7 @@ static int opl1000_send_all(int fd, const char *data, int len)
 	return sentTotal;
 }
 
-static int opl1000_http_write_response(int fd, const char *status, const char *ctype, const char *body)
+static int OPENOPL1000_SHM_HTTP opl1000_http_write_response(int fd, const char *status, const char *ctype, const char *body)
 {
 	int bodyLen = (int)strlen(body);
 	int len = snprintf(g_opl1000_micro_reply,
@@ -230,7 +232,7 @@ static int opl1000_http_write_response(int fd, const char *status, const char *c
 	return opl1000_send_all(fd, g_opl1000_micro_reply, len);
 }
 
-static int opl1000_hex_nibble(char c)
+static int OPENOPL1000_SHM_HTTP opl1000_hex_nibble(char c)
 {
 	if(c >= '0' && c <= '9') return c - '0';
 	if(c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -238,7 +240,7 @@ static int opl1000_hex_nibble(char c)
 	return -1;
 }
 
-static int opl1000_url_decode_token(const char *src, char *dst, int dstMax)
+static int OPENOPL1000_SHM_HTTP opl1000_url_decode_token(const char *src, char *dst, int dstMax)
 {
 	int out = 0;
 	if(dstMax <= 0)
@@ -275,7 +277,7 @@ static int opl1000_url_decode_token(const char *src, char *dst, int dstMax)
 	return out;
 }
 
-static bool opl1000_extract_cmnd(const char *buf, char *cmd, int cmdMax)
+static bool OPENOPL1000_SHM_HTTP opl1000_extract_cmnd(const char *buf, char *cmd, int cmdMax)
 {
 	const char *p = strstr(buf, "cmnd=");
 	if(p == NULL)
@@ -287,7 +289,7 @@ static bool opl1000_extract_cmnd(const char *buf, char *cmd, int cmdMax)
 	return opl1000_url_decode_token(p, cmd, cmdMax) > 0;
 }
 
-static const char *opl1000_cmd_rc_name(commandResult_t cr)
+static const char * OPENOPL1000_SHM_HTTP opl1000_cmd_rc_name(commandResult_t cr)
 {
 	switch(cr)
 	{
@@ -301,7 +303,7 @@ static const char *opl1000_cmd_rc_name(commandResult_t cr)
 	}
 }
 
-static void opl1000_json_escape_small(const char *src, char *dst, int dstMax)
+static void OPENOPL1000_SHM_HTTP opl1000_json_escape_small(const char *src, char *dst, int dstMax)
 {
 	int out = 0;
 	if(dstMax <= 0)
@@ -324,7 +326,7 @@ static void opl1000_json_escape_small(const char *src, char *dst, int dstMax)
 	dst[out] = 0;
 }
 
-static int opl1000_write_status(int fd, const char *httpTag)
+static int OPENOPL1000_SHM_HTTP opl1000_write_status(int fd, const char *httpTag)
 {
 	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
 		"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n",
@@ -338,7 +340,7 @@ static int opl1000_write_status(int fd, const char *httpTag)
 		g_opl1000_status_body);
 }
 
-static int opl1000_handle_direct_cmnd(int fd, const char *buf)
+static int OPENOPL1000_SHM_HTTP opl1000_handle_direct_cmnd(int fd, const char *buf)
 {
 	commandResult_t cr;
 	if(!opl1000_extract_cmnd(buf, g_opl1000_cmd, OPL1000_CMD_SIZE))
@@ -364,7 +366,7 @@ static int opl1000_handle_direct_cmnd(int fd, const char *buf)
 		g_opl1000_status_body);
 }
 
-static int opl1000_micro_fallback(int fd, const char *buf)
+static int OPENOPL1000_SHM_HTTP opl1000_micro_fallback(int fd, const char *buf)
 {
 	if(strncmp(buf, "GET /favicon.ico", 16) == 0)
 	{
@@ -379,7 +381,7 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 	}
 	else if(strncmp(buf, "GET /status", 11) == 0)
 	{
-		return opl1000_write_status(fd, "v23-micro");
+		return opl1000_write_status(fd, "v36-shm-http");
 	}
 	else if(strncmp(buf, "GET /cfg", 8) == 0 ||
 		strncmp(buf, "GET /index", 10) == 0)
@@ -394,7 +396,7 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 		"<html><body><h1>OpenOPL1000</h1>"
 		"<p>IP: %s</p>"
 		"<p>Heap: %u</p>"
-		"<p>v24 direct-command micro UI</p>"
+		"<p>v36 split-M3 micro UI</p>"
 		"<p><a href='/status'>status json</a></p>"
 		"<p><a href='/cm?cmnd=Status'>Status command</a></p>"
 		"<p><a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a></p>"
@@ -402,7 +404,7 @@ static int opl1000_micro_fallback(int fd, const char *buf)
 		"<input name='cmnd' value='Status' style='width:220px'>"
 		"<button type='submit'>Run command</button>"
 		"</form>"
-		"<p><small>Full GUI remains disabled until transport and heap are proven stable.</small></p>"
+		"<p><small>Selected micro-HTTP helpers are executing from the split-M3 SHM tail.</small></p>"
 		"</body></html>\n",
 		HAL_GetMyIPString(),
 		(unsigned int)xPortGetFreeHeapSize());

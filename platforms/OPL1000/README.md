@@ -322,3 +322,25 @@ Expected marker:
 ```
 
 If this survives to DHCP and TCP server startup, the remaining unsafe/owned area is likely below `0x80000400`. If it resets after `wifi_connection_connect rc=0`, use v34/high-14-KB as the proven-safe split-M3 boundary.
+
+
+## v36 split-M3 HTTP-helper migration probe
+
+v35 proved that the upper 15 KB of the 0x80000000-0x80004000 shared-memory window can execute split-M3 code while Wi-Fi STA, DHCP and the TCP server remain stable. v36 keeps the split-M3 base at 0x80000400 and moves selected OPL1000 micro-HTTP helper functions into `SHM_REGION`.
+
+Expected boot marker:
+
+```text
+[OpenOPL1000] split-M3 v36-http-shm: shm_fn=0x80000401 result=0xb881be0b
+```
+
+Then test:
+
+```text
+http://172.16.62.218/
+http://172.16.62.218/status
+http://172.16.62.218/cm?cmnd=Status
+http://172.16.62.218/cm?cmnd=Power%20Toggle
+```
+
+This is not expected to increase `xPortGetFreeHeapSize()` by itself. The success criterion is that real HTTP requests execute through relocated helper code without resetting or corrupting Wi-Fi.
