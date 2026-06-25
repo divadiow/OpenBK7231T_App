@@ -31,6 +31,7 @@
 
 #define OPENOPL1000_WIFI_READY_DELAY_MS      3000
 #define OPENOPL1000_SCAN_RESULT_WAIT_MS      3500
+#define OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS 12
 #define OPENOPL1000_ASSOC_WAIT_SECONDS       20
 #define OPENOPL1000_SCAN_RETRY_DELAY_MS      7000
 #define OPENOPL1000_SCAN_PASS_COUNT          5
@@ -203,7 +204,7 @@ static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
     wifiConfig.sta_config.threshold.rssi = -127;
 
     rc = wifi_set_config(WIFI_MODE_STA, &wifiConfig);
-    printf("[OpenOPL1000] worker: direct no-BSSID connect fallback set_config rc=%d heap=%u\r\n",
+    printf("[OpenOPL1000] worker: direct no-BSSID connect set_config rc=%d heap=%u\r\n",
            rc,
            OpenOPL1000_GetFreeHeap());
 
@@ -215,7 +216,22 @@ static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
     return rc;
 }
 
-static int OpenOPL1000_DoDelayedScanAndConnect(void)
+static bool OpenOPL1000_WaitForAssociation(unsigned int seconds)
+{
+    for (unsigned int i = 0; i < seconds; i++)
+    {
+        osDelay(1000);
+        if (OpenOPL1000_IsAssociated())
+        {
+            g_associated = true;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static int OpenOPL1000_DoScanAndConnect(void)
 {
     wifi_scan_config_t scanConfig;
     scan_report_t *report;
@@ -291,12 +307,37 @@ static int OpenOPL1000_DoDelayedScanAndConnect(void)
         osDelay(1000);
     }
 
-    /* Last resort: let the vendor connection code try a normal all-channel
-     * connection without a BSSID.  If the controller can find the SSID itself,
-     * this avoids our pre-scan cache limitation.  If it cannot, the existing
-     * association polling will fail and the worker will retry later.
+    return rc;
+}
+
+static void OpenOPL1000_DoConnectCycle(void)
+{
+    int rc;
+
+    /* First let the vendor connection manager try the configured SSID/password
+     * without forcing a BSSID from the small retained scan cache. In crowded RF
+     * environments this may find APs that are displaced from wifi_get_scan_result().
      */
-    return OpenOPL1000_TryDirectConnectWithoutBssid();
+    rc = OpenOPL1000_TryDirectConnectWithoutBssid();
+    if (rc == 0)
+    {
+        if (OpenOPL1000_WaitForAssociation(OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS))
+        {
+            return;
+        }
+
+        printf("[OpenOPL1000] worker: direct connect did not associate after %u seconds, trying targeted scans heap=%u\r\n",
+               (unsigned int)OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS,
+               OpenOPL1000_GetFreeHeap());
+    }
+    else
+    {
+        printf("[OpenOPL1000] worker: direct connect returned %d, trying targeted scans heap=%u\r\n",
+               rc,
+               OpenOPL1000_GetFreeHeap());
+    }
+
+    OpenOPL1000_DoScanAndConnect();
 }
 
 static bool OpenOPL1000_StartLwipAndPollForIp(void)
@@ -353,17 +394,8 @@ static void OpenOPL1000_WifiWorker(void *args)
     {
         if (!g_associated)
         {
-            OpenOPL1000_DoDelayedScanAndConnect();
-
-            for (int i = 0; i < OPENOPL1000_ASSOC_WAIT_SECONDS; i++)
-            {
-                osDelay(1000);
-                if (OpenOPL1000_IsAssociated())
-                {
-                    g_associated = true;
-                    break;
-                }
-            }
+            OpenOPL1000_DoConnectCycle();
+            OpenOPL1000_WaitForAssociation(OPENOPL1000_ASSOC_WAIT_SECONDS);
 
             if (!g_associated)
             {

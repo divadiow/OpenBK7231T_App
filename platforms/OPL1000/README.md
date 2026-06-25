@@ -413,3 +413,29 @@ Expected scan diagnostics:
 Success criteria: the device should find the `test` AP even when it is not one of the strongest few APs in the broad scan list, then associate, get DHCP, start the TCP server, and keep the v37b-style steady heap.
 
 Build note: v40b also defines `OPENOPL1000_SCAN_PASS_COUNT`; v40 missed this macro and failed to compile.
+
+## v41 direct-connect-first probe
+
+v41 keeps the v40b split-M3 and micro-HTTP base, but changes the Wi-Fi association order. The worker now first calls the vendor connection path with only the configured SSID/password and `bssid_present = 0`, then waits briefly for association. If that does not associate, it falls back to the v40b targeted-scan passes and final broad scan.
+
+The aim is to avoid depending on the SDK's small retained public scan list in crowded RF environments. If the vendor connection manager can perform its own internal scan, the `test` hotspot should connect even when it is not visible in the top few public scan records.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v41-direct-first: shm_fn=0x80000401 result=0xb881be0b
+```
+
+Useful log sequence:
+
+```text
+[OpenOPL1000] worker: direct no-BSSID wifi_connection_connect rc=...
+[OpenOPL1000] associated with 'test' ...
+```
+
+If direct connection does not associate, the fallback should still show the v40b targeted scan messages:
+
+```text
+[OpenOPL1000] worker: direct connect did not associate after 12 seconds, trying targeted scans ...
+[OpenOPL1000] worker: targeted scan pass 1/5 for SSID 'test' ...
+```
