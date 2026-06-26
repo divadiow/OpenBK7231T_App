@@ -669,7 +669,7 @@ extern void soc_module_clk_gate_disable(uint32_t gate_cfg);
 #define kNoErr                      0       //! No error occurred.
 #define rtos_delay_milliseconds sys_delay_ms
 typedef void* beken_thread_arg_t;
-typedef xTaskHandle beken_thread_t;
+typedef TaskHandle_t beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
