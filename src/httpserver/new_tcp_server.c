@@ -7,7 +7,6 @@
 #include "lwip/ip_addr.h"
 #include "lwip/inet.h"
 #include <string.h>
-#include <stdio.h>
 #include "../logging/logging.h"
 #include "../hal/hal_ota.h"
 #include "new_http.h"
@@ -30,7 +29,6 @@
 #define REPLY_BUFFER_SIZE          1024
 #define INCOMING_BUFFER_SIZE       768
 #define HTTP_CLIENT_STACK_SIZE     1024
-#define HTTP_SERVER_STACK_SIZE     0xC00
 #endif
 #ifndef MAX_SOCKETS_TCP
 #define MAX_SOCKETS_TCP MEMP_NUM_TCP_PCB
@@ -49,9 +47,6 @@ void HTTPServer_Start();
 #endif
 #ifndef HTTP_CLIENT_STACK_SIZE
 #define HTTP_CLIENT_STACK_SIZE		8192
-#endif
-#ifndef HTTP_SERVER_STACK_SIZE
-#define HTTP_SERVER_STACK_SIZE		0x800
 #endif
 typedef struct
 {
@@ -166,9 +161,7 @@ exit:
 #include "../cmnds/cmd_public.h"
 extern size_t xPortGetFreeHeapSize(void);
 
-#define OPENOPL1000_SHM_HTTP   __attribute__((section(".shm_text"), noinline, used, long_call))
 #define OPENOPL1000_SHM_DATA   __attribute__((section(".shm_data"), used, aligned(4)))
-#define OPENOPL1000_SHM_RODATA __attribute__((section(".shm_rodata"), used, aligned(4)))
 #define OPL1000_HTTP_TRACE     0
 
 /*
@@ -385,7 +378,7 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 	}
 	ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "Socket bound on 0.0.0.0:%i", HTTP_SERVER_PORT);
 
-	#if PLATFORM_OPL1000
+#if PLATFORM_OPL1000
 	err = listen(listen_sock, 1);
 #else
 	err = listen(listen_sock, 0);
@@ -403,7 +396,6 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 		socklen_t addr_len = sizeof(g_opl1000_source_addr);
 #else
 		struct sockaddr_storage source_addr;
-		struct sockaddr_storage *source_addr_ptr = &source_addr;
 		socklen_t addr_len = sizeof(source_addr);
 #endif
 
@@ -430,7 +422,22 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 		}
 		if(new_idx < max_socks)
 		{
+#if PLATFORM_OPL1000
 			sock[new_idx].fd = accept(listen_sock, (struct sockaddr*)source_addr_ptr, &addr_len);
+#else
+			sock[new_idx].fd = accept(listen_sock, (struct sockaddr*)&source_addr, &addr_len);
+
+#if LWIP_SO_RCVTIMEO
+#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
+			int tv = 30 * 1000;
+#else
+			struct timeval tv;
+			tv.tv_sec = 30;
+			tv.tv_usec = 0;
+#endif
+			setsockopt(sock[new_idx].fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+#endif
+#endif
 
 			if(sock[new_idx].fd < 0)
 			{
@@ -460,26 +467,18 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 			}
 			else
 			{
+#if PLATFORM_OPL1000
 #if LWIP_SO_RCVTIMEO
 #if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
-#if PLATFORM_OPL1000
 				int tv = 3 * 1000;
 #else
-				int tv = 30 * 1000;
-#endif
-#else
 				struct timeval tv;
-#if PLATFORM_OPL1000
 				tv.tv_sec = 3;
-#else
-				tv.tv_sec = 30;
-#endif
 				tv.tv_usec = 0;
 #endif
 				setsockopt(sock[new_idx].fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 #endif
 				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
-#if PLATFORM_OPL1000
 #if OPL1000_HTTP_TRACE
 				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
 #endif
@@ -553,7 +552,11 @@ void HTTPServer_Start()
 	err = rtos_create_thread(&g_http_thread, BEKEN_APPLICATION_PRIORITY,
 		"TCP_server",
 		(beken_thread_function_t)tcp_server_thread,
-		HTTP_SERVER_STACK_SIZE,
+#if PLATFORM_OPL1000
+		0xC00,
+#else
+		0x800,
+#endif
 		(beken_thread_arg_t)0);
 	if(err != kNoErr)
 	{
