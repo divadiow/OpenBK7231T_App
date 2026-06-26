@@ -159,10 +159,8 @@ exit:
 #if PLATFORM_OPL1000
 #include "../hal/hal_wifi.h"
 #include "../cmnds/cmd_public.h"
-extern size_t xPortGetFreeHeapSize(void);
 
 #define OPENOPL1000_SHM_DATA   __attribute__((section(".shm_data"), used, aligned(4)))
-#define OPL1000_HTTP_TRACE     0
 
 /*
  * v37b builds on v36 and the proven v35/v36 split-M3 layout:
@@ -223,21 +221,8 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 
 	if(request->receivedLen <= 0)
 	{
-#if OPL1000_HTTP_TRACE
-		ADDLOG_INFO(LOG_FEATURE_HTTP,
-			"OPL1000 empty client connection closed, fd %d heap %u",
-			fd,
-			(unsigned int)xPortGetFreeHeapSize());
-#endif
 		goto exit;
 	}
-
-#if OPL1000_HTTP_TRACE
-	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 full OBK request len %i heap %u",
-		request->receivedLen,
-		(unsigned int)xPortGetFreeHeapSize());
-#endif
 
 	lenret = HTTP_ProcessPacket(request);
 	if(lenret > 0 && request->replylen > 0)
@@ -245,9 +230,6 @@ static void tcp_client_process_sync(tcp_thread_t* arg)
 		send(fd, request->reply, request->replylen, 0);
 		request->replylen = 0;
 	}
-#if OPL1000_HTTP_TRACE
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 full OBK reply len %i heap %u", lenret, (unsigned int)xPortGetFreeHeapSize());
-#endif
 
 exit:
 	if(fd != INVALID_SOCK)
@@ -477,10 +459,6 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 				tv.tv_usec = 0;
 #endif
 				setsockopt(sock[new_idx].fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-#endif
-				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
-#if OPL1000_HTTP_TRACE
-				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
 #endif
 				tcp_client_process_sync(&sock[new_idx]);
 #else
