@@ -953,17 +953,13 @@ int HTTP_ProcessPacket(http_request_t *request)
 	if (http_checkUrlBase(urlStr, ""))
 		return http_fn_empty_url(request);
 
-#if !OBK_OPL1000_MINIMAL_WEB
 	if (http_checkUrlBase(urlStr, "testmsg"))
 		return http_fn_testmsg(request);
-#endif
 	if (http_checkUrlBase(urlStr, "index"))
 		return http_fn_index(request);
 
-#if !OBK_OPL1000_MINIMAL_WEB
 	if (http_checkUrlBase(urlStr, "about"))
 		return http_fn_about(request);
-#endif
 
 #if ENABLE_HTTP_MQTT
 	if (http_checkUrlBase(urlStr, "cfg_mqtt"))
@@ -1005,10 +1001,8 @@ int HTTP_ProcessPacket(http_request_t *request)
 	if (http_checkUrlBase(urlStr, "cfg_mac"))
 		return http_fn_cfg_mac(request);
 #endif
-#if !OBK_OPL1000_MINIMAL_WEB
 	if (http_checkUrlBase(urlStr, "cmd_tool"))
 		return http_fn_cmd_tool(request);
-#endif
 
 #if ENABLE_HTTP_STARTUP
 	if (http_checkUrlBase(urlStr, "startup_command"))
@@ -1036,21 +1030,17 @@ int HTTP_ProcessPacket(http_request_t *request)
 	if (http_checkUrlBase(urlStr, "cfg"))
 		return http_fn_cfg(request);
 
-#if !OBK_OPL1000_MINIMAL_WEB
 	if (http_checkUrlBase(urlStr, "cfg_pins"))
 		return http_fn_cfg_pins(request);
-#endif
 #if ENABLE_HTTP_PING
 	if (http_checkUrlBase(urlStr, "cfg_ping"))
 		return http_fn_cfg_ping(request);
 #endif
 
-#if !OBK_OPL1000_MINIMAL_WEB
 	if (http_checkUrlBase(urlStr, "ota"))
 		return http_fn_ota(request);
 	if (http_checkUrlBase(urlStr, "ota_exec"))
 		return http_fn_ota_exec(request);
-#endif
 	if (http_checkUrlBase(urlStr, "cm"))
 		return http_fn_cm(request);
 

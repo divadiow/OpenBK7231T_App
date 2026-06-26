@@ -1364,9 +1364,8 @@ void Main_Init_BeforeDelay_Unsafe(bool bAutoRunScripts) {
 	PIN_SetGenericDoubleClickCallback(app_on_generic_dbl_click);
 	ADDLOGF_DEBUG("Initialised other callbacks");
 
-	// initialise REST interface. OPL1000 patch RAM is very tight; keep first
-	// full-HTTP pass on the classic OBK pages/command endpoint.
-#ifndef OBK_OPL1000_NO_REST
+	// initialise REST interface
+#if !PLATFORM_OPL1000 || !defined(OBK_OPL1000_NO_REST)
 	init_rest();
 #endif
 
