@@ -35,6 +35,8 @@
 #define OPENOPL1000_ASSOC_WAIT_SECONDS        30
 #define OPENOPL1000_SCAN_RETRY_DELAY_MS       10000
 #define OPENOPL1000_SCAN_PASS_COUNT           4
+#define OPENOPL1000_DEEP_SCAN_WAIT_MS         1500
+#define OPENOPL1000_DEEP_SCAN_MAX_CHANNEL     13
 #define OPENOPL1000_WIFI_VERBOSE_SCAN         0
 #define OPENOPL1000_NETINFO_TRACE             0
 #define OPENOPL1000_CONNECT_NO_SCAN_MATCH     (-1002)
@@ -387,6 +389,60 @@ static int OpenOPL1000_DoScanAndConnect(void)
     return rc;
 }
 
+static int OpenOPL1000_DoDeepChannelScanAndConnect(void)
+{
+    wifi_scan_config_t scanConfig;
+    scan_report_t *report;
+    int rc = -1;
+
+    printf("[OpenOPL1000] worker: SSID '%s' not found; starting per-channel passive scan\r\n",
+           g_ssid);
+
+    for (int channel = 1; channel <= OPENOPL1000_DEEP_SCAN_MAX_CHANNEL; channel++)
+    {
+        memset(&scanConfig, 0, sizeof(scanConfig));
+        scanConfig.ssid = (uint8_t *)g_ssid;
+        scanConfig.channel = (uint8_t)channel;
+        scanConfig.show_hidden = true;
+        scanConfig.scan_type = WIFI_SCAN_TYPE_PASSIVE;
+        scanConfig.scan_time.passive = OPENOPL1000_DEEP_SCAN_WAIT_MS;
+
+        printf("[OpenOPL1000] worker: deep passive scan ch=%d wait=%ums heap=%u\r\n",
+               channel,
+               (unsigned int)OPENOPL1000_DEEP_SCAN_WAIT_MS,
+               OpenOPL1000_GetFreeHeap());
+
+        rc = wifi_scan_start(&scanConfig, false);
+        if (rc != 0)
+        {
+            printf("[OpenOPL1000] worker: deep scan ch=%d start rc=%d\r\n",
+                   channel,
+                   rc);
+            osDelay(250);
+            continue;
+        }
+
+        osDelay(OPENOPL1000_DEEP_SCAN_WAIT_MS + 250);
+
+        report = wifi_get_scan_result ? wifi_get_scan_result() : NULL;
+        if (OpenOPL1000_UpdateBestApFromReport(report))
+        {
+            printf("[OpenOPL1000] worker: deep scan found SSID '%s' on ch=%d\r\n",
+                   g_ssid,
+                   channel);
+            rc = OpenOPL1000_TryDirectConnectWithoutBssid();
+            if (OpenOPL1000_WaitForAssociation(OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS))
+            {
+                return 0;
+            }
+
+            return rc;
+        }
+    }
+
+    return OPENOPL1000_CONNECT_NO_SCAN_MATCH;
+}
+
 static void OpenOPL1000_DoConnectCycle(void)
 {
     int rc;
@@ -404,10 +460,19 @@ static void OpenOPL1000_DoConnectCycle(void)
 
     if (rc == OPENOPL1000_CONNECT_NO_SCAN_MATCH)
     {
-        printf("[OpenOPL1000] worker: SSID '%s' not found in scan results; skipping blind connect heap=%u\r\n",
-               g_ssid,
-               OpenOPL1000_GetFreeHeap());
-        return;
+        rc = OpenOPL1000_DoDeepChannelScanAndConnect();
+        if (OpenOPL1000_IsAssociated())
+        {
+            return;
+        }
+
+        if (rc == OPENOPL1000_CONNECT_NO_SCAN_MATCH)
+        {
+            printf("[OpenOPL1000] worker: SSID '%s' not found after deep scan; skipping blind connect heap=%u\r\n",
+                   g_ssid,
+                   OpenOPL1000_GetFreeHeap());
+            return;
+        }
     }
 
     if (g_connectionFailed)
