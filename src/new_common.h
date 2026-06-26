@@ -458,7 +458,7 @@ typedef int (*beken_thread_function_t)(void *p);
 
 #define kNoErr                      0       //! No error occurred.
 typedef void *beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)( beken_thread_arg_t arg );
 typedef int OSStatus;
 
@@ -615,7 +615,7 @@ OSStatus rtos_suspend_thread(beken_thread_t* thread);
 #define kNoErr                      0       //! No error occurred.
 #define rtos_delay_milliseconds OS_MsDelay
 typedef void *beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)( beken_thread_arg_t arg );
 typedef int OSStatus;
 
@@ -669,7 +669,7 @@ extern void soc_module_clk_gate_disable(uint32_t gate_cfg);
 #define kNoErr                      0       //! No error occurred.
 #define rtos_delay_milliseconds sys_delay_ms
 typedef void* beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -731,7 +731,7 @@ typedef unsigned int UINT32;
 
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -836,7 +836,7 @@ extern u32 pwmout_pin2chan(PinName pin);
 
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -893,7 +893,7 @@ extern void sys_delay_ms(uint32_t ms);
 #define lwip_close_force(x) lwip_close(x)
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -1058,7 +1058,7 @@ typedef unsigned int UINT32;
 #define lwip_close_force(x) lwip_close(x)
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
@@ -1175,7 +1175,7 @@ typedef unsigned int UINT32;
 #define lwip_close_force(x) lwip_close(x)
 #define kNoErr                      0       //! No error occurred.
 typedef void* beken_thread_arg_t;
-typedef TaskHandle_t beken_thread_t;
+typedef xTaskHandle beken_thread_t;
 typedef void (*beken_thread_function_t)(beken_thread_arg_t arg);
 typedef int OSStatus;
 
