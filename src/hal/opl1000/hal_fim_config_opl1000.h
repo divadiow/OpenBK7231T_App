@@ -1,0 +1,29 @@
+#ifndef HAL_FIM_CONFIG_OPL1000_H
+#define HAL_FIM_CONFIG_OPL1000_H
+
+#if PLATFORM_OPL1000
+
+#include "mw_fim.h"
+#include "new_pins.h"
+#include "../hal_flashVars.h"
+
+#define OPENOPL1000_FIM_ZONE_BASE_ADDR  0x00090000
+#define OPENOPL1000_FIM_ZONE_BLOCK_SIZE 0x1000
+#define OPENOPL1000_FIM_ZONE_BLOCK_NUM  3
+
+#define OPENOPL1000_FIM_CFG_FILE_ID     0x01010001
+#define OPENOPL1000_FIM_CFG_RECORDS     1
+#define OPENOPL1000_FIM_CFG_SIZE        sizeof(mainConfig_t)
+#define OPENOPL1000_FIM_CFG_VERSION     0x01
+
+#define OPENOPL1000_FIM_FLASHVARS_FILE_ID 0x01010002
+#define OPENOPL1000_FIM_FLASHVARS_RECORDS 1
+#define OPENOPL1000_FIM_FLASHVARS_SIZE    MAGIC_FLASHVARS_SIZE
+
+extern const T_MwFimFileInfo g_OpenOPL1000FimGroupTable11[];
+
+void OpenOPL1000_FimRegister(void);
+
+#endif
+
+#endif

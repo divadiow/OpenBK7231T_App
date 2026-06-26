@@ -16,6 +16,7 @@
 #include "sys_init.h"
 #include "sys_init_patch.h"
 #include "sys_os_config.h"
+#include "hal_fim_config_opl1000.h"
 
 static E_IO01_UART_MODE s_io01UartMode;
 
@@ -33,12 +34,16 @@ static void Main_AtUartDbgUartSwitch(void);
 static void Main_ApsUartRxDectecConfig(void);
 static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx);
 static void Main_AppInit_patch(void);
+static void OpenOPL1000_PrintRamLayout(void);
 static void OpenOPL1000_OpenBekenTask(void *args);
 static void OpenOPL1000_EarlyLog(const char *text);
 static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value) OPENOPL1000_SHM_CODE;
 
 extern void Main_Init(void);
 extern void Main_OnEverySecond(void);
+extern uint8_t __bss_end__;
+extern uint8_t __shm_region_start__;
+extern uint8_t __shm_region_end__;
 
 typedef void (*T_Main_AppInit_fp)(void);
 extern T_Main_AppInit_fp Main_AppInit;
@@ -58,6 +63,10 @@ extern void (*tracer_load)(void);
 extern void (*tcpip_config_dhcp_arp_check_init)(void);
 extern int (*nl_scrt_Init)(void);
 extern void (*sys_cfg_init)(void);
+extern uint32_t g_u32IpcWifiBssInfoAddr;
+extern uint32_t g_u32IpcWifiDbgParamAddr;
+extern uint32_t g_u32IpcWifiStaInfoAddr;
+extern uint32_t g_u32IpcPsConfAddr;
 
 static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value)
 {
@@ -70,6 +79,39 @@ static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value)
     value += 0x12345678u;
     value ^= 0x0F0F0F0Fu;
     return value;
+}
+
+static void OpenOPL1000_PrintRamLayout(void)
+{
+    uintptr_t bssEnd = (uintptr_t)&__bss_end__;
+    uintptr_t shmStart = (uintptr_t)&__shm_region_start__;
+    uintptr_t shmEnd = (uintptr_t)&__shm_region_end__;
+    volatile uint32_t *shmBase = (volatile uint32_t *)0x80000000u;
+    volatile uint32_t *shmGuardEnd = (volatile uint32_t *)0x800003F0u;
+
+    printf("[OpenOPL1000] RAM layout: bss_end=0x%08x iram_free_to_440000=%u shm=0x%08x..0x%08x used=%u free=%u\r\n",
+           (unsigned int)bssEnd,
+           (unsigned int)(0x00440000u - bssEnd),
+           (unsigned int)shmStart,
+           (unsigned int)shmEnd,
+           (unsigned int)(shmEnd - shmStart),
+           (unsigned int)(0x80004000u - shmEnd));
+
+    printf("[OpenOPL1000] IPC dyn addrs: bss=0x%08x dbg=0x%08x sta=0x%08x ps=0x%08x\r\n",
+           (unsigned int)g_u32IpcWifiBssInfoAddr,
+           (unsigned int)g_u32IpcWifiDbgParamAddr,
+           (unsigned int)g_u32IpcWifiStaInfoAddr,
+           (unsigned int)g_u32IpcPsConfAddr);
+
+    printf("[OpenOPL1000] SHM guard sample: 80000000=%08x %08x %08x %08x / 800003f0=%08x %08x %08x %08x\r\n",
+           (unsigned int)shmBase[0],
+           (unsigned int)shmBase[1],
+           (unsigned int)shmBase[2],
+           (unsigned int)shmBase[3],
+           (unsigned int)shmGuardEnd[0],
+           (unsigned int)shmGuardEnd[1],
+           (unsigned int)shmGuardEnd[2],
+           (unsigned int)shmGuardEnd[3]);
 }
 
 void __Patch_EntryPoint(void)
@@ -124,6 +166,7 @@ static void Main_PinMuxUpdate(void)
 
 static void Main_FlashLayoutUpdate(void)
 {
+    OpenOPL1000_FimRegister();
 }
 
 static void Main_ServiceInitNoBle(void)
@@ -345,10 +388,12 @@ static void Main_AppInit_patch(void)
 
     {
         uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);
-        printf("[OpenOPL1000] split-M3 v41-direct-first: shm_fn=0x%08x result=0x%08x\r\n",
+        printf("[OpenOPL1000] split-M3 v53-reset-countdown-diag: shm_fn=0x%08x result=0x%08x\r\n",
                (unsigned int)(uintptr_t)OpenOPL1000_ShmProbeFn,
                (unsigned int)shmProbe);
     }
+
+    OpenOPL1000_PrintRamLayout();
 
     memset(&threadDef, 0, sizeof(threadDef));
     threadDef.name = "openbeken";

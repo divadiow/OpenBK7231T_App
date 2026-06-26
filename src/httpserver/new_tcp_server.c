@@ -30,6 +30,7 @@
 #define REPLY_BUFFER_SIZE          1024
 #define INCOMING_BUFFER_SIZE       768
 #define HTTP_CLIENT_STACK_SIZE     1024
+#define HTTP_SERVER_STACK_SIZE     0xC00
 #endif
 #ifndef MAX_SOCKETS_TCP
 #define MAX_SOCKETS_TCP MEMP_NUM_TCP_PCB
@@ -48,6 +49,9 @@ void HTTPServer_Start();
 #endif
 #ifndef HTTP_CLIENT_STACK_SIZE
 #define HTTP_CLIENT_STACK_SIZE		8192
+#endif
+#ifndef HTTP_SERVER_STACK_SIZE
+#define HTTP_SERVER_STACK_SIZE		0x800
 #endif
 typedef struct
 {
@@ -165,342 +169,92 @@ extern size_t xPortGetFreeHeapSize(void);
 #define OPENOPL1000_SHM_HTTP   __attribute__((section(".shm_text"), noinline, used, long_call))
 #define OPENOPL1000_SHM_DATA   __attribute__((section(".shm_data"), used, aligned(4)))
 #define OPENOPL1000_SHM_RODATA __attribute__((section(".shm_rodata"), used, aligned(4)))
+#define OPL1000_HTTP_TRACE     0
 
 /*
  * v37b builds on v36 and the proven v35/v36 split-M3 layout:
  *   usable application-owned SHM tail: 0x80000400 .. 0x80003fff
  *   avoided vendor/IPC-owned bottom:   0x80000000 .. 0x800003ff
  *
- * Keep the transport path small and synchronous.  Do not call the full
- * HTTP_ProcessPacket() path here; v26 proved that route overflows the TCP_server
- * stack on OPL1000.  Instead, expose a larger but still controlled micro UI and
- * direct /cm?cmnd= command bridge.
+ * Keep the transport path synchronous and single-client, but run the stock
+ * OpenBeken HTTP parser.  postany() streams replies when this scratch buffer
+ * fills, so OPL1000 does not need a huge per-client reply allocation.
  */
-#define OPL1000_MICRO_REQ_SIZE    768
-#define OPL1000_MICRO_REPLY_SIZE  1408
-#define OPL1000_STATUS_BODY_SIZE  320
-#define OPL1000_PAGE_BODY_SIZE    1152
-#define OPL1000_CMD_SIZE          128
+#define OPL1000_HTTP_REQ_SIZE    1152
+#define OPL1000_HTTP_REPLY_SIZE  1024
 
-/* v37b: keep the live micro-HTTP working set in the split-M3 SHM tail. */
-static char g_opl1000_micro_req[OPL1000_MICRO_REQ_SIZE] OPENOPL1000_SHM_DATA = {0};
-static char g_opl1000_micro_reply[OPL1000_MICRO_REPLY_SIZE] OPENOPL1000_SHM_DATA = {0};
-static char g_opl1000_status_body[OPL1000_STATUS_BODY_SIZE] OPENOPL1000_SHM_DATA = {0};
-static char g_opl1000_page_body[OPL1000_PAGE_BODY_SIZE] OPENOPL1000_SHM_DATA = {0};
-static char g_opl1000_cmd[OPL1000_CMD_SIZE] OPENOPL1000_SHM_DATA = {0};
-static char g_opl1000_cmd_escaped[OPL1000_CMD_SIZE] OPENOPL1000_SHM_DATA = {0};
-static http_request_t g_opl1000_request_probe OPENOPL1000_SHM_DATA = {0};
+/* Keep the live OPL1000 HTTP working set in the split-M3 SHM tail. */
+static char g_opl1000_http_req[OPL1000_HTTP_REQ_SIZE] OPENOPL1000_SHM_DATA = {0};
+static char g_opl1000_http_reply[OPL1000_HTTP_REPLY_SIZE] OPENOPL1000_SHM_DATA = {0};
+static http_request_t g_opl1000_http_request OPENOPL1000_SHM_DATA = {0};
 static struct sockaddr_storage g_opl1000_source_addr OPENOPL1000_SHM_DATA = {0};
-
-static const char g_opl1000_http_200[] OPENOPL1000_SHM_RODATA = "200 OK";
-static const char g_opl1000_http_400[] OPENOPL1000_SHM_RODATA = "400 Bad Request";
-static const char g_opl1000_http_404[] OPENOPL1000_SHM_RODATA = "404 Not Found";
-static const char g_opl1000_http_503[] OPENOPL1000_SHM_RODATA = "503 Service Unavailable";
-static const char g_opl1000_ctype_json[] OPENOPL1000_SHM_RODATA = "application/json";
-static const char g_opl1000_ctype_html[] OPENOPL1000_SHM_RODATA = "text/html";
-static const char g_opl1000_ctype_plain[] OPENOPL1000_SHM_RODATA = "text/plain";
-static const char g_opl1000_missing_cmnd_json[] OPENOPL1000_SHM_RODATA = "{\"error\":\"missing cmnd\"}\n";
-static const char g_opl1000_not_found_body[] OPENOPL1000_SHM_RODATA = "not found\n";
-static const char g_opl1000_status_tag[] OPENOPL1000_SHM_RODATA = "v37b-shm-ui";
-static const char g_opl1000_get_favicon[] OPENOPL1000_SHM_RODATA = "GET /favicon.ico";
-static const char g_opl1000_get_cm[] OPENOPL1000_SHM_RODATA = "GET /cm?";
-static const char g_opl1000_get_status[] OPENOPL1000_SHM_RODATA = "GET /status";
-static const char g_opl1000_get_cfg[] OPENOPL1000_SHM_RODATA = "GET /cfg";
-static const char g_opl1000_get_index[] OPENOPL1000_SHM_RODATA = "GET /index";
-static const char g_opl1000_http_header_fmt[] OPENOPL1000_SHM_RODATA =
-	"HTTP/1.1 %s\r\n"
-	"Connection: close\r\n"
-	"Content-Type: %s\r\n"
-	"Content-Length: %d\r\n"
-	"Cache-Control: no-store\r\n"
-	"\r\n"
-	"%s";
-static const char g_opl1000_status_json_fmt[] OPENOPL1000_SHM_RODATA =
-	"{\"app\":\"OpenOPL1000\",\"ip\":\"%s\",\"heap\":%u,\"wifi\":%d,\"http\":\"%s\"}\n";
-static const char g_opl1000_cmd_json_fmt[] OPENOPL1000_SHM_RODATA =
-	"{\"app\":\"OpenOPL1000\",\"cmd\":\"%s\",\"cmd_rc\":%d,\"cmd_result\":\"%s\",\"heap\":%u,\"wifi\":%d}\n";
-static const char g_opl1000_cfg_disabled_html[] OPENOPL1000_SHM_RODATA =
-	"<html><body><h1>OpenOPL1000</h1><p>Full OBK GUI route is disabled on this constrained v37b path.</p>"
-	"<p>Use /, /status, or /cm?cmnd=Status.</p></body></html>\n";
-static const char g_opl1000_home_fmt[] OPENOPL1000_SHM_RODATA =
-	"<html><body><h1>OpenOPL1000</h1>"
-	"<p><b>IP:</b> %s</p>"
-	"<p><b>Heap:</b> %u</p>"
-	"<p><b>Build path:</b> v37b split-M3 micro UI</p>"
-	"<p><b>SHM:</b> HTTP helpers, UI strings and micro buffers are in 0x80000400..0x80003fff.</p>"
-	"<p><a href='/status'>status json</a></p>"
-	"<p>Commands:</p>"
-	"<p>"
-	"<a href='/cm?cmnd=Status'>Status</a> | "
-	"<a href='/cm?cmnd=Power%%20Toggle'>Power Toggle</a> | "
-	"<a href='/cm?cmnd=Power%%20On'>Power On</a> | "
-	"<a href='/cm?cmnd=Power%%20Off'>Power Off</a>"
-	"</p>"
-	"<form action='/cm' method='get'>"
-	"<input name='cmnd' value='Status' style='width:260px'>"
-	"<button type='submit'>Run command</button>"
-	"</form>"
-	"<p><small>Full OBK HTTP_ProcessPacket remains disabled; this is the safe OPL1000 micro path.</small></p>"
-	"</body></html>\n";
-
-static int OPENOPL1000_SHM_HTTP opl1000_send_all(int fd, const char *data, int len)
-{
-	int sentTotal = 0;
-	while(sentTotal < len)
-	{
-		int sent = send(fd, data + sentTotal, len - sentTotal, 0);
-		if(sent <= 0)
-		{
-			return sent;
-		}
-		sentTotal += sent;
-	}
-	return sentTotal;
-}
-
-static int OPENOPL1000_SHM_HTTP opl1000_http_write_response(int fd, const char *status, const char *ctype, const char *body)
-{
-	int bodyLen = (int)strlen(body);
-	int len = snprintf(g_opl1000_micro_reply,
-		OPL1000_MICRO_REPLY_SIZE,
-		g_opl1000_http_header_fmt,
-		status,
-		ctype,
-		bodyLen,
-		body);
-
-	if(len <= 0)
-	{
-		return len;
-	}
-	if(len >= OPL1000_MICRO_REPLY_SIZE)
-	{
-		len = OPL1000_MICRO_REPLY_SIZE - 1;
-	}
-	return opl1000_send_all(fd, g_opl1000_micro_reply, len);
-}
-
-static int OPENOPL1000_SHM_HTTP opl1000_hex_nibble(char c)
-{
-	if(c >= '0' && c <= '9') return c - '0';
-	if(c >= 'a' && c <= 'f') return c - 'a' + 10;
-	if(c >= 'A' && c <= 'F') return c - 'A' + 10;
-	return -1;
-}
-
-static int OPENOPL1000_SHM_HTTP opl1000_url_decode_token(const char *src, char *dst, int dstMax)
-{
-	int out = 0;
-	if(dstMax <= 0)
-	{
-		return 0;
-	}
-	while(*src && *src != ' ' && *src != '&' && *src != '\r' && *src != '\n' && out < (dstMax - 1))
-	{
-		if(*src == '+')
-		{
-			dst[out++] = ' ';
-			src++;
-		}
-		else if(*src == '%' && src[1] && src[2])
-		{
-			int hi = opl1000_hex_nibble(src[1]);
-			int lo = opl1000_hex_nibble(src[2]);
-			if(hi >= 0 && lo >= 0)
-			{
-				dst[out++] = (char)((hi << 4) | lo);
-				src += 3;
-			}
-			else
-			{
-				dst[out++] = *src++;
-			}
-		}
-		else
-		{
-			dst[out++] = *src++;
-		}
-	}
-	dst[out] = 0;
-	return out;
-}
-
-static bool OPENOPL1000_SHM_HTTP opl1000_extract_cmnd(const char *buf, char *cmd, int cmdMax)
-{
-	const char *p = strstr(buf, "cmnd=");
-	if(p == NULL)
-	{
-		cmd[0] = 0;
-		return false;
-	}
-	p += 5;
-	return opl1000_url_decode_token(p, cmd, cmdMax) > 0;
-}
-
-static const char * OPENOPL1000_SHM_HTTP opl1000_cmd_rc_name(commandResult_t cr)
-{
-	switch(cr)
-	{
-	case CMD_RES_OK: return "OK";
-	case CMD_RES_UNKNOWN_COMMAND: return "UNKNOWN_COMMAND";
-	case CMD_RES_NOT_ENOUGH_ARGUMENTS: return "NOT_ENOUGH_ARGUMENTS";
-	case CMD_RES_EMPTY_STRING: return "EMPTY_STRING";
-	case CMD_RES_BAD_ARGUMENT: return "BAD_ARGUMENT";
-	case CMD_RES_ERROR: return "ERROR";
-	default: return "UNKNOWN_RESULT";
-	}
-}
-
-static void OPENOPL1000_SHM_HTTP opl1000_json_escape_small(const char *src, char *dst, int dstMax)
-{
-	int out = 0;
-	if(dstMax <= 0)
-	{
-		return;
-	}
-	while(*src && out < (dstMax - 1))
-	{
-		char c = *src++;
-		if((c == '"' || c == '\\') && out < (dstMax - 2))
-		{
-			dst[out++] = '\\';
-			dst[out++] = c;
-		}
-		else if(c >= 32 && c < 127)
-		{
-			dst[out++] = c;
-		}
-	}
-	dst[out] = 0;
-}
-
-static int OPENOPL1000_SHM_HTTP opl1000_write_status(int fd, const char *httpTag)
-{
-	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-		g_opl1000_status_json_fmt,
-		HAL_GetMyIPString(),
-		(unsigned int)xPortGetFreeHeapSize(),
-		Main_IsConnectedToWiFi() ? 1 : 0,
-		httpTag);
-	return opl1000_http_write_response(fd,
-		g_opl1000_http_200,
-		g_opl1000_ctype_json,
-		g_opl1000_status_body);
-}
-
-static int OPENOPL1000_SHM_HTTP opl1000_handle_direct_cmnd(int fd, const char *buf)
-{
-	commandResult_t cr;
-	if(!opl1000_extract_cmnd(buf, g_opl1000_cmd, OPL1000_CMD_SIZE))
-	{
-		return opl1000_http_write_response(fd,
-			g_opl1000_http_400,
-			g_opl1000_ctype_json,
-			g_opl1000_missing_cmnd_json);
-	}
-
-	cr = CMD_ExecuteCommand(g_opl1000_cmd, COMMAND_FLAG_SOURCE_HTTP);
-	opl1000_json_escape_small(g_opl1000_cmd, g_opl1000_cmd_escaped, sizeof(g_opl1000_cmd_escaped));
-	snprintf(g_opl1000_status_body, sizeof(g_opl1000_status_body),
-		g_opl1000_cmd_json_fmt,
-		g_opl1000_cmd_escaped,
-		(int)cr,
-		opl1000_cmd_rc_name(cr),
-		(unsigned int)xPortGetFreeHeapSize(),
-		Main_IsConnectedToWiFi() ? 1 : 0);
-	return opl1000_http_write_response(fd,
-		g_opl1000_http_200,
-		g_opl1000_ctype_json,
-		g_opl1000_status_body);
-}
-
-static int OPENOPL1000_SHM_HTTP opl1000_micro_fallback(int fd, const char *buf)
-{
-	if(strncmp(buf, g_opl1000_get_favicon, sizeof(g_opl1000_get_favicon) - 1) == 0)
-	{
-		return opl1000_http_write_response(fd,
-			g_opl1000_http_404,
-			g_opl1000_ctype_plain,
-			g_opl1000_not_found_body);
-	}
-	else if(strncmp(buf, g_opl1000_get_cm, sizeof(g_opl1000_get_cm) - 1) == 0)
-	{
-		return opl1000_handle_direct_cmnd(fd, buf);
-	}
-	else if(strncmp(buf, g_opl1000_get_status, sizeof(g_opl1000_get_status) - 1) == 0)
-	{
-		return opl1000_write_status(fd, g_opl1000_status_tag);
-	}
-	else if(strncmp(buf, g_opl1000_get_cfg, sizeof(g_opl1000_get_cfg) - 1) == 0 ||
-		strncmp(buf, g_opl1000_get_index, sizeof(g_opl1000_get_index) - 1) == 0)
-	{
-		return opl1000_http_write_response(fd,
-			g_opl1000_http_503,
-			g_opl1000_ctype_html,
-			g_opl1000_cfg_disabled_html);
-	}
-
-	snprintf(g_opl1000_page_body, sizeof(g_opl1000_page_body),
-		g_opl1000_home_fmt,
-		HAL_GetMyIPString(),
-		(unsigned int)xPortGetFreeHeapSize());
-	return opl1000_http_write_response(fd,
-		g_opl1000_http_200,
-		g_opl1000_ctype_html,
-		g_opl1000_page_body);
-}
 
 static void tcp_client_process_sync(tcp_thread_t* arg)
 {
 	int fd = arg->fd;
-	char *buf = g_opl1000_micro_req;
-	http_request_t *requestProbe = &g_opl1000_request_probe;
-	int sendRc = 0;
+	char *buf = g_opl1000_http_req;
+	http_request_t *request = &g_opl1000_http_request;
+	int lenret = 0;
 
-	memset(requestProbe, 0, sizeof(*requestProbe));
-	memset(buf, 0, OPL1000_MICRO_REQ_SIZE);
+	memset(request, 0, sizeof(*request));
+	memset(buf, 0, OPL1000_HTTP_REQ_SIZE);
+	memset(g_opl1000_http_reply, 0, OPL1000_HTTP_REPLY_SIZE);
 
-	requestProbe->fd = fd;
-	requestProbe->received = buf;
-	requestProbe->receivedLenmax = OPL1000_MICRO_REQ_SIZE - 2;
-	requestProbe->responseCode = HTTP_RESPONSE_OK;
-	requestProbe->receivedLen = 0;
+	request->fd = fd;
+	request->received = buf;
+	request->receivedLenmax = OPL1000_HTTP_REQ_SIZE - 2;
+	request->responseCode = HTTP_RESPONSE_OK;
+	request->receivedLen = 0;
+	request->reply = g_opl1000_http_reply;
+	request->replymaxlen = OPL1000_HTTP_REPLY_SIZE - 1;
+	request->replylen = 0;
 
 	while(1)
 	{
-		int remaining = requestProbe->receivedLenmax - requestProbe->receivedLen;
-		int received = recv(fd, requestProbe->received + requestProbe->receivedLen, remaining, 0);
+		int remaining = request->receivedLenmax - request->receivedLen;
+		int received = recv(fd, request->received + request->receivedLen, remaining, 0);
 		if(received <= 0)
 		{
 			break;
 		}
-		requestProbe->receivedLen += received;
-		requestProbe->received[requestProbe->receivedLen] = 0;
-		if(strstr(requestProbe->received, "\r\n\r\n") != NULL ||
-			strstr(requestProbe->received, "\n\n") != NULL ||
+		request->receivedLen += received;
+		request->received[request->receivedLen] = 0;
+		if(strstr(request->received, "\r\n\r\n") != NULL ||
+			strstr(request->received, "\n\n") != NULL ||
 			received < remaining ||
-			requestProbe->receivedLen >= requestProbe->receivedLenmax)
+			request->receivedLen >= request->receivedLenmax)
 		{
 			break;
 		}
 	}
 
-	if(requestProbe->receivedLen <= 0)
+	if(request->receivedLen <= 0)
 	{
+#if OPL1000_HTTP_TRACE
 		ADDLOG_INFO(LOG_FEATURE_HTTP,
 			"OPL1000 empty client connection closed, fd %d heap %u",
 			fd,
 			(unsigned int)xPortGetFreeHeapSize());
+#endif
 		goto exit;
 	}
 
+#if OPL1000_HTTP_TRACE
 	ADDLOG_INFO(LOG_FEATURE_HTTP,
-		"OPL1000 micro request len %i heap %u",
-		requestProbe->receivedLen,
+		"OPL1000 full OBK request len %i heap %u",
+		request->receivedLen,
 		(unsigned int)xPortGetFreeHeapSize());
+#endif
 
-	sendRc = opl1000_micro_fallback(fd, requestProbe->received);
-	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 micro reply rc %i heap %u", sendRc, (unsigned int)xPortGetFreeHeapSize());
+	lenret = HTTP_ProcessPacket(request);
+	if(lenret > 0 && request->replylen > 0)
+	{
+		send(fd, request->reply, request->replylen, 0);
+		request->replylen = 0;
+	}
+#if OPL1000_HTTP_TRACE
+	ADDLOG_INFO(LOG_FEATURE_HTTP, "OPL1000 full OBK reply len %i heap %u", lenret, (unsigned int)xPortGetFreeHeapSize());
+#endif
 
 exit:
 	if(fd != INVALID_SOCK)
@@ -726,7 +480,9 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 #endif
 				//ADDLOG_EXTRADEBUG(LOG_FEATURE_HTTP, "[sock=%d]: Connection accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
 #if PLATFORM_OPL1000
+#if OPL1000_HTTP_TRACE
 				ADDLOG_INFO(LOG_FEATURE_HTTP, "[sock=%d]: OPL1000 sync accepted from IP:%s", sock[new_idx].fd, get_clientaddr(source_addr_ptr));
+#endif
 				tcp_client_process_sync(&sock[new_idx]);
 #else
 				rtos_delay_milliseconds(20);
@@ -797,7 +553,7 @@ void HTTPServer_Start()
 	err = rtos_create_thread(&g_http_thread, BEKEN_APPLICATION_PRIORITY,
 		"TCP_server",
 		(beken_thread_function_t)tcp_server_thread,
-		0x800,
+		HTTP_SERVER_STACK_SIZE,
 		(beken_thread_arg_t)0);
 	if(err != kNoErr)
 	{

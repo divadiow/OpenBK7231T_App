@@ -15,6 +15,12 @@
 #include "../httpserver/http_tcp_server.h"
 #include "../hal/hal_generic.h"
 
+#if PLATFORM_OPL1000
+#define OPENOPL1000_SHM_DATA __attribute__((section(".shm_data"), used, aligned(4)))
+#else
+#define OPENOPL1000_SHM_DATA
+#endif
+
 int cmd_uartInitIndex = 0;
 
 
@@ -102,7 +108,7 @@ static int generateHashValue(const char* fname) {
 	return hash;
 }
 
-command_t* g_commands[HASH_SIZE] = { NULL };
+command_t* g_commands[HASH_SIZE] OPENOPL1000_SHM_DATA = { NULL };
 bool g_powersave;
 
 #if defined(PLATFORM_LN882H) || PLATFORM_LN8825

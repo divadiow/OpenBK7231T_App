@@ -4,11 +4,17 @@
 #include <stdio.h>
 
 #include "core_cm3.h"
+#include "hal_system.h"
 #include "../hal_generic.h"
 
 void HAL_RebootModule(void)
 {
-    printf("[OpenOPL1000] reboot\r\n");
+    printf("[OpenOPL1000] reboot requested\r\n");
+    if (Hal_Sys_SwResetAll != NULL)
+    {
+        Hal_Sys_SwResetAll();
+    }
+
     NVIC_SystemReset();
 }
 

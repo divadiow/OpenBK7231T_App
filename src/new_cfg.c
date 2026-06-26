@@ -12,10 +12,15 @@
 #include "littlefs/our_lfs.h"
 #endif
 
+#if PLATFORM_OPL1000
+#define OPENOPL1000_SHM_DATA __attribute__((section(".shm_data"), used, aligned(4)))
+#else
+#define OPENOPL1000_SHM_DATA
+#endif
 
 #define DEFAULT_BOOT_SUCCESS_TIME 5
 
-mainConfig_t g_cfg = { 0 };
+mainConfig_t g_cfg OPENOPL1000_SHM_DATA = { 0 };
 int g_configInitialized = 0;
 int g_cfg_pendingChanges = 0;
 

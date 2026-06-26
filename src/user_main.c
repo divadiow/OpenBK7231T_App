@@ -408,6 +408,9 @@ void MAIN_ScheduleUnsafeInit(int delSeconds) {
 }
 void RESET_ScheduleModuleReset(int delSeconds) {
 	g_reset = delSeconds;
+#if PLATFORM_OPL1000
+	ADDLOGF_INFO("[OpenOPL1000] module reboot scheduled in %i seconds", delSeconds);
+#endif
 }
 
 
@@ -1079,6 +1082,9 @@ void Main_OnEverySecond()
 #if ENABLE_DRIVER_HLW8112SPI
 			HLW8112_Save_Statistics();
 #endif 
+#if PLATFORM_OPL1000
+			printf("[OpenOPL1000] scheduled reboot now\r\n");
+#endif
 			ADDLOGF_INFO("Rebooting...");
 			// call disconnect so that fast connect wouldn't fail
 			HAL_DisconnectFromWifi();
@@ -1086,6 +1092,9 @@ void Main_OnEverySecond()
 		}
 		else {
 
+#if PLATFORM_OPL1000
+			printf("[OpenOPL1000] scheduled reboot in %i seconds\r\n", g_reset);
+#endif
 			ADDLOGF_INFO("Module reboot in %i...", g_reset);
 		}
 	}
@@ -1355,10 +1364,9 @@ void Main_Init_BeforeDelay_Unsafe(bool bAutoRunScripts) {
 	PIN_SetGenericDoubleClickCallback(app_on_generic_dbl_click);
 	ADDLOGF_DEBUG("Initialised other callbacks");
 
-	// initialise REST interface. OPL1000 patch RAM is very tight; keep first real port
-	// on the classic OBK HTTP pages/command endpoint and do not pull in the
-	// larger REST/webapp interface yet.
-#if !OBK_OPL1000_MINIMAL_WEB
+	// initialise REST interface. OPL1000 patch RAM is very tight; keep first
+	// full-HTTP pass on the classic OBK pages/command endpoint.
+#ifndef OBK_OPL1000_NO_REST
 	init_rest();
 #endif
 

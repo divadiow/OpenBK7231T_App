@@ -24,6 +24,7 @@ endif
 CC      := $(CROSS_COMPILE)gcc
 OBJCOPY := $(CROSS_COMPILE)objcopy
 SIZE    := $(CROSS_COMPILE)size
+NO_PIE_FLAG := $(shell printf 'int main(void){return 0;}\n' | $(CC) -x c -no-pie -c -o /dev/null - >/dev/null 2>&1 && echo -no-pie)
 
 APS_ROOT       := $(SDK_ROOT)/SDK/APS
 APS_PATCH_ROOT := $(SDK_ROOT)/SDK/APS_PATCH
@@ -55,6 +56,7 @@ SOURCES += $(OBK_SRCS)driver/drv_timed_events.c
 SOURCES += $(OBK_SRCS)driver/drv_uart.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_adc_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_flashConfig_opl1000.c
+SOURCES += $(OBK_SRCS)hal/opl1000/hal_fim_config_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_flashVars_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_generic_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_hwtimer_opl1000.c
@@ -156,7 +158,7 @@ CFLAGS  += -ffunction-sections -fdata-sections
 CFLAGS  += -flto -fuse-linker-plugin -fno-fat-lto-objects
 CFLAGS  += -fno-unwind-tables -fno-asynchronous-unwind-tables
 CFLAGS  += -fno-builtin -fno-common -fmessage-length=0
-CFLAGS  += -nostartfiles -no-pie -specs=nosys.specs -ffreestanding
+CFLAGS  += -nostartfiles $(NO_PIE_FLAG) -specs=nosys.specs -ffreestanding
 CFLAGS  += -include sys_common.h
 CFLAGS  += -Wall -Wextra
 CFLAGS  += -Wno-implicit-function-declaration -Wno-int-conversion -Wno-unused-parameter
@@ -205,7 +207,7 @@ package: $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(BUILD_DIR)/$(OUTPUT_BASENAME
 	cp $(M0_IMAGE) $(OUTPUT_DIR)/pack_ready/opl1000_m0.bin
 	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3_main.bin
 	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3_shm.bin
-	cd $(OUTPUT_DIR)/pack_ready && zip -q -r ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3_main.bin opl1000_app_m3_shm.bin
+	cd $(OUTPUT_DIR)/pack_ready && if command -v zip >/dev/null 2>&1; then zip -q -r ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3_main.bin opl1000_app_m3_shm.bin; else python3 -m zipfile -c ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3_main.bin opl1000_app_m3_shm.bin; fi
 	@echo "OpenOPL1000 output written to $(OUTPUT_DIR)"
 	@echo "Opulinks split-M3 pack-ready files written to $(OUTPUT_DIR)/pack_ready"
 	@echo "Pack with: PatchData.txt + opl1000_m0.bin + opl1000_app_m3_main.bin + opl1000_app_m3_shm.bin"

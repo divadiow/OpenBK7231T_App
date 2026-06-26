@@ -1,12 +1,10 @@
 #if PLATFORM_OPL1000
 
 #include <string.h>
+#include <stdio.h>
 #include "../hal_flashConfig.h"
-
-#define OPENOPL1000_CFG_RAM_SIZE 4096
-
-static unsigned char s_cfgRam[OPENOPL1000_CFG_RAM_SIZE];
-static int s_cfgRamValid;
+#include "mw_fim.h"
+#include "hal_fim_config_opl1000.h"
 
 int config_get_tableOffsets(int tableID, int *outStart, int *outLen)
 {
@@ -33,18 +31,19 @@ int HAL_Configuration_ReadConfigMemory(void *target, int dataLen)
         return 0;
     }
 
-    if (dataLen > OPENOPL1000_CFG_RAM_SIZE)
-    {
-        dataLen = OPENOPL1000_CFG_RAM_SIZE;
-    }
-
-    if (!s_cfgRamValid)
+    if (dataLen != (int)OPENOPL1000_FIM_CFG_SIZE)
     {
         memset(target, 0, dataLen);
         return 0;
     }
 
-    memcpy(target, s_cfgRam, dataLen);
+    if (MwFim_FileRead(OPENOPL1000_FIM_CFG_FILE_ID, 0, OPENOPL1000_FIM_CFG_SIZE, (uint8_t *)target) != MW_FIM_OK)
+    {
+        memset(target, 0, dataLen);
+        printf("[OpenOPL1000] cfg FIM read miss, using defaults\r\n");
+        return 0;
+    }
+
     return dataLen;
 }
 
@@ -55,14 +54,19 @@ int HAL_Configuration_SaveConfigMemory(void *src, int dataLen)
         return 0;
     }
 
-    if (dataLen > OPENOPL1000_CFG_RAM_SIZE)
+    if (dataLen != (int)OPENOPL1000_FIM_CFG_SIZE)
     {
-        dataLen = OPENOPL1000_CFG_RAM_SIZE;
+        return 0;
     }
 
-    memcpy(s_cfgRam, src, dataLen);
-    s_cfgRamValid = 1;
-    return 1;
+    if (MwFim_FileWrite(OPENOPL1000_FIM_CFG_FILE_ID, 0, OPENOPL1000_FIM_CFG_SIZE, (uint8_t *)src) != MW_FIM_OK)
+    {
+        printf("[OpenOPL1000] cfg FIM write failed\r\n");
+        return 0;
+    }
+
+    printf("[OpenOPL1000] cfg FIM saved %d bytes\r\n", dataLen);
+    return dataLen;
 }
 
 #endif

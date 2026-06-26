@@ -83,15 +83,15 @@
 
 #elif PLATFORM_OPL1000
 
-/* OpenOPL1000 first real-port profile.
- * Keep this deliberately small: real OpenBeken HTTP/command/config runtime,
- * no drivers, no SoftAP, no MQTT/LFS/OTA persistence yet.
+/* OpenOPL1000 real-port profile.
+ * Keep non-web services deliberately small: full classic OpenBeken HTTP/config
+ * routes, no drivers, no SoftAP, no MQTT/LFS/OTA persistence yet.
  */
 #define NO_CHIP_TEMPERATURE                     1
 #define NEW_TCP_SERVER                          1
 #define ENABLE_EXPAND_CONSTANT                  1
-#define OBK_OPL1000_MINIMAL_WEB                1
 #define OBK_DISABLE_ALL_DRIVERS                 1
+#define OBK_OPL1000_NO_REST                     1
 #undef ENABLE_LED_BASIC
 #undef ENABLE_HTTP_MAC
 

@@ -29,12 +29,14 @@
 #define OPENOPL1000_WIFI_PASSWORD "1234abcd"
 #endif
 
-#define OPENOPL1000_WIFI_READY_DELAY_MS      3000
-#define OPENOPL1000_SCAN_RESULT_WAIT_MS      3500
+#define OPENOPL1000_WIFI_READY_DELAY_MS       5000
+#define OPENOPL1000_SCAN_RESULT_WAIT_MS       4000
 #define OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS 12
-#define OPENOPL1000_ASSOC_WAIT_SECONDS       20
-#define OPENOPL1000_SCAN_RETRY_DELAY_MS      7000
-#define OPENOPL1000_SCAN_PASS_COUNT          5
+#define OPENOPL1000_ASSOC_WAIT_SECONDS        30
+#define OPENOPL1000_SCAN_RETRY_DELAY_MS       10000
+#define OPENOPL1000_SCAN_PASS_COUNT           4
+#define OPENOPL1000_WIFI_VERBOSE_SCAN         0
+#define OPENOPL1000_NETINFO_TRACE             0
 
 extern size_t xPortGetFreeHeapSize(void);
 
@@ -55,15 +57,34 @@ static char g_gw[16] = "0.0.0.0";
 static char g_mask[16] = "0.0.0.0";
 static char g_dns[16] = "0.0.0.0";
 
-/* Static to avoid the SDK demo malloc(sizeof(wifi_scan_list_t)) path. The v12
- * log showed only ~488 bytes free after Wi-Fi/lwIP bring-up, so dynamic scan
- * allocation is not safe in the real OBK runtime.
- */
-static wifi_scan_list_t g_scanList;
-
 static unsigned int OpenOPL1000_GetFreeHeap(void)
 {
     return (unsigned int)xPortGetFreeHeapSize();
+}
+
+static bool OpenOPL1000_IsUsableMac(const uint8_t *mac)
+{
+    bool anyNonZero = false;
+    bool anyNonFf = false;
+
+    if (mac == NULL)
+    {
+        return false;
+    }
+
+    for (int i = 0; i < 6; i++)
+    {
+        if (mac[i] != 0x00)
+        {
+            anyNonZero = true;
+        }
+        if (mac[i] != 0xFF)
+        {
+            anyNonFf = true;
+        }
+    }
+
+    return anyNonZero && anyNonFf;
 }
 
 static void OpenOPL1000_ReportStatus(int status)
@@ -106,28 +127,31 @@ static bool OpenOPL1000_IsAssociated(void)
     {
         memcpy(g_bssid, apInfo.bssid, sizeof(g_bssid));
         g_channel = apInfo.channel;
-        printf("[OpenOPL1000] associated with '%.*s' bssid=" MACSTR " ch=%u rssi=%d heap=%u\r\n",
-               apInfo.ssid_length,
-               apInfo.ssid,
-               MAC2STR(apInfo.bssid),
-               (unsigned int)apInfo.channel,
-               apInfo.rssi,
-               OpenOPL1000_GetFreeHeap());
+        if (!g_associated)
+        {
+            printf("[OpenOPL1000] associated with '%.*s' bssid=" MACSTR " ch=%u rssi=%d heap=%u\r\n",
+                   apInfo.ssid_length,
+                   apInfo.ssid,
+                   MAC2STR(apInfo.bssid),
+                   (unsigned int)apInfo.channel,
+                   apInfo.rssi,
+                   OpenOPL1000_GetFreeHeap());
+        }
         return true;
     }
 
     return false;
 }
 
-static int OpenOPL1000_TryConnectFromReport(scan_report_t *report)
+static bool OpenOPL1000_UpdateBestApFromReport(scan_report_t *report)
 {
     wifi_config_t wifiConfig;
-    int rc;
+    const scan_info_t *best = NULL;
 
     if (report == NULL || report->pScanInfo == NULL || report->uScanApNum == 0)
     {
         printf("[OpenOPL1000] worker: raw scan report not ready; will retry\r\n");
-        return -1;
+        return false;
     }
 
     memset(&wifiConfig, 0, sizeof(wifiConfig));
@@ -143,6 +167,7 @@ static int OpenOPL1000_TryConnectFromReport(scan_report_t *report)
             ssidLen = WIFI_MAX_LENGTH_OF_SSID;
         }
 
+#if OPENOPL1000_WIFI_VERBOSE_SCAN
         printf("[OpenOPL1000] worker: raw[%u] ssid='%.*s' len=%u bssid=" MACSTR " rssi=%d ch=%u caps=0x%04x\r\n",
                (unsigned int)i,
                ssidLen,
@@ -152,40 +177,33 @@ static int OpenOPL1000_TryConnectFromReport(scan_report_t *report)
                rec->rssi,
                (unsigned int)rec->ap_channel,
                (unsigned int)rec->capabilities);
+#endif
 
         if ((ssidLen == wifiConfig.sta_config.ssid_length) &&
             (memcmp(rec->ssid,
                     wifiConfig.sta_config.ssid,
                     wifiConfig.sta_config.ssid_length) == 0))
         {
-            memcpy(g_bssid, rec->bssid, sizeof(g_bssid));
-            g_channel = rec->ap_channel;
-
-            memcpy(wifiConfig.sta_config.bssid, rec->bssid, sizeof(wifiConfig.sta_config.bssid));
-            wifiConfig.sta_config.bssid_present = 1;
-            wifiConfig.sta_config.scan_method = WIFI_FAST_SCAN;
-            wifiConfig.sta_config.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-            wifiConfig.sta_config.threshold.authmode = WIFI_AUTH_OPEN;
-            wifiConfig.sta_config.threshold.rssi = -127;
-
-            rc = wifi_set_config(WIFI_MODE_STA, &wifiConfig);
-            printf("[OpenOPL1000] worker: matched SSID '%s' bssid=" MACSTR " ch=%u rssi=%d set_config rc=%d\r\n",
-                   g_ssid,
-                   MAC2STR(rec->bssid),
-                   (unsigned int)rec->ap_channel,
-                   rec->rssi,
-                   rc);
-
-            OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
-            rc = wifi_connection_connect(&wifiConfig);
-            printf("[OpenOPL1000] worker: wifi_connection_connect rc=%d heap=%u\r\n",
-                   rc,
-                   OpenOPL1000_GetFreeHeap());
-            return rc;
+            if (best == NULL || rec->rssi > best->rssi)
+            {
+                best = rec;
+            }
         }
     }
 
-    return -1;
+    if (best == NULL)
+    {
+        return false;
+    }
+
+    memcpy(g_bssid, best->bssid, sizeof(g_bssid));
+    g_channel = best->ap_channel;
+    printf("[OpenOPL1000] worker: best SSID '%s' bssid=" MACSTR " ch=%u rssi=%d; using SDK no-BSSID connect path\r\n",
+           g_ssid,
+           MAC2STR(best->bssid),
+           (unsigned int)best->ap_channel,
+           best->rssi);
+    return true;
 }
 
 static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
@@ -235,14 +253,14 @@ static int OpenOPL1000_DoScanAndConnect(void)
 {
     wifi_scan_config_t scanConfig;
     scan_report_t *report;
+    uint16_t apCount = 0;
     int rc = -1;
 
     for (int pass = 0; pass < OPENOPL1000_SCAN_PASS_COUNT; pass++)
     {
-        bool targeted = (pass < (OPENOPL1000_SCAN_PASS_COUNT - 1));
+        bool targeted = (pass == 0);
 
         memset(&scanConfig, 0, sizeof(scanConfig));
-        memset(&g_scanList, 0, sizeof(g_scanList));
 
         if (targeted)
         {
@@ -250,9 +268,10 @@ static int OpenOPL1000_DoScanAndConnect(void)
         }
         scanConfig.channel = 0;
         scanConfig.show_hidden = true;
-        scanConfig.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-        scanConfig.scan_time.active.min = 120;
-        scanConfig.scan_time.active.max = 500;
+        scanConfig.scan_type = WIFI_SCAN_TYPE_MIX;
+        scanConfig.scan_time.active.min = 100;
+        scanConfig.scan_time.active.max = 300;
+        scanConfig.scan_time.passive = 150;
 
         printf("[OpenOPL1000] worker: %s scan pass %d/%d for SSID '%s' wait=%ums heap=%u\r\n",
                targeted ? "targeted" : "broad fallback",
@@ -281,25 +300,32 @@ static int OpenOPL1000_DoScanAndConnect(void)
 
         osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
 
-        rc = wifi_scan_get_ap_list(&g_scanList);
-        printf("[OpenOPL1000] worker: public scan list rc=%d ap_count=%d heap=%u\r\n",
+        rc = wifi_scan_get_ap_num(&apCount);
+#if OPENOPL1000_WIFI_VERBOSE_SCAN
+        printf("[OpenOPL1000] worker: public scan count rc=%d ap_count=%u heap=%u\r\n",
                rc,
-               g_scanList.num,
+               (unsigned int)apCount,
                OpenOPL1000_GetFreeHeap());
+#endif
 
         report = wifi_get_scan_result ? wifi_get_scan_result() : NULL;
+#if OPENOPL1000_WIFI_VERBOSE_SCAN
         printf("[OpenOPL1000] worker: raw scan report ptr=%p count=%u heap=%u\r\n",
                report,
                report ? (unsigned int)report->uScanApNum : 0,
                OpenOPL1000_GetFreeHeap());
+#endif
 
-        rc = OpenOPL1000_TryConnectFromReport(report);
-        if (rc == 0)
+        if (OpenOPL1000_UpdateBestApFromReport(report))
         {
-            return rc;
+            rc = OpenOPL1000_TryDirectConnectWithoutBssid();
+            if (OpenOPL1000_WaitForAssociation(OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS))
+            {
+                return 0;
+            }
         }
 
-        printf("[OpenOPL1000] worker: SSID '%s' not found on %s scan pass %d\r\n",
+        printf("[OpenOPL1000] worker: SSID '%s' not associated after %s scan pass %d\r\n",
                g_ssid,
                targeted ? "targeted" : "broad",
                pass + 1);
@@ -314,30 +340,39 @@ static void OpenOPL1000_DoConnectCycle(void)
 {
     int rc;
 
-    /* First let the vendor connection manager try the configured SSID/password
-     * without forcing a BSSID from the small retained scan cache. In crowded RF
-     * environments this may find APs that are displaced from wifi_get_scan_result().
+    /* The SDK station demos scan first, then connect. v43 logs showed the
+     * pre-scan direct connect returned rc=-1 and only succeeded after a scan
+     * had populated the SDK's internal AP table, so keep scan-first as the
+     * normal path and use direct connect as the last fallback.
      */
+    rc = OpenOPL1000_DoScanAndConnect();
+    if (OpenOPL1000_IsAssociated())
+    {
+        return;
+    }
+
+    printf("[OpenOPL1000] worker: scan-first connect returned %d, trying final direct connect heap=%u\r\n",
+           rc,
+           OpenOPL1000_GetFreeHeap());
+
     rc = OpenOPL1000_TryDirectConnectWithoutBssid();
-    if (rc == 0)
+    if (rc == 0 || rc == -1)
     {
         if (OpenOPL1000_WaitForAssociation(OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS))
         {
             return;
         }
 
-        printf("[OpenOPL1000] worker: direct connect did not associate after %u seconds, trying targeted scans heap=%u\r\n",
+        printf("[OpenOPL1000] worker: final direct connect did not associate after %u seconds heap=%u\r\n",
                (unsigned int)OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS,
                OpenOPL1000_GetFreeHeap());
     }
     else
     {
-        printf("[OpenOPL1000] worker: direct connect returned %d, trying targeted scans heap=%u\r\n",
+        printf("[OpenOPL1000] worker: final direct connect returned %d heap=%u\r\n",
                rc,
                OpenOPL1000_GetFreeHeap());
     }
-
-    OpenOPL1000_DoScanAndConnect();
 }
 
 static bool OpenOPL1000_StartLwipAndPollForIp(void)
@@ -472,14 +507,14 @@ static void OpenOPL1000_StartWorkerOnce(void)
            OpenOPL1000_GetFreeHeap());
 }
 
-static int OpenOPL1000_DefaultStaConnectedHandler(wifi_event_t event, uint8_t *data, uint32_t length)
+static int32_t OpenOPL1000_DefaultStaConnectedHandler(wifi_event_t event, uint8_t *data, uint32_t length)
 {
     (void)event;
     (void)length;
     return wifi_station_connected_event_handler(data);
 }
 
-static int OpenOPL1000_DefaultStaDisconnectedHandler(wifi_event_t event, uint8_t *data, uint32_t length)
+static int32_t OpenOPL1000_DefaultStaDisconnectedHandler(wifi_event_t event, uint8_t *data, uint32_t length)
 {
     (void)event;
     (void)length;
@@ -684,6 +719,7 @@ const char *HAL_GetMyMaskString(void)
 void WiFI_GetMacAddress(char *mac)
 {
     static const uint8_t fallback[6] = {0x02, 0x4F, 0x50, 0x10, 0x00, 0x01};
+    uint8_t candidate[6];
 
     if (mac == NULL)
     {
@@ -692,9 +728,22 @@ void WiFI_GetMacAddress(char *mac)
 
     memcpy(mac, fallback, sizeof(fallback));
 
+    memset(candidate, 0, sizeof(candidate));
+    if (wifi_config_get_mac_address(WIFI_MODE_STA, candidate) == 0 &&
+        OpenOPL1000_IsUsableMac(candidate))
+    {
+        memcpy(mac, candidate, sizeof(candidate));
+        return;
+    }
+
     if (wifi_get_mac_addr)
     {
-        wifi_get_mac_addr((uint8_t *)mac);
+        memset(candidate, 0, sizeof(candidate));
+        wifi_get_mac_addr(candidate);
+        if (OpenOPL1000_IsUsableMac(candidate))
+        {
+            memcpy(mac, candidate, sizeof(candidate));
+        }
     }
 }
 
@@ -732,12 +781,28 @@ uint8_t HAL_GetWiFiChannel(uint8_t *chan)
 
 void HAL_PrintNetworkInfo(void)
 {
+#if OPENOPL1000_NETINFO_TRACE
     printf("[OpenOPL1000] IP=%s GW=%s MASK=%s\r\n", HAL_GetMyIPString(), HAL_GetMyGatewayString(), HAL_GetMyMaskString());
+#endif
 }
 
 int HAL_GetWifiStrength(void)
 {
-    return 0;
+    int8_t rssi = 0;
+    wifi_ap_record_t apInfo;
+
+    if (wifi_connection_get_rssi(&rssi) == 0)
+    {
+        return rssi;
+    }
+
+    memset(&apInfo, 0, sizeof(apInfo));
+    if (wifi_sta_get_ap_info(&apInfo) == 0 && apInfo.ssid_length > 0)
+    {
+        return apInfo.rssi;
+    }
+
+    return -127;
 }
 
 #endif

@@ -279,38 +279,12 @@ static void OpenOPL1000_GpioOutputCommand(int pin, int value, bool force, char *
     snprintf(output, outputLen, "GPIO%d output set to %d%s\r\n", pin, value, force ? " (forced)" : "");
 }
 
-static void OpenOPL1000_RebootTask(void *args)
-{
-    (void)args;
-    osDelay(500);
-    printf("[OpenOPL1000] reboot command executing\r\n");
-    Hal_Sys_SwResetAll();
-    while (1)
-    {
-        osDelay(1000);
-    }
-}
+extern void RESET_ScheduleModuleReset(int delSeconds);
 
 static void OpenOPL1000_ScheduleReboot(char *output, size_t outputLen)
 {
-    osThreadDef_t threadDef;
-    osThreadId threadId;
-
-    threadDef.name = "openopl1000_reboot";
-    threadDef.stacksize = 512;
-    threadDef.tpriority = OS_TASK_PRIORITY_APP;
-    threadDef.instances = 0;
-    threadDef.pthread = OpenOPL1000_RebootTask;
-
-    threadId = osThreadCreate(&threadDef, NULL);
-    if (threadId == NULL)
-    {
-        snprintf(output, outputLen, "ERROR: failed to create reboot task\r\n");
-    }
-    else
-    {
-        snprintf(output, outputLen, "Reboot scheduled.\r\n");
-    }
+    RESET_ScheduleModuleReset(3);
+    snprintf(output, outputLen, "Reboot scheduled through OpenBeken.\r\n");
 }
 
 void OpenOPL1000_ConsoleExecute(const char *command, char *output, size_t outputLen)

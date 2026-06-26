@@ -8,12 +8,18 @@
 #include "../logging/logging.h"
 #include "../hal/hal_pins.h"
 
+#if PLATFORM_OPL1000
+#define OPENOPL1000_SHM_DATA __attribute__((section(".shm_data"), used, aligned(4)))
+#else
+#define OPENOPL1000_SHM_DATA
+#endif
+
 #define MAX_CMD_LEN 512
 #define MAX_ARGS 32
 
 static char g_buffer[MAX_CMD_LEN];
 static char *g_args[MAX_ARGS];
-static char g_argsExpanded[MAX_ARGS][40];
+static char g_argsExpanded[MAX_ARGS][40] OPENOPL1000_SHM_DATA;
 static const char *g_argsFrom[MAX_ARGS];
 static int g_numArgs = 0;
 static int tok_flags = 0;
