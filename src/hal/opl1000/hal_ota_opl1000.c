@@ -21,8 +21,6 @@ int HAL_FlashRead(char *buffer, int readlen, int startaddr)
     return 0;
 }
 
-#endif
-
 int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 {
     (void)request;
@@ -31,3 +29,5 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
     ADDLOG_ERROR(LOG_FEATURE_OTA, "[OpenOPL1000] OTA flash write is not implemented yet");
     return -1;
 }
+
+#endif
