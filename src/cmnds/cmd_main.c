@@ -534,6 +534,7 @@ static commandResult_t CMD_Flags(const void* context, const char* cmd, const cha
 
 	return CMD_RES_OK;
 }
+#if !PLATFORM_OPL1000
 static commandResult_t CMD_HTTPOTA(const void* context, const char* cmd, const char* args, int cmdFlags) {
 
 	if (args && *args) {
@@ -546,6 +547,7 @@ static commandResult_t CMD_HTTPOTA(const void* context, const char* cmd, const c
 
 	return CMD_RES_OK;
 }
+#endif
 static commandResult_t CMD_Restart(const void* context, const char* cmd, const char* args, int cmdFlags) {
 	int delaySeconds;
 
@@ -1118,7 +1120,9 @@ void CMD_Init_Early() {
 	//cmddetail:"descr":"Starts the firmware update procedure, the argument should be a reachable HTTP server file. You can easily setup HTTP server with Xampp, or Visual Code, or Python, etc. Make sure you are using OTA file for a correct platform (getting N platform RBL on T will brick device, etc etc)",
 	//cmddetail:"fn":"CMD_HTTPOTA","file":"cmnds/cmd_main.c","requires":"",
 	//cmddetail:"examples":""}
+#if !PLATFORM_OPL1000
 	CMD_RegisterCommand("ota_http", CMD_HTTPOTA, NULL);
+#endif
 #if ENABLE_HA_DISCOVERY
 	//cmddetail:{"name":"scheduleHADiscovery","args":"[Seconds]",
 	//cmddetail:"descr":"This will schedule HA discovery, the discovery will happen with given number of seconds, but timer only counts when MQTT is connected. It will not work without MQTT online, so you must set MQTT credentials first.",
