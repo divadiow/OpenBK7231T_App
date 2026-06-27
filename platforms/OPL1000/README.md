@@ -7,7 +7,7 @@ Current scope:
 - Opulinks OPL1000 A2 SDK patch entrypoint
 - real OpenBeken `Main_Init()` task
 - STA-only Wi-Fi bring-up through the OPL1000 HAL
-- hardcoded test Wi-Fi defaults for bring-up: `test` / `1234abcd`
+- hardcoded test Wi-Fi defaults for bring-up: `OPL1000_AP` / `1234abcd`
 - hardened OPL1000 HTTP transport with real OpenBeken `/cm?...` command path under test
 - persistent OpenBeken main config via an OPL1000 FIM extension zone
 
@@ -755,4 +755,285 @@ Build result with `C:\gcc-arm-none-eabi-5_4-2016q3`:
 ```text
 IRAM1: 156308 / 170848
 SHM:     9288 / 15360
+```
+
+## v54 flashvars FIM size fix
+
+The latest first-boot hardware log showed main config being created correctly,
+but retained flash variables still needed one OPL1000-specific fix. The SDK FIM
+table was registering the flashvars record with the shared
+`MAGIC_FLASHVARS_SIZE` value of 64 bytes, while the OPL1000 build's
+`FLASH_VARS_STRUCTURE` is 80 bytes. `MwFim_FileWrite()` checks the registered
+record size, so `HAL_FlashVars_*()` writes were rejected even though the FIM
+file ID and sector layout were valid.
+
+v54 changes only the OPL1000 FIM table size for flashvars to
+`sizeof(FLASH_VARS_STRUCTURE)`. The main config FIM version stays unchanged, so
+this does not deliberately invalidate existing `CFG_Holder` storage.
+
+The confirming diagnostic build printed:
+
+```text
+[OpenOPL1000] flashvars size=80 fim_size=80 magic=64
+[OpenOPL1000] flashvars FIM read miss, using defaults
+```
+
+The important result was that `flashvars FIM write failed` disappeared. A read
+miss on a freshly erased device is expected until the first retained value is
+written.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v54-flashvars-size: shm_fn=0x80000401 result=0xb881be0b
+```
+
+## v55 webapp route
+
+The classic index page exposes `Launch Web Application`, but OPL1000 still
+returned `Not found.` for `/app`. This was not because `ENABLE_HTTP_WEBAPP` was
+off; it is enabled in the shared config. The missing piece was the REST callback
+registration. v42 deliberately kept `OBK_OPL1000_NO_REST` enabled to avoid the
+first full-classic-HTTP image overflowing the M3 patch window, and that also
+left the `/app` callback unregistered.
+
+v55 keeps `OBK_OPL1000_NO_REST` in place and registers only the lightweight
+`/app` callback on OPL1000. Other platforms still call `init_rest()` and get the
+same `/api/` GET, `/api/` POST, and `/app` callbacks as before. OPL1000 gets
+just the launcher page, which emits the configured remote webapp URL and should
+not pull the heavier REST API surface into active use yet.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v55-webapp-route: shm_fn=0x80000401 result=0xb881be0b
+```
+
+## v56 full REST registration
+
+v55 proved that the `/app` launcher can open, but the remote OpenBeken webapp
+expects the normal `/api/...` endpoints after it loads. v56 therefore removes
+the OPL1000 `OBK_OPL1000_NO_REST` profile gate so OPL1000 follows the normal
+`init_rest()` path.
+
+This registers the standard REST callbacks:
+
+```text
+/api/ GET
+/api/ POST
+/app GET
+```
+
+The code for these handlers was already linked into the OPL1000 image via
+`rest_interface.c`; v56 mainly adds the two `/api/` callback registrations at
+runtime. This is the proper compatibility test for the hosted webapp, with the
+main risk being the extra heap used by the callback table entries and whatever
+the webapp requests through REST once loaded.
+
+The first GCC 13 link overflowed IRAM by 4280 bytes. OPL1000 now excludes the
+currently unusable REST flash/OTA endpoints (`/api/ota` and `/api/flash/...`)
+and places the REST router text/strings into the already-proven split-M3 SHM
+tail via the OPL1000 linker script.
+
+Build result with WSL `arm-none-eabi-gcc` 13.2.1:
+
+```text
+IRAM1: 169704 / 170848
+SHM:    14524 / 15360
+```
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v56-full-rest: shm_fn=0x80000401 result=0xb881be0b
+```
+
+## v57 OPL1000-only OTA/httpclient prune
+
+v56 proved the hosted webapp works with the normal REST callback registration,
+but OPL1000 still had no implemented OTA flash writer. The REST flash/OTA
+endpoints were already disabled for OPL1000, so v57 also removes the generic
+HTTP client sources from the OPL1000 makefile and skips registering the
+`ota_http` command on OPL1000 only.
+
+This is deliberately scoped to the OPL1000 profile. Other platforms still build
+the HTTP client and register `ota_http` as before.
+
+Build result with WSL `arm-none-eabi-gcc` 13.2.1:
+
+```text
+IRAM1: 169616 / 170848
+SHM:    14524 / 15360
+```
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v57-ota-prune: shm_fn=0x80000401 result=0xb881be0b
+```
+
+## v58 OPL1000-only SDK initializer prune
+
+The v57 image had the full classic HTTP UI and hosted `/app` webapp working, but
+only about 1.2 KB of M3 patch-window headroom remained. v58 keeps the change
+inside the OPL1000 platform and uses linker `--wrap` entries to skip vendor SDK
+initializers that OpenBeken does not use at runtime:
+
+```text
+wpa_cli_func_init_patch
+at_func_init_patch
+Diag_PatchInit
+le_ctrl_pre_patch_init
+```
+
+The OPL1000 makefile also drops `__AT_CMD_TASK__`, because the AT parser/task is
+not exposed by the OpenBeken profile. ROM UART mode helpers remain available via
+the SDK symbol file.
+
+`LeHostPatchAssign` was tested as a possible BLE-side prune, but it produced no
+link-size change, so it was not kept.
+
+Build result with WSL `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v57 IRAM1: 169616 / 170848
+v58 IRAM1: 163444 / 170848
+v58 SHM:    14524 / 15360
+```
+
+This gives back 6172 bytes of IRAM1 headroom. The boldest cut is
+`le_ctrl_pre_patch_init`, so if hardware testing shows Wi-Fi association,
+reboot, or early boot oddities, that wrapper is the first one to re-test.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v58-sdk-prune: shm_fn=0x80000401 result=0xb881be0b
+```
+
+Hardware check from the first v58 boot log:
+
+```text
+[OpenOPL1000] split-M3 v58-sdk-prune: shm_fn=0x80001255 result=0xb881be0b
+[OpenOPL1000] RAM layout: bss_end=0x0043e314 iram_free_to_440000=7404 shm=0x80000400..0x80003cbc used=14524 free=836
+```
+
+The SHM probe function address moved as the image layout changed; the important
+part is that the probe still returned `0xb881be0b`. The unit connected to
+`OPL1000_AP`, got DHCP address `192.168.1.120`, started the TCP server, and the
+hosted webapp command path worked:
+
+```text
+Info:HTTP:TCP server listening
+Info:CMD:[WebApp Cmd 'loglevel 3' Result] OK
+```
+
+The log still contains `[CLI]WPA: rssi=...` prints. Wrapping
+`wpa_cli_func_init_patch` removed the vendor CLI command-table init, but this
+RSSI print comes from another SDK WPA/status path and remains a separate cleanup
+candidate.
+
+## v59 OPL1000 pin labels and ping HTTP prune
+
+v59 adds SDK-derived pin labels to the OPL1000 HAL so the config page shows the
+main likely hardware function next to each IO. This is informational only: GPIO
+still works as before, and PWM/ADC remain disabled/stubbed until they are wired
+and tested properly.
+
+The labels are based on the SDK project pinmux defaults and alternatives:
+debug UART on IO0/IO1, UART/SPI/AUX labels through IO17, and PWM-capable labels
+on IO18..IO23. IO20/IO21 also note their current ICE_M3 default functions.
+
+v59 also disables the Ping Watchdog HTTP menu/page/router for OPL1000 only with
+`#undef ENABLE_HTTP_PING`. The deeper ping watchdog feature was not enabled for
+this profile, so this removes dead HTTP UI surface without changing other
+platforms.
+
+The OPL1000 makefile does not track header dependencies, so config-header
+changes must be measured from a clean build.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v58 size: text 171815, data 2308, bss 3844, dec 177967
+v59 size: text 170691, data 2312, bss 3836, dec 176839
+
+v58 IRAM1: 163444 / 170848
+v59 IRAM1: 162316 / 170848
+v59 SHM:    14524 / 15360
+```
+
+Net v59 change versus v58 is 1128 bytes smaller overall and 1128 bytes less
+IRAM1 use. SHM is unchanged.
+
+A temporary clean `codex_v59_pingprobe` build left `ENABLE_HTTP_PING` enabled
+to measure the saving from the HTTP ping prune:
+
+```text
+ping probe size: text 172339, data 2312, bss 3836, dec 178487
+final v59 size:  text 170691, data 2312, bss 3836, dec 176839
+```
+
+So removing the unused ping HTTP UI saves 1648 bytes of text/IRAM in this build.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v59-pin-labels-ping-prune: shm_fn=0x80001255 result=0xb881be0b
+```
+
+## v60 Wi-Fi config ownership
+
+v60 makes the OPL1000 Wi-Fi path behave more like a normal OpenBeken STA build
+while still acknowledging the current SDK limitation: no SoftAP fallback. The
+compiled `OPL1000_AP` / `1234abcd` test network remains only as the first-boot
+default seeded by the OPL1000 block in `CFG_SetDefaultConfig()`. After config
+exists, `g_cfg` is the source of truth.
+
+The OPL1000 Wi-Fi HAL no longer silently falls back to the compiled SSID or
+password when it is called with empty values. An empty SSID now skips STA
+connection and reports disconnected. A non-empty SSID with an empty password is
+left as an open-network connection attempt.
+
+The SoftAP/open-access path is now explicitly blocked for OPL1000:
+
+```text
+HAL_SetupWiFiOpenAccessPoint() reports unsupported and returns -1.
+/cfg_wifi hides the "Convert to Open Access WiFi" form on OPL1000.
+/cfg_wifi_set?open=1 refuses the request without clearing saved credentials.
+```
+
+This avoids the previous bad behaviour where requesting SoftAP could reconnect
+to the compiled test AP and make the web UI look like credentials had changed
+when they had not.
+
+v60 also adds an OPL1000-only `/cfg_wifi` scan implementation using the SDK
+`wifi_scan_start()` / `wifi_get_scan_result()` APIs. It prints SSID, channel,
+RSSI, and capability bits. The scan is deliberately simple and blocks that HTTP
+request for about four seconds while the SDK scan completes; the OPL1000 HTTP
+server is still the simplified single worker path, so this should be treated as
+a bring-up aid rather than a final polished UX.
+
+Vendor AT remains disabled. UART provisioning through the OpenBeken command
+line is the next likely step for first-time setup without requiring users to
+stand up the default `OPL1000_AP`.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v59 size: text 170691, data 2312, bss 3836, dec 176839
+v60 size: text 171287, data 2308, bss 3836, dec 177431
+
+v59 IRAM1: 162316 / 170848
+v60 IRAM1: 162916 / 170848
+v60 SHM:    14516 / 15360
+```
+
+Net v60 change versus v59 is 592 bytes larger overall and 600 bytes more IRAM1
+use. SHM is 8 bytes smaller because the SHM text layout moved slightly.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v60-wifi-config: shm_fn=0x80001245 result=0xb881be0b
 ```
