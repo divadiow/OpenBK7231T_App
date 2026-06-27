@@ -65,6 +65,10 @@ extern uint32_t current_fw_idx;
 #elif defined(PLATFORM_ESPIDF) || PLATFORM_ESP8266
 #include "esp_wifi.h"
 #include "esp_system.h"
+#elif PLATFORM_OPL1000
+#include "cmsis_os.h"
+#include "controller_wifi_com.h"
+#include "wifi_api.h"
 #elif defined(PLATFORM_BK7231T)
 // REALLY? A typo in Tuya SDK? Storge?
 // tuya-iotos-embeded-sdk-wifi-ble-bk7231t/platforms/bk7231t/tuya_os_adapter/include/driver/tuya_hal_storge.h
@@ -83,6 +87,70 @@ extern uint32_t current_fw_idx;
 #if (defined(PLATFORM_BK7231T) || defined(PLATFORM_BK7231N)) && !defined(PLATFORM_BEKEN_NEW)
 int tuya_os_adapt_wifi_all_ap_scan(AP_IF_S** ap_ary, unsigned int* num);
 int tuya_os_adapt_wifi_release_ap(AP_IF_S* ap);
+#endif
+
+#if PLATFORM_OPL1000
+#define OPENOPL1000_HTTP_SCAN_WAIT_MS 4000
+
+static int http_opl1000_print_wifi_scan(http_request_t *request)
+{
+	wifi_scan_config_t scanConfig;
+	scan_report_t *report;
+	int rc;
+
+	memset(&scanConfig, 0, sizeof(scanConfig));
+	scanConfig.channel = 0;
+	scanConfig.show_hidden = true;
+	scanConfig.scan_type = WIFI_SCAN_TYPE_MIX;
+	scanConfig.scan_time.active.min = 100;
+	scanConfig.scan_time.active.max = 300;
+	scanConfig.scan_time.passive = 150;
+
+	bk_printf("OPL1000 HTTP WiFi scan begin...\r\n");
+	rc = wifi_scan_start(&scanConfig, false);
+	if (rc != 0) {
+		hprintf255(request, "Wifi scan failed, rc=%d<br>", rc);
+		return rc;
+	}
+
+	osDelay(OPENOPL1000_HTTP_SCAN_WAIT_MS);
+
+	report = wifi_get_scan_result ? wifi_get_scan_result() : NULL;
+	if (report == NULL || report->pScanInfo == NULL || report->uScanApNum == 0) {
+		poststr(request, "Wifi scan returned no networks<br>");
+		return 0;
+	}
+
+	hprintf255(request, "Scan returned %u networks<br>", (unsigned int)report->uScanApNum);
+	poststr(request, "<table><tr><th>SSID</th><th>Channel</th><th>Signal</th><th>Caps</th></tr>");
+	for (uint32_t i = 0; i < report->uScanApNum; i++) {
+		const scan_info_t *record = &report->pScanInfo[i];
+		unsigned int ssidLen = (unsigned int)record->ssid_len;
+
+		if (ssidLen > WIFI_MAX_LENGTH_OF_SSID) {
+			ssidLen = WIFI_MAX_LENGTH_OF_SSID;
+		}
+
+		if (ssidLen == 0) {
+			hprintf255(request,
+				"<tr><td>&lt;hidden&gt;</td><td>%u</td><td>%d</td><td>0x%04x</td></tr>",
+				(unsigned int)record->ap_channel,
+				record->rssi,
+				(unsigned int)record->capabilities);
+		} else {
+			hprintf255(request,
+				"<tr><td>%.*s</td><td>%u</td><td>%d</td><td>0x%04x</td></tr>",
+				ssidLen,
+				(const char *)record->ssid,
+				(unsigned int)record->ap_channel,
+				record->rssi,
+				(unsigned int)record->capabilities);
+		}
+	}
+	poststr(request, "</table><br>");
+
+	return 0;
+}
 #endif
 
 static const char SUBMIT_AND_END_FORM[] = "<br><input type=\"submit\" value=\"Submit\"></form>";
@@ -1655,6 +1723,9 @@ int http_fn_cfg_wifi(http_request_t* request) {
 			hprintf255(request, "</table><br>");
 		}
 
+#elif PLATFORM_OPL1000
+		http_opl1000_print_wifi_scan(request);
+
 #else
 		hprintf255(request, "TODO %s<br>", PLATFORM_MCU_NAME);
 #endif
@@ -1664,10 +1735,14 @@ int http_fn_cfg_wifi(http_request_t* request) {
 <input type=\"submit\" value=\"Scan Local Networks\">\
 </form>");
 	poststr_h4(request, "Use this to disconnect from your WiFi");
+#if PLATFORM_OPL1000
+	poststr(request, "<p>OPL1000 is STA-only in the current SDK profile, so it cannot fall back to an open configuration access point. Save another SSID/password below or use UART provisioning once available.</p>");
+#else
 	poststr(request, "<form action=\"/cfg_wifi_set\">\
 <input type=\"hidden\" id=\"open\" name=\"open\" value=\"1\">\
 <input type=\"submit\" value=\"Convert to Open Access WiFi\" onclick=\"return confirm('Are you sure you want to switch to open access WiFi?')\">\
 </form>");
+#endif
 	poststr_h2(request, "Use this to connect to your WiFi");
 	add_label_text_field(request, "SSID", "ssid", CFG_GetWiFiSSID(), "<form action=\"/cfg_wifi_set\">");
 	add_label_password_field(request, "", "pass", CFG_GetWiFiPass(), "<br>Password<span  style=\"float:right;\"><input type=\"checkbox\" onclick=\"e=getElement('pass');if(this.checked){e.type='text'}else e.type='password'\" > enable clear text password</span>");
@@ -1743,9 +1818,13 @@ int http_fn_cfg_wifi_set(http_request_t* request) {
 	http_setup(request, httpMimeTypeHTML);
 	http_html_start(request, "Saving Wifi");
 	if (http_getArg(request->url, "open", tmpA, sizeof(tmpA))) {
+#if PLATFORM_OPL1000
+		poststr(request, "OPL1000 does not support SoftAP/open access point mode. Saved WiFi credentials were not changed.");
+#else
 		bChanged |= CFG_SetWiFiSSID("");
 		bChanged |= CFG_SetWiFiPass("");
 		poststr(request, "WiFi mode set: open access point.");
+#endif
 	}
 	else {
 		if (http_getArg(request->url, "ssid", tmpA, sizeof(tmpA))) {
