@@ -91,9 +91,9 @@
 #define NEW_TCP_SERVER                          1
 #define ENABLE_EXPAND_CONSTANT                  1
 #define OBK_DISABLE_ALL_DRIVERS                 1
-#define OBK_OPL1000_NO_REST                     1
 #undef ENABLE_LED_BASIC
 #undef ENABLE_HTTP_MAC
+#undef ENABLE_HTTP_PING
 
 #elif PLATFORM_W600
 
