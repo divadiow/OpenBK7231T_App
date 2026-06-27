@@ -27,6 +27,38 @@ SECTIONS
         KEEP(*(ENTRY_POINT))
     } > IRAM1
 
+    .shm_region ORIGIN(SHM) :
+    {
+        __shm_region_start__ = .;
+        . = ALIGN(4);
+        /* Legacy name retained for older probe objects, then typed sections.
+         * GCC/LTO does not allow code and const/data with different section
+         * flags to share the same input-section name, so v37b splits them.
+         */
+        KEEP(*(SHM_REGION))
+        KEEP(*(.SHM_REGION))
+        KEEP(*(.SHM_REGION*))
+        . = ALIGN(4);
+        KEEP(*(.text.http_rest*))
+        KEEP(*(.shm_text))
+        KEEP(*(.shm_text*))
+        . = ALIGN(4);
+        KEEP(*(.rodata.http_rest*))
+        KEEP(*(.shm_rodata))
+        KEEP(*(.shm_rodata*))
+        . = ALIGN(4);
+        KEEP(*(.shm_data))
+        KEEP(*(.shm_data*))
+        KEEP(*(.shm_bss))
+        KEEP(*(.shm_bss*))
+        . = ALIGN(4);
+        __shm_region_end__ = .;
+    } > SHM
+
+    ASSERT(__shm_region_end__ <= ORIGIN(SHM) + LENGTH(SHM), "Error: SHM split-M3 region overflow")
+
+    . = ORIGIN(IRAM1) + SIZEOF(.entry);
+
     .text ALIGN(4) :
     {
         __text_start__ = .;
@@ -76,34 +108,6 @@ SECTIONS
     PROVIDE(__end__ = __bss_end__);
 
     ASSERT(__bss_end__ <= ORIGIN(IRAM1) + LENGTH(IRAM1), "Error: IRAM1 patch window overflow")
-
-    .shm_region ORIGIN(SHM) :
-    {
-        __shm_region_start__ = .;
-        . = ALIGN(4);
-        /* Legacy name retained for older probe objects, then typed sections.
-         * GCC/LTO does not allow code and const/data with different section
-         * flags to share the same input-section name, so v37b splits them.
-         */
-        KEEP(*(SHM_REGION))
-        KEEP(*(.SHM_REGION))
-        KEEP(*(.SHM_REGION*))
-        . = ALIGN(4);
-        KEEP(*(.shm_text))
-        KEEP(*(.shm_text*))
-        . = ALIGN(4);
-        KEEP(*(.shm_rodata))
-        KEEP(*(.shm_rodata*))
-        . = ALIGN(4);
-        KEEP(*(.shm_data))
-        KEEP(*(.shm_data*))
-        KEEP(*(.shm_bss))
-        KEEP(*(.shm_bss*))
-        . = ALIGN(4);
-        __shm_region_end__ = .;
-    } > SHM
-
-    ASSERT(__shm_region_end__ <= ORIGIN(SHM) + LENGTH(SHM), "Error: SHM split-M3 region overflow")
 
     /DISCARD/ :
     {
