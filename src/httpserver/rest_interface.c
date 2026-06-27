@@ -35,6 +35,12 @@ extern uint8_t flash_size_8720;
 
 #define MAX_JSON_VALUE_LENGTH   128
 
+#if PLATFORM_OPL1000
+#define REST_ENABLE_FLASH_API 0
+#else
+#define REST_ENABLE_FLASH_API 1
+#endif
+
 
 int http_rest_error(http_request_t* request, int code, char* msg);
 
@@ -61,10 +67,12 @@ static int http_rest_post_lfs_file(http_request_t* request);
 #endif
 
 static int http_rest_post_reboot(http_request_t* request);
+#if REST_ENABLE_FLASH_API
 int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr);
 static int http_rest_get_flash(http_request_t* request, int startaddr, int len);
 static int http_rest_get_flash_advanced(http_request_t* request);
 static int http_rest_post_flash_advanced(http_request_t* request);
+#endif
 
 static int http_rest_get_info(http_request_t* request);
 static int http_rest_get_bt_scan(http_request_t* request);
@@ -121,7 +129,7 @@ static int http_rest_get(http_request_t* request) {
 		return http_rest_get_seriallog(request);
 	}
 
-#if ENABLE_LITTLEFS
+#if ENABLE_LITTLEFS && REST_ENABLE_FLASH_API
 	if (!strcmp(request->url, "api/fsblock")) {
 		uint32_t newsize = CFG_GetLFS_Size();
 		uint32_t newstart = (LFS_BLOCKS_END - newsize);
@@ -163,9 +171,11 @@ static int http_rest_get(http_request_t* request) {
 	}
 #endif
 
+#if REST_ENABLE_FLASH_API
 	if (!strncmp(request->url, "api/flash/", 10)) {
 		return http_rest_get_flash_advanced(request);
 	}
+#endif
 
 	http_setup(request, httpMimeTypeHTML);
 	http_html_start(request, "GET REST API");
@@ -197,6 +207,7 @@ static int http_rest_post(http_request_t* request) {
 	if (!strcmp(request->url, "api/reboot")) {
 		return http_rest_post_reboot(request);
 	}
+#if REST_ENABLE_FLASH_API
 	if (!strcmp(request->url, "api/ota")) {
 		OTA_IncrementProgress(1);
 #if ENABLE_BT_PROXY
@@ -237,13 +248,14 @@ static int http_rest_post(http_request_t* request) {
 	if (!strncmp(request->url, "api/flash/", 10)) {
 		return http_rest_post_flash_advanced(request);
 	}
+#endif
 
 	if (!strcmp(request->url, "api/cmnd")) {
 		return http_rest_post_cmd(request);
 	}
 
 
-#if ENABLE_LITTLEFS
+#if ENABLE_LITTLEFS && REST_ENABLE_FLASH_API
 	if (!strcmp(request->url, "api/fsblock")) {
 		if (lfs_present()) {
 			release_lfs();
@@ -1312,6 +1324,7 @@ static int http_rest_post_reboot(http_request_t* request) {
 	return 0;
 }
 
+#if REST_ENABLE_FLASH_API
 static int http_rest_get_flash_advanced(http_request_t* request) {
 	char* params = request->url + 10;
 	int startaddr = 0;
@@ -1363,6 +1376,7 @@ static int http_rest_get_flash(http_request_t* request, int startaddr, int len) 
 	os_free(buffer);
 	return 0;
 }
+#endif
 
 static int http_rest_get_channels(http_request_t* request) {
 	int i;
