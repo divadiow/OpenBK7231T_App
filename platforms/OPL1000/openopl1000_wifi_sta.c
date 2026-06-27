@@ -15,7 +15,7 @@
 #include "wifi_event_handler.h"
 
 #ifndef OPENOPL1000_WIFI_SSID
-#define OPENOPL1000_WIFI_SSID "test"
+#define OPENOPL1000_WIFI_SSID "OPL1000_AP"
 #endif
 
 #ifndef OPENOPL1000_WIFI_PASSWORD
