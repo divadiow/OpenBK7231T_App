@@ -39,6 +39,11 @@ static void OpenOPL1000_OpenBekenTask(void *args);
 static void OpenOPL1000_EarlyLog(const char *text);
 static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value) OPENOPL1000_SHM_CODE;
 
+void __wrap_wpa_cli_func_init_patch(void);
+void __wrap_at_func_init_patch(void);
+void __wrap_Diag_PatchInit(void);
+void __wrap_le_ctrl_pre_patch_init(void);
+
 extern void Main_Init(void);
 extern void Main_OnEverySecond(void);
 extern uint8_t __bss_end__;
@@ -79,6 +84,37 @@ static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value)
     value += 0x12345678u;
     value ^= 0x0F0F0F0Fu;
     return value;
+}
+
+void __wrap_wpa_cli_func_init_patch(void)
+{
+    /* OpenBeken uses the SDK Wi-Fi service/driver/event APIs directly.  The
+     * vendor WPA CLI command table is not needed for the product runtime and
+     * costs patch-window space on OPL1000.
+     */
+}
+
+void __wrap_at_func_init_patch(void)
+{
+    /* The OpenOPL1000 runtime keeps the debug UART under our control and does
+     * not expose the vendor AT command task/parser.  The ROM UART mode helpers
+     * are still available through symdefs, so the AT command table init can be
+     * skipped for the OpenBeken profile.
+     */
+}
+
+void __wrap_Diag_PatchInit(void)
+{
+    /* The SDK diagnostic command task is not part of the OpenBeken runtime.
+     * Serial logging still uses the debug UART directly.
+     */
+}
+
+void __wrap_le_ctrl_pre_patch_init(void)
+{
+    /* Probe: BLE controller patch init may be unnecessary because the
+     * OpenOPL1000 profile deliberately skips LeRtosTaskCreat().
+     */
 }
 
 static void OpenOPL1000_PrintRamLayout(void)
@@ -388,7 +424,7 @@ static void Main_AppInit_patch(void)
 
     {
         uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);
-        printf("[OpenOPL1000] split-M3 v53-reset-countdown-diag: shm_fn=0x%08x result=0x%08x\r\n",
+        printf("[OpenOPL1000] split-M3 v60-wifi-config: shm_fn=0x%08x result=0x%08x\r\n",
                (unsigned int)(uintptr_t)OpenOPL1000_ShmProbeFn,
                (unsigned int)shmProbe);
     }
