@@ -64,9 +64,6 @@ SOURCES += $(OBK_SRCS)hal/opl1000/hal_ota_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_pins_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_uart_opl1000.c
 SOURCES += $(OBK_SRCS)hal/opl1000/hal_wifi_opl1000.c
-SOURCES += $(OBK_SRCS)httpclient/http_client.c
-SOURCES += $(OBK_SRCS)httpclient/utils_net.c
-SOURCES += $(OBK_SRCS)httpclient/utils_timer.c
 SOURCES += $(OBK_SRCS)httpserver/http_basic_auth.c
 SOURCES += $(OBK_SRCS)httpserver/http_fns.c
 SOURCES += $(OBK_SRCS)httpserver/http_tcp_server.c
@@ -101,11 +98,10 @@ DEFS  += -D__PMP_ENABLE__
 DEFS  += -D__PMP_REGION__
 DEFS  += -D__HEAP_REGION__
 DEFS  += -DnoLWIP_DYNAMIC_DEBUG_ENABLE
-DEFS  += -D__AT_CMD_TASK__
 DEFS  += -D__noRTL_SIMULATION__
 DEFS  += -D_ARMABI_PURE=
 DEFS  += -DLWIP_TIMEVAL_PRIVATE=0
-DEFS  += -DOPENOPL1000_WIFI_SSID=\"test\"
+DEFS  += -DOPENOPL1000_WIFI_SSID=\"OPL1000_AP\"
 DEFS  += -DOPENOPL1000_WIFI_PASSWORD=\"1234abcd\"
 
 # Key include paths first; broad SDK paths follow for the vendor patch headers.
@@ -173,6 +169,10 @@ LDFLAGS += -flto -fuse-linker-plugin
 LDFLAGS += -Wl,--print-memory-usage
 LDFLAGS += -Wl,--entry=__Patch_EntryPoint
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(OUTPUT_BASENAME).map
+LDFLAGS += -Wl,--wrap=at_func_init_patch
+LDFLAGS += -Wl,--wrap=Diag_PatchInit
+LDFLAGS += -Wl,--wrap=le_ctrl_pre_patch_init
+LDFLAGS += -Wl,--wrap=wpa_cli_func_init_patch
 LDFLAGS += -Xlinker --just-symbols=$(SYMDEFS)
 
 .PHONY: all package clean
