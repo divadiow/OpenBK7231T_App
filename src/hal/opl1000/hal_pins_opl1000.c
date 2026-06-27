@@ -13,7 +13,6 @@
 #define OPENOPL1000_GPIO_MAX 24
 
 static uint32_t s_outputMask;
-static char s_pinAlias[6];
 
 static int OpenOPL1000_PinValid(int index)
 {
@@ -28,6 +27,38 @@ static int OpenOPL1000_PinGpioCapable(int index)
 static E_GpioIdx_t OpenOPL1000_PinToGpio(int index)
 {
     return (E_GpioIdx_t)index;
+}
+
+static const char *OpenOPL1000_GetPinLabel(int index)
+{
+    switch (index)
+    {
+    case 0:  return "IO0 (DBG_TX)";
+    case 1:  return "IO1 (DBG_RX)";
+    case 2:  return "IO2 (AUX2/UART0_TX)";
+    case 3:  return "IO3 (AUX3/UART0_RX)";
+    case 4:  return "IO4 (AUX4/UART1_TX)";
+    case 5:  return "IO5 (AUX5/UART1_RX)";
+    case 6:  return "IO6 (AUX6/UART0_TX)";
+    case 7:  return "IO7 (AUX7/UART0_RX)";
+    case 8:  return "IO8 (UART1_TX/AUX8)";
+    case 9:  return "IO9 (UART1_RX/AUX9)";
+    case 10: return "IO10 (AUX10/UART0_TX)";
+    case 11: return "IO11 (AUX11/UART0_RX)";
+    case 12: return "IO12 (SPI0_CS/AUX12)";
+    case 13: return "IO13 (SPI0_CLK/AUX13)";
+    case 14: return "IO14 (SPI0_IO0/AUX14)";
+    case 15: return "IO15 (SPI0_IO1/AUX15)";
+    case 16: return "IO16 (SPI0_IO2)";
+    case 17: return "IO17 (SPI0_IO3)";
+    case 18: return "IO18 (PWM5)";
+    case 19: return "IO19 (PWM4)";
+    case 20: return "IO20 (PWM3/ICE_M3_DAT)";
+    case 21: return "IO21 (PWM2/ICE_M3_CLK)";
+    case 22: return "IO22 (PWM1)";
+    case 23: return "IO23 (PWM0)";
+    default: return "";
+    }
 }
 
 void HAL_PIN_SetOutputValue(int index, int iVal)
@@ -109,8 +140,7 @@ int HAL_PIN_CanThisPinBePWM(int index)
 const char *HAL_PIN_GetPinNameAlias(int index)
 {
     if (!OpenOPL1000_PinValid(index)) return "";
-    snprintf(s_pinAlias, sizeof(s_pinAlias), "IO%d", index);
-    return s_pinAlias;
+    return OpenOPL1000_GetPinLabel(index);
 }
 
 int HAL_PIN_Find(const char *name)
