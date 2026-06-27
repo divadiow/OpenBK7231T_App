@@ -22,7 +22,7 @@
 #include "wifi_event_handler.h"
 
 #ifndef OPENOPL1000_WIFI_SSID
-#define OPENOPL1000_WIFI_SSID "test"
+#define OPENOPL1000_WIFI_SSID "OPL1000_AP"
 #endif
 
 #ifndef OPENOPL1000_WIFI_PASSWORD
@@ -35,11 +35,8 @@
 #define OPENOPL1000_ASSOC_WAIT_SECONDS        30
 #define OPENOPL1000_SCAN_RETRY_DELAY_MS       10000
 #define OPENOPL1000_SCAN_PASS_COUNT           4
-#define OPENOPL1000_DEEP_SCAN_WAIT_MS         1500
-#define OPENOPL1000_DEEP_SCAN_MAX_CHANNEL     13
 #define OPENOPL1000_WIFI_VERBOSE_SCAN         0
 #define OPENOPL1000_NETINFO_TRACE             0
-#define OPENOPL1000_CONNECT_NO_SCAN_MATCH     (-1002)
 
 extern size_t xPortGetFreeHeapSize(void);
 
@@ -50,8 +47,6 @@ static bool g_workerStarted;
 static bool g_associated;
 static bool g_haveIp;
 static bool g_lwipStarted;
-static volatile bool g_connectionFailed;
-static volatile int g_lastConnectionFailReason = -1;
 static osThreadId g_workerThread;
 static char g_ssid[WIFI_MAX_LENGTH_OF_SSID];
 static char g_password[WIFI_LENGTH_PASSPHRASE + 1];
@@ -211,37 +206,6 @@ static bool OpenOPL1000_UpdateBestApFromReport(scan_report_t *report)
     return true;
 }
 
-static int OpenOPL1000_GetConnectionFailReason(void *data, uint16_t length)
-{
-    if (data == NULL || length == 0)
-    {
-        return -1;
-    }
-
-    return (int)(*((uint8_t *)data));
-}
-
-static void OpenOPL1000_LogCountry(void)
-{
-    wifi_country_t country;
-    int rc;
-
-    memset(&country, 0, sizeof(country));
-    rc = wifi_get_country(&country);
-    if (rc == 0)
-    {
-        printf("[OpenOPL1000] Wi-Fi country '%c%c' start_ch=%u max_ch=%u\r\n",
-               country.cc[0] ? country.cc[0] : '?',
-               country.cc[1] ? country.cc[1] : '?',
-               (unsigned int)country.start_chan,
-               (unsigned int)country.max_chan);
-    }
-    else
-    {
-        printf("[OpenOPL1000] Wi-Fi country get rc=%d\r\n", rc);
-    }
-}
-
 static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
 {
     wifi_config_t wifiConfig;
@@ -256,9 +220,6 @@ static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
     wifiConfig.sta_config.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     wifiConfig.sta_config.threshold.authmode = WIFI_AUTH_OPEN;
     wifiConfig.sta_config.threshold.rssi = -127;
-
-    g_connectionFailed = false;
-    g_lastConnectionFailReason = -1;
 
     rc = wifi_set_config(WIFI_MODE_STA, &wifiConfig);
     printf("[OpenOPL1000] worker: direct no-BSSID connect set_config rc=%d heap=%u\r\n",
@@ -278,13 +239,6 @@ static bool OpenOPL1000_WaitForAssociation(unsigned int seconds)
     for (unsigned int i = 0; i < seconds; i++)
     {
         osDelay(1000);
-        if (g_connectionFailed)
-        {
-            printf("[OpenOPL1000] worker: association failed early, reason=%d heap=%u\r\n",
-                   g_lastConnectionFailReason,
-                   OpenOPL1000_GetFreeHeap());
-            return false;
-        }
         if (OpenOPL1000_IsAssociated())
         {
             g_associated = true;
@@ -301,7 +255,6 @@ static int OpenOPL1000_DoScanAndConnect(void)
     scan_report_t *report;
     uint16_t apCount = 0;
     int rc = -1;
-    bool sawTarget = false;
 
     for (int pass = 0; pass < OPENOPL1000_SCAN_PASS_COUNT; pass++)
     {
@@ -365,7 +318,6 @@ static int OpenOPL1000_DoScanAndConnect(void)
 
         if (OpenOPL1000_UpdateBestApFromReport(report))
         {
-            sawTarget = true;
             rc = OpenOPL1000_TryDirectConnectWithoutBssid();
             if (OpenOPL1000_WaitForAssociation(OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS))
             {
@@ -381,66 +333,7 @@ static int OpenOPL1000_DoScanAndConnect(void)
         osDelay(1000);
     }
 
-    if (!sawTarget)
-    {
-        return OPENOPL1000_CONNECT_NO_SCAN_MATCH;
-    }
-
     return rc;
-}
-
-static int OpenOPL1000_DoDeepChannelScanAndConnect(void)
-{
-    wifi_scan_config_t scanConfig;
-    scan_report_t *report;
-    int rc = -1;
-
-    printf("[OpenOPL1000] worker: SSID '%s' not found; starting per-channel passive scan\r\n",
-           g_ssid);
-
-    for (int channel = 1; channel <= OPENOPL1000_DEEP_SCAN_MAX_CHANNEL; channel++)
-    {
-        memset(&scanConfig, 0, sizeof(scanConfig));
-        scanConfig.ssid = (uint8_t *)g_ssid;
-        scanConfig.channel = (uint8_t)channel;
-        scanConfig.show_hidden = true;
-        scanConfig.scan_type = WIFI_SCAN_TYPE_PASSIVE;
-        scanConfig.scan_time.passive = OPENOPL1000_DEEP_SCAN_WAIT_MS;
-
-        printf("[OpenOPL1000] worker: deep passive scan ch=%d wait=%ums heap=%u\r\n",
-               channel,
-               (unsigned int)OPENOPL1000_DEEP_SCAN_WAIT_MS,
-               OpenOPL1000_GetFreeHeap());
-
-        rc = wifi_scan_start(&scanConfig, false);
-        if (rc != 0)
-        {
-            printf("[OpenOPL1000] worker: deep scan ch=%d start rc=%d\r\n",
-                   channel,
-                   rc);
-            osDelay(250);
-            continue;
-        }
-
-        osDelay(OPENOPL1000_DEEP_SCAN_WAIT_MS + 250);
-
-        report = wifi_get_scan_result ? wifi_get_scan_result() : NULL;
-        if (OpenOPL1000_UpdateBestApFromReport(report))
-        {
-            printf("[OpenOPL1000] worker: deep scan found SSID '%s' on ch=%d\r\n",
-                   g_ssid,
-                   channel);
-            rc = OpenOPL1000_TryDirectConnectWithoutBssid();
-            if (OpenOPL1000_WaitForAssociation(OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS))
-            {
-                return 0;
-            }
-
-            return rc;
-        }
-    }
-
-    return OPENOPL1000_CONNECT_NO_SCAN_MATCH;
 }
 
 static void OpenOPL1000_DoConnectCycle(void)
@@ -455,31 +348,6 @@ static void OpenOPL1000_DoConnectCycle(void)
     rc = OpenOPL1000_DoScanAndConnect();
     if (OpenOPL1000_IsAssociated())
     {
-        return;
-    }
-
-    if (rc == OPENOPL1000_CONNECT_NO_SCAN_MATCH)
-    {
-        rc = OpenOPL1000_DoDeepChannelScanAndConnect();
-        if (OpenOPL1000_IsAssociated())
-        {
-            return;
-        }
-
-        if (rc == OPENOPL1000_CONNECT_NO_SCAN_MATCH)
-        {
-            printf("[OpenOPL1000] worker: SSID '%s' not found after deep scan; skipping blind connect heap=%u\r\n",
-                   g_ssid,
-                   OpenOPL1000_GetFreeHeap());
-            return;
-        }
-    }
-
-    if (g_connectionFailed)
-    {
-        printf("[OpenOPL1000] worker: connect failed during scan path, reason=%d; waiting before retry heap=%u\r\n",
-               g_lastConnectionFailReason,
-               OpenOPL1000_GetFreeHeap());
         return;
     }
 
@@ -670,8 +538,6 @@ static int OpenOPL1000_WifiEventHandler(wifi_event_id_t eventId, void *data, uin
 
         case WIFI_EVENT_STA_CONNECTED:
             printf("[OpenOPL1000] event: STA_CONNECTED\r\n");
-            g_connectionFailed = false;
-            g_lastConnectionFailReason = -1;
             g_associated = true;
             OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
             break;
@@ -693,11 +559,7 @@ static int OpenOPL1000_WifiEventHandler(wifi_event_id_t eventId, void *data, uin
             break;
 
         case WIFI_EVENT_STA_CONNECTION_FAILED:
-            g_lastConnectionFailReason = OpenOPL1000_GetConnectionFailReason(data, length);
-            g_connectionFailed = true;
-            printf("[OpenOPL1000] event: STA_CONNECTION_FAILED reason=%d len=%u\r\n",
-                   g_lastConnectionFailReason,
-                   (unsigned int)length);
+            printf("[OpenOPL1000] event: STA_CONNECTION_FAILED\r\n");
             g_associated = false;
             g_haveIp = false;
             g_lwipStarted = false;
@@ -731,7 +593,6 @@ static void OpenOPL1000_WifiInitOnce(void)
 
     wifi_event_loop_init((wifi_event_cb_t)OpenOPL1000_WifiEventHandler);
     wifi_init(&initConfig, NULL);
-    OpenOPL1000_LogCountry();
 
     g_wifiInitialised = true;
     printf("[OpenOPL1000] Wi-Fi init done, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
@@ -748,26 +609,21 @@ void HAL_ConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticI
     wifi_config_t wifiConfig;
     (void)ip;
 
-    if (oob_ssid && *oob_ssid)
+    memset(g_ssid, 0, sizeof(g_ssid));
+    memset(g_password, 0, sizeof(g_password));
+
+    if (oob_ssid == NULL || *oob_ssid == 0)
     {
-        strncpy(g_ssid, oob_ssid, sizeof(g_ssid) - 1);
-    }
-    else
-    {
-        strncpy(g_ssid, OPENOPL1000_WIFI_SSID, sizeof(g_ssid) - 1);
+        printf("[OpenOPL1000] HAL_ConnectToWiFi called without SSID; STA connect skipped\r\n");
+        OpenOPL1000_ReportStatus(WIFI_STA_DISCONNECTED);
+        return;
     }
 
-    if (connect_key && *connect_key)
+    strncpy(g_ssid, oob_ssid, sizeof(g_ssid) - 1);
+    if (connect_key != NULL)
     {
         strncpy(g_password, connect_key, sizeof(g_password) - 1);
     }
-    else
-    {
-        strncpy(g_password, OPENOPL1000_WIFI_PASSWORD, sizeof(g_password) - 1);
-    }
-
-    g_ssid[sizeof(g_ssid) - 1] = 0;
-    g_password[sizeof(g_password) - 1] = 0;
 
     printf("[OpenOPL1000] HAL_ConnectToWiFi ssid='%s' heap=%u\r\n", g_ssid, OpenOPL1000_GetFreeHeap());
     OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
@@ -796,13 +652,6 @@ void HAL_ConnectToWiFi(const char *oob_ssid, const char *connect_key, obkStaticI
         rc = wifi_start();
         g_wifiStarted = (rc == 0);
         printf("[OpenOPL1000] wifi_start rc=%d heap=%u\r\n", rc, OpenOPL1000_GetFreeHeap());
-        if (g_wifiStarted)
-        {
-            rc = wifi_config_set_bandwidth(WIFI_MODE_STA, WIFI_BW_HT20);
-            printf("[OpenOPL1000] wifi_config_set_bandwidth(HT20) rc=%d heap=%u\r\n",
-                   rc,
-                   OpenOPL1000_GetFreeHeap());
-        }
     }
     else
     {
@@ -821,7 +670,6 @@ int HAL_SetupWiFiOpenAccessPoint(const char *ssid)
 {
     printf("[OpenOPL1000] SoftAP requested for '%s' but OPL1000 SDK supports STA only\r\n", ssid ? ssid : "");
     OpenOPL1000_ReportStatus(WIFI_AP_FAILED);
-    HAL_ConnectToWiFi(OPENOPL1000_WIFI_SSID, OPENOPL1000_WIFI_PASSWORD, NULL);
     return -1;
 }
 
