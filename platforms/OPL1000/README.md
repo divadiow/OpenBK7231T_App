@@ -1037,3 +1037,218 @@ Expected marker:
 ```text
 [OpenOPL1000] split-M3 v60-wifi-config: shm_fn=0x80001245 result=0xb881be0b
 ```
+
+## v61 watchdog feed during warm reboot Wi-Fi reconnect
+
+Hardware testing of v60 showed that saving new Wi-Fi credentials from the GUI
+persisted correctly, but the immediate software reboot could reset again while
+connecting to the newly saved AP. A full power cycle then booted and connected
+normally with the new credentials, so the config/FIM save path was not the
+problem.
+
+The failing warm-boot log reset almost exactly at the SDK's 10 second watchdog
+window, during the first scan/connect attempt and before the worker printed the
+`wifi_connection_connect rc=...` line. The Opulinks SDK initializes the hardware
+WDT with a 10 second timeout and its normal idle hook clears it, while the
+OpenBeken OPL1000 HAL still had an empty `HAL_Run_WDT()`.
+
+v61 wires OPL1000 `HAL_Run_WDT()` to `Hal_Wdt_Clear()` so OpenBeken's existing
+once-per-second watchdog call feeds the SDK WDT. The Wi-Fi worker also clears
+the WDT immediately around the long SDK scan, connect, and lwIP start calls.
+
+This is intentionally OPL1000-only and does not change the generic reboot path
+or Wi-Fi config behaviour. The test is to change Wi-Fi from `/cfg_wifi`, allow
+the automatic reboot, and check whether the device reaches DHCP on the newly
+saved AP without a second reset.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v60 size: text 171287, data 2308, bss 3836, dec 177431
+v61 size: text 171331, data 2312, bss 3836, dec 177479
+
+v60 IRAM1: 162916 / 170848
+v61 IRAM1: 162964 / 170848
+v61 SHM:    14516 / 15360
+```
+
+Net v61 change versus v60 is 48 bytes larger overall and 48 bytes more IRAM1
+use. SHM is unchanged.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v61-wdt-feed: shm_fn=0x80001245 result=0xb881be0b
+```
+
+## v62 default UART command line
+
+OPL1000 has no SoftAP provisioning path in the vendor SDK, and the BLE/AT
+provisioning stack remains disabled to keep the OpenBeken build small. v62
+therefore enables the existing OpenBeken UART command line by default on
+OPL1000 only.
+
+Flag 31 (`OBK_FLAG_CMD_ACCEPT_UART_COMMANDS`) is now set in the OPL1000 default
+config. The shared command-console runner is still limited to platforms with a
+known backend, but the gate now includes OPL1000 as well as Beken. To keep heap
+cost down, OPL1000 uses a 256 byte UART RX ring buffer instead of the 512 byte
+Beken default.
+
+The OPL1000 UART HAL now hooks the SDK debug-UART RX callback and appends bytes
+to the OpenBeken UART command ring buffer. This uses the same IO0/IO1 debug
+UART already used for boot and OpenBeken logs, so command input shares the log
+serial port at 115200 baud. The vendor AT command system is not re-enabled.
+
+The intended provisioning test after flashing is to send newline-terminated OBK
+commands over the debug UART:
+
+```text
+SSID1 "YourWifiName"
+Password1 "YourWifiPassword"
+restart
+```
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v61 size: text 171331, data 2312, bss 3836, dec 177479
+v62 size: text 171819, data 2336, bss 3836, dec 177991
+
+v61 IRAM1: 162964 / 170848
+v62 IRAM1: 163508 / 170848
+v62 SHM:    14484 / 15360
+```
+
+Net v62 change versus v61 is 512 bytes larger overall and 544 bytes more IRAM1
+use. SHM use decreased by 32 bytes. Runtime heap cost is the OPL1000 UART RX
+ring buffer, currently 256 bytes, allocated only when the UART command flag is
+enabled.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v62-uart-cli: shm_fn=0x80001245 result=0xb881be0b
+```
+
+## v63 UART command line via polling
+
+Hardware testing of v62 showed that replacing the SDK debug-UART RX callback
+was too invasive. The device repeatedly reset during Wi-Fi association after
+the targeted scan had found the AP and the worker had called
+`wifi_connection_connect()`. The serial log also showed interleaved/truncated
+output around the Wi-Fi bring-up window.
+
+v63 keeps the OPL1000-only Flag 31 default and the 256 byte UART command RX
+buffer, but removes the debug-UART callback replacement. Instead, OPL1000
+disables debug-UART RX interrupts for the OBK console and polls
+`Hal_DbgUart_DataRecvTimeOut()` from the existing OpenBeken UART command tick,
+draining up to 64 bytes per pass into the normal command ring buffer.
+
+This keeps UART command handling out of interrupt context and avoids taking
+over the vendor debug/diag callback path. The provisioning command test remains
+the same:
+
+```text
+SSID1 "YourWifiName"
+Password1 "YourWifiPassword"
+restart
+```
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v62 size: text 171819, data 2336, bss 3836, dec 177991
+v63 size: text 171827, data 2336, bss 3836, dec 177999
+
+v62 IRAM1: 163508 / 170848
+v63 IRAM1: 163516 / 170848
+v63 SHM:    14484 / 15360
+```
+
+Net v63 change versus v62 is 8 bytes larger overall and 8 bytes more IRAM1
+use. SHM use is unchanged.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v63-uart-poll: shm_fn=0x80001245 result=0xb881be0b
+```
+
+## v64 defer UART command line until Wi-Fi is online
+
+Hardware testing of v63 showed the same reset pattern as v62: the device reset
+during the first Wi-Fi association, after the targeted scan and
+`direct no-BSSID connect set_config`, but before
+`wifi_connection_connect rc=...` was printed.
+
+v64 keeps the OPL1000-only UART command line code but stops initializing or
+polling it during Wi-Fi association. On OPL1000, `CMD_InitCommands()` now skips
+the immediate UART console init even when Flag 31 is set. The quick-tick UART
+runner returns early until `Main_HasWiFiConnected()` is true; only after the
+device is online does it lazily initialize the 256 byte command RX ring buffer
+and start polling the debug UART.
+
+This is deliberately a conservative probe. It does not solve first-boot
+provisioning without the default AP, but it should preserve the known-good Wi-Fi
+join path while still allowing UART credential changes after the device has
+joined its current configured AP.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v63 size: text 171827, data 2336, bss 3836, dec 177999
+v64 size: text 171823, data 2332, bss 3836, dec 177991
+
+v63 IRAM1: 163516 / 170848
+v64 IRAM1: 163508 / 170848
+v64 SHM:    14484 / 15360
+```
+
+Net v64 change versus v63 is 8 bytes smaller overall and 8 bytes less IRAM1
+use. SHM use is unchanged.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v64-uart-after-wifi: shm_fn=0x80001245 result=0xb881be0b
+```
+
+## v65 rollback UART command-line experiment
+
+Hardware testing of v64 still reset at the same Wi-Fi association point as v62
+and v63, even though v64 deferred UART console init and polling until after
+`Main_HasWiFiConnected()` became true. That means the OPL1000 image could not
+tolerate this UART command-line experiment even when the runtime UART path was
+dormant during association.
+
+v65 rolls the UART command-line experiment out of the active OPL1000 build:
+
+- Flag 31 is no longer enabled by default on OPL1000.
+- `cmd_main.c` goes back to a Beken-only UART command console gate.
+- `hal_uart_opl1000.c` goes back to the small TX-only stub.
+
+The v62-v64 history is kept above because it is useful evidence: the obvious
+OBK UART-console path is not safe enough for this tight OPL1000 image right now.
+Future provisioning should use either a much smaller OPL1000-specific parser or
+a lower-level SDK/FIM write path that does not pull the generic OBK UART command
+console into the Wi-Fi association image.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v64 size: text 171823, data 2332, bss 3836, dec 177991
+v65 size: text 171335, data 2308, bss 3836, dec 177479
+
+v64 IRAM1: 163508 / 170848
+v65 IRAM1: 162964 / 170848
+v65 SHM:    14516 / 15360
+```
+
+Net v65 change versus v64 is 512 bytes smaller overall and 544 bytes less IRAM1
+use. SHM use returns to the v61 baseline.
+
+Expected marker:
+
+```text
+[OpenOPL1000] split-M3 v65-uart-rollback: shm_fn=0x80001245 result=0xb881be0b
+```
