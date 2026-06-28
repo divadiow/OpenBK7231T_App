@@ -1252,3 +1252,59 @@ Expected marker:
 ```text
 [OpenOPL1000] split-M3 v65-uart-rollback: shm_fn=0x80001245 result=0xb881be0b
 ```
+
+## v66 log cleanup
+
+v65 restored the working Wi-Fi path, so v66 turns attention to making the boot
+log look more like a normal OpenBeken platform rather than an always-on bring-up
+trace. The earlier `[OpenOPL1000] ...` prefix was deliberate during the porting
+work, but most of it was no longer useful in normal test builds.
+
+v66 changes:
+
+- Removes the active `OpenBeken platform port` banner and the extra pre-logger
+  `Starting OpenBeken` line. The normal common OBK startup banner is now the
+  first OpenBeken-owned product/version line.
+- Moves OPL1000 boot RAM/SHM probe logging behind `OPENOPL1000_BOOT_TRACE`.
+- Moves the verbose OPL1000 Wi-Fi worker/event diagnostics behind
+  `OPENOPL1000_WIFI_TRACE`.
+- Removes platform wording from a few OPL1000-only flash, reboot, OTA, HTTP,
+  and socket error logs.
+- Removes the stale Wi-Fi page text that mentioned future UART provisioning,
+  because the v62-v64 UART command-line experiment is parked.
+
+The older `platforms/OPL1000/openopl1000_*` bring-up files still contain historic
+`[OpenOPL1000]` strings, including old minimal-web Wi-Fi logs, but the current
+Makefile links `main_patch.c` plus the real OBK `hal/opl1000/*` path instead.
+Those old strings are kept as history and are not expected in v66 firmware
+output.
+
+The line splitting seen in earlier serial logs, for example `Using Pass [123`
+followed by `4abcd]`, appears to be UART/capture interleaving rather than a
+source-side string truncation. The common OBK password log is intentionally left
+unchanged in this branch for now.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v65 size: text 171335, data 2308, bss 3836, dec 177479
+v66 size: text 166943, data 2308, bss 3836, dec 173087
+
+v65 IRAM1: 162964 / 170848
+v66 IRAM1: 158604 / 170848
+v65 SHM:    14516 / 15360
+v66 SHM:    14484 / 15360
+```
+
+Net v66 change versus v65 is 4392 bytes smaller overall, 4360 bytes less IRAM1
+use, and 32 bytes less SHM use. Most of that comes from compiling out the
+verbose OPL1000 Wi-Fi and split-M3 trace strings/calls.
+
+Expected startup shape:
+
+```text
+OpenOPL1000, version codex_v66
+...
+Info:MAIN:Using SSID [OPL1000_AP]
+Info:MAIN:Using Pass [1234abcd]
+```

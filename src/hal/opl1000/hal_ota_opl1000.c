@@ -8,7 +8,7 @@
 
 void otarequest(const char *urlin)
 {
-    printf("[OpenOPL1000] OTA request ignored for now: %s\r\n", urlin ? urlin : "");
+    printf("OTA request ignored for now: %s\r\n", urlin ? urlin : "");
 }
 
 int HAL_FlashRead(char *buffer, int readlen, int startaddr)
@@ -26,7 +26,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
     (void)request;
     (void)startaddr;
     (void)maxaddr;
-    ADDLOG_ERROR(LOG_FEATURE_OTA, "[OpenOPL1000] OTA flash write is not implemented yet");
+    ADDLOG_ERROR(LOG_FEATURE_OTA, "OTA flash write is not implemented yet");
     return -1;
 }
 

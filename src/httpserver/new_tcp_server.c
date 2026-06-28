@@ -430,7 +430,7 @@ static void tcp_server_thread(beken_thread_arg_t arg)
 				 */
 				if(errno != EWOULDBLOCK)
 				{
-					ADDLOG_ERROR(LOG_FEATURE_HTTP, "OPL1000 accept failed err %i", errno);
+						ADDLOG_ERROR(LOG_FEATURE_HTTP, "accept failed err %i", errno);
 				}
 				sock[new_idx].fd = INVALID_SOCK;
 				rtos_delay_milliseconds(50);

@@ -10,7 +10,7 @@
 
 void HAL_RebootModule(void)
 {
-    printf("[OpenOPL1000] reboot requested\r\n");
+    printf("Reboot requested\r\n");
     if (Hal_Sys_SwResetAll != NULL)
     {
         Hal_Sys_SwResetAll();

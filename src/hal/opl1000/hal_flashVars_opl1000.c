@@ -21,7 +21,7 @@ static void OpenOPL1000_LoadFlashVars(void)
     if (MwFim_FileRead(OPENOPL1000_FIM_FLASHVARS_FILE_ID, 0, sizeof(s_flashVars), (uint8_t *)&s_flashVars) != MW_FIM_OK)
     {
         memset(&s_flashVars, 0, sizeof(s_flashVars));
-        printf("[OpenOPL1000] flashvars FIM read miss, using defaults\r\n");
+        printf("FlashVars FIM read miss, using defaults\r\n");
     }
 
     s_flashVarsLoaded = 1;
@@ -31,7 +31,7 @@ static int OpenOPL1000_SaveFlashVars(void)
 {
     if (MwFim_FileWrite(OPENOPL1000_FIM_FLASHVARS_FILE_ID, 0, sizeof(s_flashVars), (uint8_t *)&s_flashVars) != MW_FIM_OK)
     {
-        printf("[OpenOPL1000] flashvars FIM write failed\r\n");
+        printf("FlashVars FIM write failed\r\n");
         return 0;
     }
 

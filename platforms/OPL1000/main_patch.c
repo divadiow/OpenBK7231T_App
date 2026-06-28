@@ -22,6 +22,10 @@ static E_IO01_UART_MODE s_io01UartMode;
 
 #define OPENOPL1000_SHM_CODE __attribute__((section(".shm_text"), noinline, used, long_call))
 
+#ifndef OPENOPL1000_BOOT_TRACE
+#define OPENOPL1000_BOOT_TRACE 0
+#endif
+
 void __Patch_EntryPoint(void) __attribute__((section("ENTRY_POINT")));
 void __Patch_EntryPoint(void) __attribute__((used));
 
@@ -34,7 +38,9 @@ static void Main_AtUartDbgUartSwitch(void);
 static void Main_ApsUartRxDectecConfig(void);
 static void Main_ApsUartRxDectecCb(E_GpioIdx_t gpioIdx);
 static void Main_AppInit_patch(void);
+#if OPENOPL1000_BOOT_TRACE
 static void OpenOPL1000_PrintRamLayout(void);
+#endif
 static void OpenOPL1000_OpenBekenTask(void *args);
 static void OpenOPL1000_EarlyLog(const char *text);
 static uint32_t OpenOPL1000_ShmProbeFn(uint32_t value) OPENOPL1000_SHM_CODE;
@@ -117,6 +123,7 @@ void __wrap_le_ctrl_pre_patch_init(void)
      */
 }
 
+#if OPENOPL1000_BOOT_TRACE
 static void OpenOPL1000_PrintRamLayout(void)
 {
     uintptr_t bssEnd = (uintptr_t)&__bss_end__;
@@ -125,7 +132,7 @@ static void OpenOPL1000_PrintRamLayout(void)
     volatile uint32_t *shmBase = (volatile uint32_t *)0x80000000u;
     volatile uint32_t *shmGuardEnd = (volatile uint32_t *)0x800003F0u;
 
-    printf("[OpenOPL1000] RAM layout: bss_end=0x%08x iram_free_to_440000=%u shm=0x%08x..0x%08x used=%u free=%u\r\n",
+    printf("OPL1000 RAM layout: bss_end=0x%08x iram_free_to_440000=%u shm=0x%08x..0x%08x used=%u free=%u\r\n",
            (unsigned int)bssEnd,
            (unsigned int)(0x00440000u - bssEnd),
            (unsigned int)shmStart,
@@ -133,13 +140,13 @@ static void OpenOPL1000_PrintRamLayout(void)
            (unsigned int)(shmEnd - shmStart),
            (unsigned int)(0x80004000u - shmEnd));
 
-    printf("[OpenOPL1000] IPC dyn addrs: bss=0x%08x dbg=0x%08x sta=0x%08x ps=0x%08x\r\n",
+    printf("OPL1000 IPC dyn addrs: bss=0x%08x dbg=0x%08x sta=0x%08x ps=0x%08x\r\n",
            (unsigned int)g_u32IpcWifiBssInfoAddr,
            (unsigned int)g_u32IpcWifiDbgParamAddr,
            (unsigned int)g_u32IpcWifiStaInfoAddr,
            (unsigned int)g_u32IpcPsConfAddr);
 
-    printf("[OpenOPL1000] SHM guard sample: 80000000=%08x %08x %08x %08x / 800003f0=%08x %08x %08x %08x\r\n",
+    printf("OPL1000 SHM guard sample: 80000000=%08x %08x %08x %08x / 800003f0=%08x %08x %08x %08x\r\n",
            (unsigned int)shmBase[0],
            (unsigned int)shmBase[1],
            (unsigned int)shmBase[2],
@@ -149,6 +156,7 @@ static void OpenOPL1000_PrintRamLayout(void)
            (unsigned int)shmGuardEnd[2],
            (unsigned int)shmGuardEnd[3]);
 }
+#endif
 
 void __Patch_EntryPoint(void)
 {
@@ -209,7 +217,9 @@ static void Main_ServiceInitNoBle(void)
 {
     T_MwOtaLayoutInfo tLayout;
 
-    printf("[OpenOPL1000] Sys_ServiceInitNoBle: Wi-Fi services only; skipping BLE/LE task\r\n");
+#if OPENOPL1000_BOOT_TRACE
+    printf("Wi-Fi services only; skipping BLE/LE task\r\n");
+#endif
 
     if (wifi_mac_task_create != NULL)
     {
@@ -229,12 +239,16 @@ static void Main_ServiceInitNoBle(void)
     if (nl_scrt_Init != NULL)
     {
         int scrtRc = nl_scrt_Init();
-        printf("[OpenOPL1000] nl_scrt_Init rc=%d\r\n", scrtRc);
+#if OPENOPL1000_BOOT_TRACE
+        printf("nl_scrt_Init rc=%d\r\n", scrtRc);
+#endif
     }
+#if OPENOPL1000_BOOT_TRACE
     else
     {
-        printf("[OpenOPL1000] nl_scrt_Init pointer is NULL\r\n");
+        printf("nl_scrt_Init pointer is NULL\r\n");
     }
+#endif
 
     if (do_supplicant_init != NULL)
     {
@@ -390,8 +404,9 @@ static void OpenOPL1000_OpenBekenTask(void *args)
 {
     (void)args;
 
-    OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] OpenBeken task entered\r\n");
-    OpenOPL1000_EarlyLog("[OpenOPL1000] starting real OpenBeken runtime\r\n");
+#if OPENOPL1000_BOOT_TRACE
+    OpenOPL1000_EarlyLog("\r\nOpenBeken task entered\r\n");
+#endif
     Main_Init();
 
     while (1)
@@ -419,17 +434,16 @@ static void Main_AppInit_patch(void)
 
     Hal_DbgUart_Init(115200);
     Hal_DbgUart_RxIntEn(1);
-    OpenOPL1000_EarlyLog("\r\n[OpenOPL1000] Main_AppInit_patch reached; APS/debug UART is IO0/IO1 @115200\r\n");
-    OpenOPL1000_EarlyLog("[OpenOPL1000] OpenBeken platform port\r\n");
-
+#if OPENOPL1000_BOOT_TRACE
     {
         uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);
-        printf("[OpenOPL1000] split-M3 v65-uart-rollback: shm_fn=0x%08x result=0x%08x\r\n",
+        printf("OPL1000 split-M3 v66-log-cleanup: shm_fn=0x%08x result=0x%08x\r\n",
                (unsigned int)(uintptr_t)OpenOPL1000_ShmProbeFn,
                (unsigned int)shmProbe);
     }
 
     OpenOPL1000_PrintRamLayout();
+#endif
 
     memset(&threadDef, 0, sizeof(threadDef));
     threadDef.name = "openbeken";
@@ -440,6 +454,6 @@ static void Main_AppInit_patch(void)
 
     if (osThreadCreate(&threadDef, NULL) == NULL)
     {
-        OpenOPL1000_EarlyLog("[OpenOPL1000] failed to create OpenBeken task\r\n");
+        OpenOPL1000_EarlyLog("Failed to create OpenBeken task\r\n");
     }
 }

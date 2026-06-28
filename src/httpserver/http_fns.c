@@ -106,7 +106,7 @@ static int http_opl1000_print_wifi_scan(http_request_t *request)
 	scanConfig.scan_time.active.max = 300;
 	scanConfig.scan_time.passive = 150;
 
-	bk_printf("OPL1000 HTTP WiFi scan begin...\r\n");
+	bk_printf("WiFi scan begin...\r\n");
 	rc = wifi_scan_start(&scanConfig, false);
 	if (rc != 0) {
 		hprintf255(request, "Wifi scan failed, rc=%d<br>", rc);
@@ -1736,7 +1736,7 @@ int http_fn_cfg_wifi(http_request_t* request) {
 </form>");
 	poststr_h4(request, "Use this to disconnect from your WiFi");
 #if PLATFORM_OPL1000
-	poststr(request, "<p>OPL1000 is STA-only in the current SDK profile, so it cannot fall back to an open configuration access point. Save another SSID/password below or use UART provisioning once available.</p>");
+	poststr(request, "<p>OPL1000 is STA-only in the current SDK profile, so it cannot fall back to an open configuration access point. Save another SSID/password below.</p>");
 #else
 	poststr(request, "<form action=\"/cfg_wifi_set\">\
 <input type=\"hidden\" id=\"open\" name=\"open\" value=\"1\">\
