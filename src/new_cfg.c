@@ -166,6 +166,9 @@ void CFG_SetDefaultConfig() {
 #if PLATFORM_BEKEN
 	//CFG_SetFlag(OBK_FLAG_CMD_ACCEPT_UART_COMMANDS, true);
 #endif
+#if PLATFORM_OPL1000
+	CFG_SetFlag(OBK_FLAG_CMD_ACCEPT_UART_COMMANDS, true);
+#endif
 	
 	CFG_SetDefaultLEDCorrectionTable();
 
