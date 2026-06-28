@@ -16,6 +16,7 @@
 #include "lwip_helper.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/netif.h"
+#include "hal_wdt.h"
 #include "sys_os_config.h"
 #include "wifi_api.h"
 #include "wifi_event.h"
@@ -60,6 +61,14 @@ static char g_dns[16] = "0.0.0.0";
 static unsigned int OpenOPL1000_GetFreeHeap(void)
 {
     return (unsigned int)xPortGetFreeHeapSize();
+}
+
+static void OpenOPL1000_ClearWatchdog(void)
+{
+    if (Hal_Wdt_Clear != NULL)
+    {
+        Hal_Wdt_Clear();
+    }
 }
 
 static bool OpenOPL1000_IsUsableMac(const uint8_t *mac)
@@ -227,7 +236,9 @@ static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
            OpenOPL1000_GetFreeHeap());
 
     OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
+    OpenOPL1000_ClearWatchdog();
     rc = wifi_connection_connect(&wifiConfig);
+    OpenOPL1000_ClearWatchdog();
     printf("[OpenOPL1000] worker: direct no-BSSID wifi_connection_connect rc=%d heap=%u\r\n",
            rc,
            OpenOPL1000_GetFreeHeap());
@@ -291,6 +302,7 @@ static int OpenOPL1000_DoScanAndConnect(void)
                targeted ? "targeted" : "broad",
                rc,
                OpenOPL1000_GetFreeHeap());
+        OpenOPL1000_ClearWatchdog();
 
         if (rc != 0)
         {
@@ -299,6 +311,7 @@ static int OpenOPL1000_DoScanAndConnect(void)
         }
 
         osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
+        OpenOPL1000_ClearWatchdog();
 
         rc = wifi_scan_get_ap_num(&apCount);
 #if OPENOPL1000_WIFI_VERBOSE_SCAN
@@ -380,10 +393,13 @@ static bool OpenOPL1000_StartLwipAndPollForIp(void)
     if (!g_lwipStarted)
     {
         g_lwipStarted = true;
+        OpenOPL1000_ClearWatchdog();
         printf("[OpenOPL1000] worker: lwIP network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
         lwip_network_init(WIFI_MODE_STA);
+        OpenOPL1000_ClearWatchdog();
         printf("[OpenOPL1000] worker: lwIP net_start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
         lwip_net_start(WIFI_MODE_STA);
+        OpenOPL1000_ClearWatchdog();
 
         /* Do not call lwip_net_ready() here. On OPL1000 A2 it blocks the
          * temporary Wi-Fi worker indefinitely after DHCP succeeds, so the
