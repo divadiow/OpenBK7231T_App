@@ -992,6 +992,7 @@ void BL_Shared_Init(void) {
     {
       sensdataset->sensors[i].noChangeFrame = 0;
       sensdataset->sensors[i].lastReading = 0;
+      sensdataset->sensors[i].lastSentValue = 0;
     }
 	sensdataset->sensors[OBK_FREQUENCY].lastReading = NAN;
 #if ENABLE_BL_TWIN
@@ -999,6 +1000,7 @@ void BL_Shared_Init(void) {
 	{
 		sensdataset1->sensors[i].noChangeFrame = 0;
 		sensdataset1->sensors[i].lastReading = 0;
+		sensdataset1->sensors[i].lastSentValue = 0;
 	}
 	sensdataset1->sensors[OBK_FREQUENCY].lastReading = NAN;
 #endif
