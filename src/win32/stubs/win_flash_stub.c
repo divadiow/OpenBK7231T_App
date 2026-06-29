@@ -12,6 +12,22 @@ byte *g_flash = 0;
 bool g_flashLoaded = false;
 bool g_bFlashModified = false;
 
+static void SIM_SetFlashFileName(const char *targetPath) {
+	size_t len;
+
+	if (targetPath == 0) {
+		fname[0] = 0;
+		return;
+	}
+
+	len = strlen(targetPath);
+	if (len >= sizeof(fname)) {
+		len = sizeof(fname) - 1;
+	}
+	memmove(fname, targetPath, len);
+	fname[len] = 0;
+}
+
 bool SIM_IsFlashModified() {
 	return g_bFlashModified;
 }
@@ -34,7 +50,7 @@ void SIM_SetupEmptyFlashModeNoFile() {
 void SIM_SaveFlashData(const char *targetPath) {
 	FILE *f;
 	allocFlashIfNeeded();
-	strcpy(fname, targetPath);
+	SIM_SetFlashFileName(targetPath);
 	if (fname[0]) {
 		f = fopen(fname, "wb");
 		fwrite(g_flash, FLASH_SIZE, 1, f);
@@ -45,7 +61,7 @@ void SIM_SaveFlashData(const char *targetPath) {
 void SIM_SetupFlashFileReading(const char *flashPath) {
 	int loaded = 0;
 	allocFlashIfNeeded();
-	strcpy(fname, flashPath);
+	SIM_SetFlashFileName(flashPath);
 	FILE *f = fopen(fname, "rb");
 	if (f != 0) {
 		loaded = fread(g_flash, 1, FLASH_SIZE, f);
@@ -58,7 +74,7 @@ void SIM_SetupFlashFileReading(const char *flashPath) {
 }
 void SIM_SetupNewFlashFile(const char *flashPath) {
 	allocFlashIfNeeded();
-	strcpy(fname, flashPath);
+	SIM_SetFlashFileName(flashPath);
 	SIM_SaveFlashData(fname);
 	g_bFlashModified = false;
 }
