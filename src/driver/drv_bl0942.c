@@ -60,7 +60,7 @@ static unsigned short bl0942_opts= 0;
 #define DEFAULT_CURRENT_CAL 251210
 #define DEFAULT_POWER_CAL 598
 
-#define CF_CNT_INVALID (1 << 31)
+#define CF_CNT_INVALID (1u << 31)
 
 typedef struct {
     uint32_t i_rms;

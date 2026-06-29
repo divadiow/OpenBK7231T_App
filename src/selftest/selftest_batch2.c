@@ -296,17 +296,28 @@ static void Test_Batch2_BL0942_EnergyCounterDeltaAndWrap(void) {
 
 #if ENABLE_DRIVER_TESTPOWER
 static void Test_Batch2_BLShared_PublishIntervals(void) {
+	int i;
+
 	Batch2_SetupMQTTPowerDevice("batch2Pub");
+	Sim_RunSeconds(6, false);
+	SIM_ClearMQTTHistory();
 
 	SELFTEST_ASSERT_CMD_OK("startDriver TESTPOWER");
 	SELFTEST_ASSERT_CMD_OK("SetupTestPower 230 0.50 115 50.00 0");
 	SELFTEST_ASSERT_CMD_OK("VCPPublishThreshold 0.25 0.002 0.25 0.1 0.02");
-	SELFTEST_ASSERT_CMD_OK("VCPPublishIntervals 5 60");
+	SELFTEST_ASSERT_CMD_OK("VCPPublishIntervals 0 1");
 
-	Sim_RunSeconds(8, false);
+	Test_Power_RunEverySecond();
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/voltage/get", 230.0f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/current/get", 0.50f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/power/get", 115.0f, false);
+
+	SIM_ClearMQTTHistory();
+	SELFTEST_ASSERT_CMD_OK("VCPPublishIntervals 5 6");
+	Test_Power_RunEverySecond();
+	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/voltage/get", 230.0f, false));
+	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/current/get", 0.50f, false));
+	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/power/get", 115.0f, false));
 
 	SIM_ClearMQTTHistory();
 	SELFTEST_ASSERT_CMD_OK("SetupTestPower 240 0.60 144 50.50 0");
@@ -315,7 +326,22 @@ static void Test_Batch2_BLShared_PublishIntervals(void) {
 	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/current/get", 0.60f, false));
 	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/power/get", 144.0f, false));
 
-	Sim_RunSeconds(6, false);
+	for (i = 0; i < 4; i++) {
+		Test_Power_RunEverySecond();
+	}
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/voltage/get", 240.0f, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/current/get", 0.60f, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/power/get", 144.0f, false);
+
+	SIM_ClearMQTTHistory();
+	for (i = 0; i < 6; i++) {
+		Test_Power_RunEverySecond();
+	}
+	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/voltage/get", 240.0f, false));
+	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/current/get", 0.60f, false));
+	SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForFloat("batch2Pub/power/get", 144.0f, false));
+
+	Test_Power_RunEverySecond();
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/voltage/get", 240.0f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/current/get", 0.60f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("batch2Pub/power/get", 144.0f, false);
