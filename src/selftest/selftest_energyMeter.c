@@ -148,6 +148,11 @@ void Test_EnergyMeter_CSE7766() {
 	SELFTEST_ASSERT(CMD_ExecuteCommand("VoltageSet 240", 0) == CMD_RES_OK);
 	SELFTEST_ASSERT(CMD_ExecuteCommand("CurrentSet 0.30", 0) == CMD_RES_OK);
 	SELFTEST_ASSERT(CMD_ExecuteCommand("PowerSet 70", 0) == CMD_RES_OK);
+
+	// The BL shared publish gate normally suppresses very rapid V/C/P
+	// publishes. Keep this CSE7766 test focused on the packet parser and the
+	// resulting MQTT values by allowing the next parsed packet to publish.
+	SELFTEST_ASSERT(CMD_ExecuteCommand("VCPPublishIntervals 0 1", 0) == CMD_RES_OK);
 	SIM_ClearMQTTHistory();
 
 	SELFTEST_ASSERT(CMD_ExecuteCommand(va("uartFakeHex %s", packet70W240V), 0) == CMD_RES_OK);
@@ -158,10 +163,10 @@ void Test_EnergyMeter_CSE7766() {
 	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$current", 0), 0.30f, 0.01f);
 	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$power", 0), 70.0f, 0.5f);
 
-	Sim_RunSeconds(10, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/voltage/get", 240.0f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/current/get", 0.30f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/power/get", 70.0f, false);
+	SELFTEST_ASSERT(CMD_ExecuteCommand("VCPPublishIntervals 5 60", 0) == CMD_RES_OK);
 	SIM_ClearMQTTHistory();
 }
 void Test_EnergyMeter_Events() {
