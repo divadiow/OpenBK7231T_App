@@ -39,13 +39,13 @@ void HTTPClient_Test_FreeLastRequest(void) {
 	}
 }
 static void *HTTPClient_Test_Malloc(int failPoint, size_t size) {
-	if (g_httpClientTestFailPoint == failPoint) {
+	if (failPoint != HTTPCLIENT_TEST_FAIL_NONE && g_httpClientTestFailPoint == failPoint) {
 		return 0;
 	}
 	return malloc(size);
 }
 static char *HTTPClient_Test_ExpandingStrdup(int failPoint, const char *s) {
-	if (g_httpClientTestFailPoint == failPoint) {
+	if (failPoint != HTTPCLIENT_TEST_FAIL_NONE && g_httpClientTestFailPoint == failPoint) {
 		return 0;
 	}
 	return CMD_ExpandingStrdup(s);

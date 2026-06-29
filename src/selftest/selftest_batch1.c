@@ -117,7 +117,7 @@ static void Test_Batch1_Command_ReturnContracts(void) {
 	SELFTEST_ASSERT(res == CMD_RES_NOT_ENOUGH_ARGUMENTS);
 	SELFTEST_ASSERT_CHANNEL(4, 10);
 
-	SELFTEST_ASSERT_CMD_OK("setPinRole 9 Relay");
+	SELFTEST_ASSERT_CMD_OK("setPinRole 9 Rel");
 	SELFTEST_ASSERT(PIN_GetPinRoleForPinIndex(9) == IOR_Relay);
 	oldRole = PIN_GetPinRoleForPinIndex(9);
 	res = CMD_ExecuteCommand("setPinRole 9 NotARealRole", 0);
@@ -300,7 +300,7 @@ static void Test_Batch1_Config_SaveLoad_CoreState(void) {
 	CFG_SetFlag(3, true);
 	PIN_SetPinRoleForPinIndex(9, IOR_Relay_n);
 	PIN_SetPinChannelForPinIndex(9, 6);
-	SELFTEST_ASSERT_CMD_OK("setPinRole 10 Button");
+	SELFTEST_ASSERT_CMD_OK("setPinRole 10 Btn");
 	SELFTEST_ASSERT_CMD_OK("setPinChannel 10 7");
 
 	CFG_Save_IfThereArePendingChanges();
