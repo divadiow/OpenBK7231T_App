@@ -137,7 +137,7 @@ static commandResult_t testRealloc(const void * context, const char *cmd, const 
 
 	ADDLOG_INFO(LOG_FEATURE_CMD, "Realloc has been tested! Total calls %i, reps now %i, reallocBroken %i",totalCalls,repeats,reallocBroken);
 
-    return CMD_RES_OK;
+    return reallocBroken ? CMD_RES_ERROR : CMD_RES_OK;
 }
 
 static commandResult_t testLog(const void * context, const char *cmd, const char *args, int cmdFlags){
