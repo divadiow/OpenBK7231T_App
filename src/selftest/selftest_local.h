@@ -159,6 +159,11 @@ void Test_Pins();
 void Test_Batch1();
 void Test_Batch2();
 void Test_Batch3();
+void Test_Batch4();
+void Test_Batch5();
+void Test_Batch6();
+void Test_Batch7();
+void Test_Batch8();
 
 void Test_GetJSONValue_Setup(const char *text);
 void Test_FakeHTTPClientPacket_GET(const char *tg);

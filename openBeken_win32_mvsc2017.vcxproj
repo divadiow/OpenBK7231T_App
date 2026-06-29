@@ -791,6 +791,11 @@
     <ClCompile Include="src\selftest\selftest_batch1.c" />
     <ClCompile Include="src\selftest\selftest_batch2.c" />
     <ClCompile Include="src\selftest\selftest_batch3.c" />
+    <ClCompile Include="src\selftest\selftest_batch4.c" />
+    <ClCompile Include="src\selftest\selftest_batch5.c" />
+    <ClCompile Include="src\selftest\selftest_batch6.c" />
+    <ClCompile Include="src\selftest\selftest_batch7.c" />
+    <ClCompile Include="src\selftest\selftest_batch8.c" />
     <ClCompile Include="src\selftest\selftest_berry.c" />
     <ClCompile Include="src\selftest\selftest_buttonEvents.c" />
     <ClCompile Include="src\selftest\selftest_chargingDriver.c" />

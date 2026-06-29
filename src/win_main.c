@@ -277,6 +277,11 @@ void Win_DoUnitTests()
 	Test_Batch1();
 	Test_Batch2();
 	Test_Batch3();
+	Test_Batch4();
+	Test_Batch5();
+	Test_Batch6();
+	Test_Batch7();
+	Test_Batch8();
 	Test_Demo_SimpleShuttersScript();
 	Test_Role_ToggleAll();
 	Test_Demo_FanCyclingRelays();

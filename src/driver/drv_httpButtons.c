@@ -111,14 +111,21 @@ void DRV_HTTPButtons_ProcessChanges(http_request_t *request) {
 	int j;
 	char tmpA[8];
 	httpButton_t *bt;
+	const char *label;
 
 	if (http_getArg(request->url, "act", tmpA, sizeof(tmpA))) {
 		j = atoi(tmpA);
 		bt = getSafe(j);
-		hprintf255(request, "<h3>Will do action %s!</h3>", bt->label);
-		if (bt) {
-			CMD_ExecuteCommand(bt->command, 0);
+		if (bt == 0 || bt->bEnabled == false || bt->command == 0) {
+			hprintf255(request, "<h3>No HTTP button action %i!</h3>", j);
+			return;
 		}
+		label = bt->label;
+		if (label == 0) {
+			label = "HTTP Button";
+		}
+		hprintf255(request, "<h3>Will do action %s!</h3>", label);
+		CMD_ExecuteCommand(bt->command, 0);
 	}
 
 }
@@ -283,6 +290,25 @@ commandResult_t CMD_setButtonEnabled(const void *context, const char *cmd, const
 	return CMD_RES_OK;
 }
 void DRV_InitHTTPButtons() {
+	int i;
+
+	for (i = 0; i < g_buttonCount; i++) {
+		if (g_buttons && g_buttons[i]) {
+			if (g_buttons[i]->label) {
+				free(g_buttons[i]->label);
+			}
+			if (g_buttons[i]->command) {
+				free(g_buttons[i]->command);
+			}
+			free(g_buttons[i]);
+		}
+	}
+	if (g_buttons) {
+		free(g_buttons);
+	}
+	g_buttons = 0;
+	g_buttonCount = 0;
+
 	//cmddetail:{"name":"setButtonColor","args":"[ButtonIndex][Color]",
 	//cmddetail:"descr":"Sets the colour of custom scriptable HTTP page button",
 	//cmddetail:"fn":"CMD_setButtonColor","file":"driver/drv_httpButtons.c","requires":"",

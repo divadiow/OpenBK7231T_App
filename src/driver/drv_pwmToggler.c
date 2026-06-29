@@ -384,8 +384,15 @@ void DRV_InitPWMToggler() {
 	int i;
 
 	for (i = 0; i < MAX_ONOFF_SLOTS; i++) {
+		if (g_names[i]) {
+			free(g_names[i]);
+			g_names[i] = 0;
+		}
 		g_channels[i] = -1;
-		g_names[i] = 0;
+		g_values[i] = 0;
+		g_enabled[i] = false;
+		g_speeds[i] = 0;
+		g_current[i] = 0;
 	}
 	//cmddetail:{"name":"toggler_enable","args":"[1or0]",
 	//cmddetail:"descr":"Sets the given output ON or OFF.  handles toggler_enable0, toggler_enable1, etc",
