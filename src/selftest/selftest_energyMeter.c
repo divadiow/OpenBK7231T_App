@@ -1,6 +1,8 @@
 #ifdef WINDOWS
 
 #include "selftest_local.h"
+#include "../driver/drv_cse7766.h"
+#include "../driver/drv_uart.h"
 
 #if ENABLE_BL_SHARED
 
@@ -127,24 +129,38 @@ void Test_EnergyMeter_BL0942() {
 	SIM_ClearMQTTHistory();
 }
 void Test_EnergyMeter_CSE7766() {
+	const char *packet70W240V = "555A02FCD800062F00413200D7F2537B18023E9F7171FEEC";
+
 	SIM_ClearOBK(0);
 	SIM_ClearAndPrepareForMQTTTesting("miscDevice", "bekens");
 
 	PIN_SetPinRoleForPinIndex(9, IOR_Relay);
 	PIN_SetPinChannelForPinIndex(9, 1);
 
-	CMD_ExecuteCommand("startDriver CSE7766", 0);
+	SELFTEST_ASSERT(CMD_ExecuteCommand("startDriver CSE7766", 0) == CMD_RES_OK);
 
-	CMD_ExecuteCommand("uartFakeHex 555A02FCD800062F00413200D7F2537B18023E9F7171FEEC", 0);
+	// First packet proves that a captured CSE7766 frame is accepted and also
+	// primes the raw values used by the calibration commands below.
+	SELFTEST_ASSERT(CMD_ExecuteCommand(va("uartFakeHex %s", packet70W240V), 0) == CMD_RES_OK);
 	CSE7766_RunEverySecond();
+	SELFTEST_ASSERT(UART_GetDataSize() == 0);
 
-	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	SELFTEST_ASSERT(CMD_ExecuteCommand("VoltageSet 240", 0) == CMD_RES_OK);
+	SELFTEST_ASSERT(CMD_ExecuteCommand("CurrentSet 0.30", 0) == CMD_RES_OK);
+	SELFTEST_ASSERT(CMD_ExecuteCommand("PowerSet 70", 0) == CMD_RES_OK);
+	SIM_ClearMQTTHistory();
+
+	SELFTEST_ASSERT(CMD_ExecuteCommand(va("uartFakeHex %s", packet70W240V), 0) == CMD_RES_OK);
+	CSE7766_RunEverySecond();
+	SELFTEST_ASSERT(UART_GetDataSize() == 0);
+
 	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$voltage", 0), 240.0f, 0.5f);
-	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$current", 0), 0.30f, 0.05f);
+	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$current", 0), 0.30f, 0.01f);
 	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$power", 0), 70.0f, 0.5f);
 
+	Sim_RunSeconds(10, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/voltage/get", 240.0f, false);
-	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/current/get", 0.3019f, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/current/get", 0.30f, false);
 	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/power/get", 70.0f, false);
 	SIM_ClearMQTTHistory();
 }
