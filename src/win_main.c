@@ -275,6 +275,7 @@ void Win_DoUnitTests()
 	Test_Commands_Calendar();
 	Test_Commands_Generic();
 	Test_Batch1();
+	Test_Batch2();
 	Test_Demo_SimpleShuttersScript();
 	Test_Role_ToggleAll();
 	Test_Demo_FanCyclingRelays();

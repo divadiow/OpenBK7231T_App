@@ -157,6 +157,7 @@ void Test_OpenWeatherMap();
 void Test_Shutters();
 void Test_Pins();
 void Test_Batch1();
+void Test_Batch2();
 
 void Test_GetJSONValue_Setup(const char *text);
 void Test_FakeHTTPClientPacket_GET(const char *tg);
