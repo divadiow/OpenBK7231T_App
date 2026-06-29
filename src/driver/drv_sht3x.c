@@ -20,6 +20,45 @@ static float g_temp = 0.0, g_humid = 0.0, g_caltemp = 0.0, g_calhum = 0.0;
 static bool g_shtper = false;
 static softI2C_t g_softI2C;
 
+static uint8_t SHT3X_CalcCrc(uint8_t* data);
+
+static bool SHT3X_ParseMeasurement(const uint8_t *buff, float *outTemp, float *outHumid)
+{
+	uint8_t tempBytes[2];
+	uint8_t humidBytes[2];
+	unsigned int th, tl, hh, hl;
+
+	tempBytes[0] = buff[0];
+	tempBytes[1] = buff[1];
+	humidBytes[0] = buff[3];
+	humidBytes[1] = buff[4];
+
+	if (SHT3X_CalcCrc(tempBytes) != buff[2] || SHT3X_CalcCrc(humidBytes) != buff[5]) {
+		ADDLOG_INFO(LOG_FEATURE_SENSOR, "SHT3X: bad CRC, ignoring measurement");
+		return false;
+	}
+
+	th = buff[0];
+	tl = buff[1];
+	hh = buff[3];
+	hl = buff[4];
+	*outTemp = 175 * ((th * 256 + tl) / 65535.0) - 45.0;
+	*outHumid = 100 * ((hh * 256 + hl) / 65535.0);
+	return true;
+}
+
+static void SHT3X_StoreMeasurement(const char *logPrefix)
+{
+	g_temp = (int)((g_temp + g_caltemp) * 10.0) / 10.0f;
+	g_humid = (int)(g_humid + g_calhum);
+
+	channel_temp = g_cfg.pins.channels[g_softI2C.pin_data];
+	channel_humid = g_cfg.pins.channels2[g_softI2C.pin_data];
+	CHANNEL_Set(channel_temp, (int)(g_temp * 10), 0);
+	CHANNEL_Set(channel_humid, (int)(g_humid), 0);
+
+	addLogAdv(LOG_INFO, LOG_FEATURE_SENSOR, "%s Temperature:%.1fC Humidity:%.0f%%", logPrefix, g_temp, g_humid);
+}
 
 commandResult_t SHT3X_Calibrate(const void* context, const char* cmd, const char* args, int cmdFlags) {
 
@@ -112,14 +151,15 @@ commandResult_t SHT3X_Heater(const void* context, const char* cmd, const char* a
 
 void SHT3X_MeasurePercmd() {
 #if WINDOWS
-	// TODO: values for simulator so I can test SHT30 
-	// on my Windows machine
-	g_temp = 23.4f;
-	g_humid = 56.7f;
-#else
-
+	if (!SIM_SoftI2C_IsEnabled()) {
+		// Keep legacy simulator defaults unless a self-test explicitly enables fake I2C.
+		g_temp = 23.4f;
+		g_humid = 56.7f;
+		SHT3X_StoreMeasurement("SHT3X_Measure: Period");
+		return;
+	}
+#endif
 	uint8_t buff[6];
-	unsigned int th, tl, hh, hl;
 
 	Soft_I2C_Start(&g_softI2C, SHT3X_I2C_ADDR);
 	// Ask for fetching data
@@ -132,24 +172,10 @@ void SHT3X_MeasurePercmd() {
 	Soft_I2C_ReadBytes(&g_softI2C, buff, 6);
 	Soft_I2C_Stop(&g_softI2C);
 
-	th = buff[0];
-	tl = buff[1];
-	hh = buff[3];
-	hl = buff[4];
-
-	g_temp = 175 * ((th * 256 + tl) / 65535.0) - 45.0;
-	g_humid = 100 * ((hh * 256 + hl) / 65535.0);
-#endif
-
-	g_temp = (int)((g_temp + g_caltemp) * 10.0) / 10.0f;
-	g_humid = (int)(g_humid + g_calhum);
-
-	channel_temp = g_cfg.pins.channels[g_softI2C.pin_data];
-	channel_humid = g_cfg.pins.channels2[g_softI2C.pin_data];
-	CHANNEL_Set(channel_temp, (int)(g_temp * 10), 0);
-	CHANNEL_Set(channel_humid, (int)(g_humid), 0);
-
-	addLogAdv(LOG_INFO, LOG_FEATURE_SENSOR, "SHT3X_Measure: Period Temperature:%.2fC Humidity:%.0f%%", g_temp, g_humid);
+	if (!SHT3X_ParseMeasurement(buff, &g_temp, &g_humid)) {
+		return;
+	}
+	SHT3X_StoreMeasurement("SHT3X_Measure: Period");
 }
 
 commandResult_t SHT3X_MeasurePer(const void* context, const char* cmd, const char* args, int cmdFlags) {
@@ -158,46 +184,33 @@ commandResult_t SHT3X_MeasurePer(const void* context, const char* cmd, const cha
 }
 void SHT3X_Measurecmd() {
 #if WINDOWS
-	// TODO: values for simulator so I can test SHT30 
-	// on my Windows machine
-	g_temp = 23.4f;
-	g_humid = 56.7f;
-#else
+	if (!SIM_SoftI2C_IsEnabled()) {
+		// Keep legacy simulator defaults unless a self-test explicitly enables fake I2C.
+		g_temp = 23.4f;
+		g_humid = 56.7f;
+		SHT3X_StoreMeasurement("SHT3X_Measure:");
+		return;
+	}
+#endif
 	uint8_t buff[6];
-	unsigned int th, tl, hh, hl;
 
 	Soft_I2C_Start(&g_softI2C, SHT3X_I2C_ADDR);
 	// no clock stretching
 	Soft_I2C_WriteByte(&g_softI2C, 0x24);
-	// medium repeteability
+	// medium repeatability
 	Soft_I2C_WriteByte(&g_softI2C, 0x16);
 	Soft_I2C_Stop(&g_softI2C);
 
-	rtos_delay_milliseconds(20);	//give the sensor time to do the conversion
+	rtos_delay_milliseconds(20);
 
 	Soft_I2C_Start(&g_softI2C, SHT3X_I2C_ADDR | 1);
 	Soft_I2C_ReadBytes(&g_softI2C, buff, 6);
 	Soft_I2C_Stop(&g_softI2C);
 
-	th = buff[0];
-	tl = buff[1];
-	hh = buff[3];
-	hl = buff[4];
-
-	g_temp = 175 * ((th * 256 + tl) / 65535.0) - 45.0;
-	g_humid = 100 * ((hh * 256 + hl) / 65535.0);
-#endif
-
-	g_temp = (int)((g_temp + g_caltemp) * 10.0) / 10.0f;
-	g_humid = (int)(g_humid + g_calhum);
-
-	channel_temp = g_cfg.pins.channels[g_softI2C.pin_data];
-	channel_humid = g_cfg.pins.channels2[g_softI2C.pin_data];
-	CHANNEL_Set(channel_temp, (int)(g_temp * 10), 0);
-	CHANNEL_Set(channel_humid, (int)(g_humid), 0);
-
-	addLogAdv(LOG_INFO, LOG_FEATURE_SENSOR, "SHT3X_Measure: Temperature:%.1fC Humidity:%.0f%%", g_temp, g_humid);
-
+	if (!SHT3X_ParseMeasurement(buff, &g_temp, &g_humid)) {
+		return;
+	}
+	SHT3X_StoreMeasurement("SHT3X_Measure:");
 }
 
 commandResult_t SHT3X_Measure(const void* context, const char* cmd, const char* args, int cmdFlags)

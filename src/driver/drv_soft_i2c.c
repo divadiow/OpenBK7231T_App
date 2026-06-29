@@ -12,6 +12,90 @@
 
 static int g_clk_period = SM2135_DELAY;
 
+#ifdef WINDOWS
+#define SIM_SOFTI2C_MAX_HISTORY 1024
+typedef struct simSoftI2C_s {
+	int enabled;
+	int readPos;
+	int readCount;
+	byte readBytes[SIM_SOFTI2C_MAX_HISTORY];
+	int writeCount;
+	byte writeBytes[SIM_SOFTI2C_MAX_HISTORY];
+	int startCount;
+	byte startAddresses[SIM_SOFTI2C_MAX_HISTORY];
+	int readUnderflowCount;
+} simSoftI2C_t;
+
+static simSoftI2C_t g_simSoftI2C;
+
+void SIM_SoftI2C_Reset(void) {
+	memset(&g_simSoftI2C, 0, sizeof(g_simSoftI2C));
+}
+
+void SIM_SoftI2C_Enable(int bEnabled) {
+	g_simSoftI2C.enabled = bEnabled;
+}
+
+bool SIM_SoftI2C_IsEnabled(void) {
+	return g_simSoftI2C.enabled != 0;
+}
+
+void SIM_SoftI2C_QueueReadBytes(const byte *data, int len) {
+	int i;
+	for (i = 0; i < len; i++) {
+		if (g_simSoftI2C.readCount < SIM_SOFTI2C_MAX_HISTORY) {
+			g_simSoftI2C.readBytes[g_simSoftI2C.readCount++] = data[i];
+		}
+	}
+}
+
+int SIM_SoftI2C_GetWriteCount(void) {
+	return g_simSoftI2C.writeCount;
+}
+
+int SIM_SoftI2C_GetWriteByte(int index) {
+	if (index < 0 || index >= g_simSoftI2C.writeCount) {
+		return -1;
+	}
+	return g_simSoftI2C.writeBytes[index];
+}
+
+int SIM_SoftI2C_GetStartCount(void) {
+	return g_simSoftI2C.startCount;
+}
+
+int SIM_SoftI2C_GetStartAddress(int index) {
+	if (index < 0 || index >= g_simSoftI2C.startCount) {
+		return -1;
+	}
+	return g_simSoftI2C.startAddresses[index];
+}
+
+int SIM_SoftI2C_GetReadUnderflowCount(void) {
+	return g_simSoftI2C.readUnderflowCount;
+}
+
+static void SIM_SoftI2C_RecordWrite(byte value) {
+	if (g_simSoftI2C.writeCount < SIM_SOFTI2C_MAX_HISTORY) {
+		g_simSoftI2C.writeBytes[g_simSoftI2C.writeCount++] = value;
+	}
+}
+
+static void SIM_SoftI2C_RecordStart(byte addr) {
+	if (g_simSoftI2C.startCount < SIM_SOFTI2C_MAX_HISTORY) {
+		g_simSoftI2C.startAddresses[g_simSoftI2C.startCount++] = addr;
+	}
+}
+
+static byte SIM_SoftI2C_ReadNextByte(void) {
+	if (g_simSoftI2C.readPos < g_simSoftI2C.readCount) {
+		return g_simSoftI2C.readBytes[g_simSoftI2C.readPos++];
+	}
+	g_simSoftI2C.readUnderflowCount++;
+	return 0;
+}
+#endif
+
 #if !PLATFORM_ESPIDF && !PLATFORM_XR806 && !PLATFORM_XR872 && !PLATFORM_ESP8266 && !PLATFORM_REALTEK_NEW && !PLATFORM_TXW81X
 void usleep(int r) //delay function do 10*r nops, because rtos_delay_milliseconds is too much
 {
@@ -48,6 +132,11 @@ static commandResult_t CMD_SoftI2C_SetClkPeriod(const void* context, const char*
 }
 
 bool Soft_I2C_PreInit(softI2C_t *i2c) {
+#ifdef WINDOWS
+	if (SIM_SoftI2C_IsEnabled()) {
+		return true;
+	}
+#endif
 	//cmddetail:{"name":"SoftI2C_SetClkPeriod","args":"[period]",
 	//cmddetail:"descr":"Sets the clock period in number of nop delay cycles (times 10)",
 	//cmddetail:"fn":"CMD_SoftI2C_SetClkPeriod","file":"driver/drv_soft_i2c.c","requires":"",
@@ -62,6 +151,12 @@ bool Soft_I2C_PreInit(softI2C_t *i2c) {
 }
 
 bool Soft_I2C_WriteByte(softI2C_t *i2c, uint8_t value) {
+#ifdef WINDOWS
+	if (SIM_SoftI2C_IsEnabled()) {
+		SIM_SoftI2C_RecordWrite(value);
+		return true;
+	}
+#endif
 	uint8_t curr;
 	uint8_t ack;
 
@@ -93,6 +188,12 @@ void Soft_I2C_Start_Internal(softI2C_t *i2c) {
 	Soft_I2C_SetLow(i2c->pin_clk);
 }
 bool Soft_I2C_Start(softI2C_t *i2c, uint8_t addr) {
+#ifdef WINDOWS
+	if (SIM_SoftI2C_IsEnabled()) {
+		SIM_SoftI2C_RecordStart(addr);
+		return true;
+	}
+#endif
 	Soft_I2C_SetLow(i2c->pin_data);
 	usleep(g_clk_period);
 	Soft_I2C_SetLow(i2c->pin_clk);
@@ -100,6 +201,11 @@ bool Soft_I2C_Start(softI2C_t *i2c, uint8_t addr) {
 }
 
 void Soft_I2C_Stop(softI2C_t *i2c) {
+#ifdef WINDOWS
+	if (SIM_SoftI2C_IsEnabled()) {
+		return;
+	}
+#endif
 	Soft_I2C_SetLow(i2c->pin_data);
 	usleep(g_clk_period);
 	Soft_I2C_SetHigh(i2c->pin_clk);
@@ -111,6 +217,14 @@ void Soft_I2C_Stop(softI2C_t *i2c) {
 
 void Soft_I2C_ReadBytes(softI2C_t *i2c, uint8_t* buf, int numOfBytes)
 {
+#ifdef WINDOWS
+	if (SIM_SoftI2C_IsEnabled()) {
+		for (int i = 0; i < numOfBytes; i++) {
+			buf[i] = SIM_SoftI2C_ReadNextByte();
+		}
+		return;
+	}
+#endif
 
 	for (int i = 0; i < numOfBytes - 1; i++)
 	{
@@ -123,6 +237,11 @@ void Soft_I2C_ReadBytes(softI2C_t *i2c, uint8_t* buf, int numOfBytes)
 }
 uint8_t Soft_I2C_ReadByte(softI2C_t *i2c, bool nack)
 {
+#ifdef WINDOWS
+	if (SIM_SoftI2C_IsEnabled()) {
+		return SIM_SoftI2C_ReadNextByte();
+	}
+#endif
 	uint8_t val = 0;
 
 	Soft_I2C_SetHigh(i2c->pin_data);

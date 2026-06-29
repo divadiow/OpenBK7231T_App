@@ -293,6 +293,17 @@ void Soft_I2C_Start_Internal(softI2C_t *i2c);
 void Soft_I2C_Stop(softI2C_t *i2c);
 uint8_t Soft_I2C_ReadByte(softI2C_t *i2c, bool nack);
 void Soft_I2C_ReadBytes(softI2C_t *i2c, uint8_t *buf, int numOfBytes);
+#ifdef WINDOWS
+void SIM_SoftI2C_Reset(void);
+void SIM_SoftI2C_Enable(int bEnabled);
+bool SIM_SoftI2C_IsEnabled(void);
+void SIM_SoftI2C_QueueReadBytes(const byte *data, int len);
+int SIM_SoftI2C_GetWriteCount(void);
+int SIM_SoftI2C_GetWriteByte(int index);
+int SIM_SoftI2C_GetStartCount(void);
+int SIM_SoftI2C_GetStartAddress(int index);
+int SIM_SoftI2C_GetReadUnderflowCount(void);
+#endif
 
 // Shared LED driver
 commandResult_t CMD_LEDDriver_Map(const void *context, const char *cmd, const char *args, int flags);
