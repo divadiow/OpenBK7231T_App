@@ -210,7 +210,9 @@ void Win_DoUnitTests()
 	SELFTEST_ASSERT(PIN_ParsePinRoleName("Btn_pd_n") == IOR_Button_pd_n);
 	SELFTEST_ASSERT(PIN_ParsePinRoleName("TglChanOnTgl_pd") == IOR_ToggleChannelOnToggle_pd);
 
-	//Test_Shutters();
+#if ENABLE_DRIVER_SHUTTERS
+	Test_Shutters();
+#endif
 	Test_TuyaMCU_TH08();
 	Test_ButtonEvents();
 	Test_Command_If();

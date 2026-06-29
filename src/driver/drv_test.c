@@ -20,7 +20,6 @@ const char *g_testCommands[] = {
 	"testStrdup",
 	"testRealloc",
 	"json_test",
-	"lfs_test1",
 	"TestSprintfForInteger",
 	"TestSprintfForHex",
 	"TestSprintfForFloat",

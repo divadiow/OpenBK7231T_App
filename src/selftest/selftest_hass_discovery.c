@@ -121,7 +121,41 @@ void Test_HassDiscovery_LED_CW() {
 }
 
 void Test_HassDiscovery_LED_RGB() {
-	// TODO
+	const char *shortName = "RGBtest";
+	const char *fullName = "Windows Fake RGB";
+	const char *mqttName = "testRGB";
+
+	SIM_ClearOBK(shortName);
+	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
+
+	CFG_SetShortDeviceName(shortName);
+	CFG_SetDeviceName(fullName);
+
+	PIN_SetPinRoleForPinIndex(24, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(24, 1);
+
+	PIN_SetPinRoleForPinIndex(26, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(26, 2);
+
+	PIN_SetPinRoleForPinIndex(9, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(9, 3);
+
+	SIM_ClearMQTTHistory();
+
+	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
+	Sim_RunSeconds(10, false);
+
+	// OBK device should publish RGB light discovery JSON.
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_cmd_t", "cmnd/testRGB/led_dimmer");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_stat_t", "~/led_dimmer/get");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_scl", "100");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "~", mqttName);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_stat_t", "~/led_basecolor_rgb/get");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testRGB/led_basecolor_rgb");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "cmd_t", "cmnd/testRGB/led_enableAll");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "stat_t", "~/led_enableAll/get");
+	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testRGB/led_temperature");
 }
 
 void Test_HassDiscovery_LED_RGBCW() {
@@ -214,7 +248,34 @@ void Test_HassDiscovery_LED_RGBW() {
 	//SIM_DumpMQTTHistory();
 }
 void Test_HassDiscovery_LED_SingleColor() {
-	// TODO
+	const char *shortName = "SinglePWMtest";
+	const char *fullName = "Windows Fake Single PWM";
+	const char *mqttName = "testSinglePWM";
+
+	SIM_ClearOBK(shortName);
+	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
+
+	CFG_SetShortDeviceName(shortName);
+	CFG_SetDeviceName(fullName);
+
+	PIN_SetPinRoleForPinIndex(24, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(24, 1);
+
+	SIM_ClearMQTTHistory();
+
+	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
+	Sim_RunSeconds(10, false);
+
+	// OBK device should publish single-channel PWM light discovery JSON.
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_cmd_t", "cmnd/testSinglePWM/led_dimmer");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_stat_t", "~/led_dimmer/get");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_scl", "100");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "~", mqttName);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "cmd_t", "cmnd/testSinglePWM/led_enableAll");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "stat_t", "~/led_enableAll/get");
+	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testSinglePWM/led_basecolor_rgb");
+	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testSinglePWM/led_temperature");
 }
 void Test_HassDiscovery_DHT11() {
 	const char *shortName = "DHTtest";

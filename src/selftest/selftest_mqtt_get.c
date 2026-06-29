@@ -12,7 +12,38 @@ void Test_MQTT_Get_Relay() {
 
 	SIM_ClearMQTTHistory();
 
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_PIN_BOOLEAN(24, false);
 
+	// Direct channel set must drive both the logical channel and the relay pin.
+	SIM_SendFakeMQTTRawChannelSet(1, "1");
+	Sim_RunFrames(4, false);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_PIN_BOOLEAN(24, true);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("myTestDevice/1/get", "1", false);
+	SIM_ClearMQTTHistory();
+
+	// Empty /get must publish the current state without changing it.
+	SIM_SendFakeMQTT("myTestDevice/1/get", "");
+	Sim_RunFrames(4, false);
+	SELFTEST_ASSERT_CHANNEL(1, 1);
+	SELFTEST_ASSERT_PIN_BOOLEAN(24, true);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("myTestDevice/1/get", "1", false);
+	SIM_ClearMQTTHistory();
+
+	SIM_SendFakeMQTTRawChannelSet(1, "0");
+	Sim_RunFrames(4, false);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_PIN_BOOLEAN(24, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("myTestDevice/1/get", "0", false);
+	SIM_ClearMQTTHistory();
+
+	SIM_SendFakeMQTT("myTestDevice/1/get", "");
+	Sim_RunFrames(4, false);
+	SELFTEST_ASSERT_CHANNEL(1, 0);
+	SELFTEST_ASSERT_PIN_BOOLEAN(24, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR("myTestDevice/1/get", "0", false);
+	SIM_ClearMQTTHistory();
 }
 void Test_MQTT_Get_LED_EnableAll() {
 	SIM_ClearOBK(0);

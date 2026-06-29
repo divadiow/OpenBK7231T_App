@@ -138,7 +138,14 @@ void Test_EnergyMeter_CSE7766() {
 	CMD_ExecuteCommand("uartFakeHex 555A02FCD800062F00413200D7F2537B18023E9F7171FEEC", 0);
 	CSE7766_RunEverySecond();
 
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$voltage", 0), 240.0f, 0.5f);
+	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$current", 0), 0.30f, 0.05f);
+	SELFTEST_ASSERT_FLOATCOMPAREEPSILON(CMD_EvaluateExpression("$power", 0), 70.0f, 0.5f);
 
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/voltage/get", 240.0f, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/current/get", 0.3019f, false);
+	SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT("miscDevice/power/get", 70.0f, false);
 	SIM_ClearMQTTHistory();
 }
 void Test_EnergyMeter_Events() {

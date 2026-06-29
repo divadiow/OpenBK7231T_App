@@ -20,12 +20,22 @@ void Test_HassDiscovery_TuyaMCU_VoltageCurrentPower() {
 	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
 	Sim_RunSeconds(5, false);
 	
-	// OBK device should publish JSON on MQTT topic "homeassistant"
-	/*SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "name", shortName);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "sw", USER_SW_VER);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "mf", MANUFACTURER);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "mdl", PLATFORM_MCU_NAME);*/
+	// OBK device should publish one sensor discovery JSON for each VCP channel.
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
+		"dev_cla", "voltage",
+		"stat_t", "~/0/get",
+		"unit_of_meas", "V",
+		"val_tpl", "{{ '%0.2f'|format(float(value)*0.1) }}");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_3KEY("homeassistant", true, 0, 0,
+		"dev_cla", "power",
+		"stat_t", "~/1/get",
+		"unit_of_meas", "W");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
+		"dev_cla", "current",
+		"stat_t", "~/2/get",
+		"unit_of_meas", "A",
+		"val_tpl", "{{ '%0.3f'|format(float(value)*0.01) }}");
 
 }
 
@@ -45,12 +55,13 @@ void Test_HassDiscovery_TuyaMCU_Power10() {
 	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
 	Sim_RunSeconds(5, false);
 
-	// OBK device should publish JSON on MQTT topic "homeassistant"
-	/*SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "name", shortName);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "sw", USER_SW_VER);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "mf", MANUFACTURER);
-	SELFTEST_ASSERT_JSON_VALUE_STRING("dev", "mdl", PLATFORM_MCU_NAME);*/
+	// OBK device should publish a power_div10 sensor with the expected scale template.
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
+		"dev_cla", "power",
+		"stat_t", "~/1/get",
+		"unit_of_meas", "W",
+		"val_tpl", "{{ '%0.2f'|format(float(value)*0.1) }}");
 
 }
 

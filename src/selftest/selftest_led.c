@@ -2,6 +2,8 @@
 
 #include "selftest_local.h"
 
+void LED_SetColorByIndex(int index);
+
 void DDP_SimulatePacket(const char *s) {
 	// accept strings like 41030001000000000003FFFFFF and call DDP_Parse
 	size_t len = strlen(s);
@@ -372,8 +374,16 @@ void Test_LEDDriver_Palette() {
 	PIN_SetPinRoleForPinIndex(9, IOR_PWM);
 	PIN_SetPinChannelForPinIndex(9, 3);
 
-	CMD_ExecuteCommand("SPC 0 FF00FF", 0);
+	CMD_ExecuteCommand("led_enableAll 1", 0);
+	CMD_ExecuteCommand("led_dimmer 100", 0);
 
+	SELFTEST_ASSERT(CMD_ExecuteCommand("SPC 0 FF00FF", 0) == CMD_RES_OK);
+	LED_SetColorByIndex(0);
+
+	SELFTEST_ASSERT_CHANNEL(1, 100);
+	SELFTEST_ASSERT_CHANNEL(2, 0);
+	SELFTEST_ASSERT_CHANNEL(3, 100);
+	SELFTEST_ASSERT_EXPRESSION("$led_enableAll", 1.0f);
 }
 unsigned short sim_smChannels[5];
 void Simulator_StoreBP5758DColor(unsigned short *data) {

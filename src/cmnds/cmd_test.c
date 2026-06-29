@@ -13,6 +13,14 @@
 
 #if ENABLE_TEST_COMMANDS
 
+static int testFloatEqualsEpsilon(float a, float b, float epsilon) {
+	float diff = a - b;
+	if (diff < 0) {
+		diff = -diff;
+	}
+	return diff < epsilon;
+}
+
 static commandResult_t CMD_getPin(const void* context, const char* cmd, const char* args, int cmdFlags) {
 	Tokenizer_TokenizeString(args,0);
 	
@@ -49,6 +57,10 @@ static commandResult_t testMallocFree(const void * context, const char *cmd, con
 		ra1 = 1 + abs(rand() % 1000);
 
 		msg = malloc(ra1);
+		if (msg == 0) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "testMallocFree: malloc failed for %i bytes", ra1);
+			return CMD_RES_ERROR;
+		}
 		memset(msg,rand()%255,ra1);
 		os_free(msg);
 	}
@@ -62,7 +74,6 @@ static commandResult_t testStrdup(const void * context, const char *cmd, const c
 	int repeats;
 	int rep;
     char *msg;
-	int ra1;
 	static int totalCalls = 0;
 	const char *s = "Strdup test123";
 
@@ -73,9 +84,16 @@ static commandResult_t testStrdup(const void * context, const char *cmd, const c
 	totalCalls++;
 
 	for(rep = 0; rep < repeats; rep++) {
-		ra1 = 1 + abs(rand() % 1000);
-
 		msg = strdup(s);
+		if (msg == 0) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "testStrdup: strdup failed");
+			return CMD_RES_ERROR;
+		}
+		if (strcmp(msg, s) != 0) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "testStrdup: duplicated string differs");
+			os_free(msg);
+			return CMD_RES_ERROR;
+		}
 
 		os_free(msg);
 	}
@@ -215,6 +233,9 @@ static commandResult_t testJSON(const void * context, const char *cmd, const cha
 
 
 		root = cJSON_CreateObject();
+		if (root == 0) {
+			return CMD_RES_ERROR;
+		}
 		cJSON_AddNumberToObject(root, "uptime", g_secondsElapsed);
 		cJSON_AddNumberToObject(root, "consumption_total", ra1 );
 		cJSON_AddNumberToObject(root, "consumption_last_hour",  ra2);
@@ -222,7 +243,11 @@ static commandResult_t testJSON(const void * context, const char *cmd, const cha
 		cJSON_AddNumberToObject(root, "consumption_sample_count", ra4);
 		cJSON_AddNumberToObject(root, "consumption_sampling_period", ra5);
 
-			stats = cJSON_CreateArray();
+		stats = cJSON_CreateArray();
+		if (stats == 0) {
+			cJSON_Delete(root);
+			return CMD_RES_ERROR;
+		}
 		for(i = 0; i < 23; i++)
 		{
 			cJSON_AddItemToArray(stats, cJSON_CreateNumber(rand()%10));
@@ -230,6 +255,30 @@ static commandResult_t testJSON(const void * context, const char *cmd, const cha
 		cJSON_AddItemToObject(root, "consumption_samples", stats);
 
 		msg = cJSON_Print(root);
+		if (msg == 0) {
+			cJSON_Delete(root);
+			return CMD_RES_ERROR;
+		}
+		{
+			cJSON *parsed = cJSON_Parse(msg);
+			cJSON *total;
+			cJSON *samples;
+
+			if (parsed == 0) {
+				cJSON_Delete(root);
+				os_free(msg);
+				return CMD_RES_ERROR;
+			}
+			total = cJSON_GetObjectItem(parsed, "consumption_total");
+			samples = cJSON_GetObjectItem(parsed, "consumption_samples");
+			if (total == 0 || ((int)total->valuedouble) != ra1 || samples == 0 || cJSON_GetArraySize(samples) != 23) {
+				cJSON_Delete(parsed);
+				cJSON_Delete(root);
+				os_free(msg);
+				return CMD_RES_ERROR;
+			}
+			cJSON_Delete(parsed);
+		}
 		cJSON_Delete(root);
 		os_free(msg);
 	}
@@ -242,6 +291,10 @@ static commandResult_t testJSON(const void * context, const char *cmd, const cha
 
 // Usage for continous test: addRepeatingEvent 1 -1 lfs_test1 ir.bat
 static commandResult_t cmnd_lfs_test1(const void * context, const char *cmd, const char *args, int cmdFlags) {
+	if (args == 0 || *args == 0) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD, "cmnd_lfs_test1: missing filename");
+		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+	}
 #if ENABLE_LITTLEFS
 	if (lfs_present()) {
 		lfs_file_t file;
@@ -265,16 +318,24 @@ static commandResult_t cmnd_lfs_test1(const void * context, const char *cmd, con
 
 			lfs_file_close(&lfs, &file);
 			ADDLOG_INFO(LOG_FEATURE_CMD, "cmnd_lfs_test1: closed file %s", args);
+			if (lfsres < 0) {
+				return CMD_RES_ERROR;
+			}
+			return CMD_RES_OK;
 		}
 		else {
-			ADDLOG_INFO(LOG_FEATURE_CMD, "cmnd_lfs_test1: failed to file %s", args);
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "cmnd_lfs_test1: failed to open file %s", args);
+			return CMD_RES_ERROR;
 		}
 	}
 	else {
 		ADDLOG_ERROR(LOG_FEATURE_CMD, "cmnd_lfs_test1: lfs is absent");
+		return CMD_RES_ERROR;
 	}
+#else
+	ADDLOG_ERROR(LOG_FEATURE_CMD, "cmnd_lfs_test1: littlefs support is disabled");
+	return CMD_RES_ERROR;
 #endif
-	return CMD_RES_OK;
 }
 // Usage for continous test: addRepeatingEvent 1 -1 lfs_test2 ir.bat
 static commandResult_t cmnd_lfs_test2(const void * context, const char *cmd, const char *args, int cmdFlags) {
@@ -328,8 +389,15 @@ static commandResult_t cmnd_json_test(const void * context, const char *cmd, con
 	float dailyStats[4] = { 95.44071197f, 171.84954833f, 181.58737182f, 331.35061645f };
 
 	root = cJSON_CreateObject();
+	if (root == 0) {
+		return CMD_RES_ERROR;
+	}
 	{
 		stats = cJSON_CreateArray();
+		if (stats == 0) {
+			cJSON_Delete(root);
+			return CMD_RES_ERROR;
+		}
 		for (i = 0; i < 4; i++)
 		{
 			cJSON_AddItemToArray(stats, cJSON_CreateNumber(dailyStats[i]));
@@ -339,7 +407,36 @@ static commandResult_t cmnd_json_test(const void * context, const char *cmd, con
 
 	msg = cJSON_PrintUnformatted(root);
 	cJSON_Delete(root);
+	if (msg == 0) {
+		return CMD_RES_ERROR;
+	}
 	ADDLOG_INFO(LOG_FEATURE_CMD, "Test JSON reads: %s", msg);
+	{
+		cJSON *parsed;
+		cJSON *daily;
+
+		parsed = cJSON_Parse(msg);
+		if (parsed == 0) {
+			free(msg);
+			return CMD_RES_ERROR;
+		}
+		daily = cJSON_GetObjectItem(parsed, "consumption_daily");
+		if (daily == 0 || cJSON_GetArraySize(daily) != 4) {
+			cJSON_Delete(parsed);
+			free(msg);
+			return CMD_RES_ERROR;
+		}
+		for (i = 0; i < 4; i++)
+		{
+			cJSON *item = cJSON_GetArrayItem(daily, i);
+			if (item == 0 || !testFloatEqualsEpsilon((float)item->valuedouble, dailyStats[i], 0.001f)) {
+				cJSON_Delete(parsed);
+				free(msg);
+				return CMD_RES_ERROR;
+			}
+		}
+		cJSON_Delete(parsed);
+	}
 	free(msg);
 	return CMD_RES_OK;
 }
