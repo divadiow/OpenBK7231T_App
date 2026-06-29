@@ -24,7 +24,7 @@ int SIM_UART_GetDataSize()
 {
     int ret = (g_recvBufIn >= g_recvBufOut
                 ? g_recvBufIn - g_recvBufOut
-                : g_recvBufIn + (g_recvBufSize - g_recvBufOut) + 1);
+                : g_recvBufIn + (g_recvBufSize - g_recvBufOut));
 	return ret;
 }
 

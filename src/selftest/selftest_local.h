@@ -58,6 +58,9 @@ void SelfTest_Failed(const char *file, const char *function, int line, const cha
 #define SELFTEST_ASSERT_HTML_REPLY_NOT_CONTAINS(expected) SELFTEST_ASSERT(!(strstr(Test_GetLastHTMLReply(), expected)));
 #define SELFTEST_ASSERT_HAD_MQTT_PUBLISH_STR(topic, value, bRetain) SELFTEST_ASSERT(SIM_CheckMQTTHistoryForString(topic, value, bRetain));
 #define SELFTEST_ASSERT_HAD_MQTT_PUBLISH_FLOAT(topic, value, bRetain) SELFTEST_ASSERT(SIM_CheckMQTTHistoryForFloat(topic, value, bRetain));
+#define SELFTEST_ASSERT_NO_MQTT_PUBLISH_STR(topic, value, bRetain) SELFTEST_ASSERT(!SIM_CheckMQTTHistoryForString(topic, value, bRetain));
+#define SELFTEST_ASSERT_CMD_OK(commandText) SELFTEST_ASSERT(CMD_ExecuteCommand((commandText), 0) == CMD_RES_OK);
+#define SELFTEST_ASSERT_CMD_ERROR(commandText) SELFTEST_ASSERT(CMD_ExecuteCommand((commandText), 0) != CMD_RES_OK);
 #define SELFTEST_ASSERT_FLAG(flag, value) SELFTEST_ASSERT(CFG_HasFlag(flag) == value);
 #define SELFTEST_ASSERT_HAS_MQTT_JSON_SENT(topic, bPrefixMode) SELFTEST_ASSERT(!SIM_BeginParsingMQTTJSON(topic, bPrefixMode));
 #define SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY(topic, bPrefixMode, object1, object2, key, value) SELFTEST_ASSERT(SIM_HasMQTTHistoryStringWithJSONPayload(topic, bPrefixMode, object1, object2, key, value, 0, 0, 0, 0, 0, 0));
@@ -153,6 +156,7 @@ void Test_MAX72XX();
 void Test_OpenWeatherMap();
 void Test_Shutters();
 void Test_Pins();
+void Test_Batch1();
 
 void Test_GetJSONValue_Setup(const char *text);
 void Test_FakeHTTPClientPacket_GET(const char *tg);
@@ -183,6 +187,7 @@ int Test_GetJSONValue_IntFromArray(int index, const char *obj);
 const char *Test_GetJSONValue_StrFromArray(int index, const char *obj);
 const char *Test_GetJSONValue_StrFromNestedArray(const char *par, const char *key, int index);
 
+void SIM_ClearAndPrepareForMQTTTesting(const char *clientName, const char *groupName);
 void SIM_SendFakeMQTT(const char *text, const char *arguments);
 void SIM_SendFakeMQTTAndRunSimFrame_CMND(const char *command, const char *arguments);
 void SIM_SendFakeMQTTAndRunSimFrame_CMND_ViaGroupTopic(const char *command, const char *arguments);
@@ -210,6 +215,12 @@ void SIM_AppendUARTByte(byte rc);
 bool SIM_UART_ExpectAndConsumeHByte(byte b);
 bool SIM_UART_ExpectAndConsumeHexStr(const char *hexString);
 void SIM_ClearUART();
+
+void SIM_ShutdownOBK();
+void SIM_StartOBK(const char *flashPath);
+void SIM_SetupEmptyFlashModeNoFile();
+void SIM_SetupNewFlashFile(const char *flashPath);
+void SIM_SaveFlashData(const char *targetPath);
 
 #endif
 #endif // __SELFTEST_LOCAL_H__

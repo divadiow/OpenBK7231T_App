@@ -575,6 +575,24 @@ bool stribegins(const char *str, const char *needle) {
 	int l = strlen(needle);
 	return !wal_strnicmp(str, needle, l);
 }
+static int MQTT_ParseChannelTopicSegment(const char *p, const char **suffix) {
+	int channel = 0;
+
+	if (p == 0 || *p < '0' || *p > '9') {
+		return -1;
+	}
+	while (*p >= '0' && *p <= '9') {
+		channel = channel * 10 + (*p - '0');
+		p++;
+	}
+	if (*p != '/') {
+		return -1;
+	}
+	if (suffix) {
+		*suffix = p;
+	}
+	return channel;
+}
 // this accepts obkXXXXXX/<chan>/get to request channel publish
 int channelGet(obk_mqtt_request_t* request) {
 	//int len = request->receivedLen;
@@ -619,13 +637,12 @@ int channelGet(obk_mqtt_request_t* request) {
 	}
 #endif
 
-	// atoi won't parse any non-decimal chars, so it should skip over the rest of the topic.
-	channel = atoi(p);
+	channel = MQTT_ParseChannelTopicSegment(p, 0);
 
 	//addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "channelGet channel %i", channel);
 
 	// if channel out of range, stop here.
-	if ((channel < 0) || (channel > 32)) {
+	if ((channel < 0) || (channel > CHANNEL_MAX)) {
 		return 0;
 	}
 
@@ -653,8 +670,7 @@ int channelSet(obk_mqtt_request_t* request) {
 
 	//addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "channelSet part topic %s", p);
 
-	// atoi won't parse any non-decimal chars, so it should skip over the rest of the topic.
-	channel = atoi(p);
+	channel = MQTT_ParseChannelTopicSegment(p, &p);
 
 	//addLogAdv(LOG_INFO, LOG_FEATURE_MQTT, "channelSet channel %i", channel);
 
@@ -662,9 +678,6 @@ int channelSet(obk_mqtt_request_t* request) {
 	if ((channel < 0) || (channel > CHANNEL_MAX)) {
 		return 0;
 	}
-
-	// make sure the topic ends with '/set'.
-	p = strchr(p, '/');
 
 	// if not /set, then stop here
 	if (strcmp(p, "/set")) {
