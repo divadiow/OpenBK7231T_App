@@ -22,7 +22,7 @@ static void Test_Batch7_HassDiscovery_HTTPButtonConfigEntity(void) {
 	SELFTEST_ASSERT_JSON_VALUE_STRING(NULL, "name", "Do Config Thing");
 	SELFTEST_ASSERT_JSON_VALUE_STRING(NULL, "command_topic", "cmnd/batch7HaDevice/backlog");
 	SELFTEST_ASSERT_JSON_VALUE_STRING(NULL, "payload_press", "setChannel 4 44");
-	SELFTEST_ASSERT_JSON_VALUE_STRING(NULL, "entity_category", "config");
+	SELFTEST_ASSERT_JSON_VALUE_STRING_NOT_PRESENT(NULL, "entity_category");
 }
 
 static void Test_Batch7_HassDiscovery_HTTPButtonLinkOnlySkipped(void) {
