@@ -278,6 +278,21 @@ static void Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility() {
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
+static void Test_TuyaMCU_V3_DisableHeartbeatLowPowerCompatibility() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("tuyaMcu_v3LowPowerMode", 0);
+
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 25 00 00 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
 static void Test_TuyaMCU_V3_LowPowerStartupCompatibility() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
@@ -310,6 +325,11 @@ static void Test_TuyaMCU_V3_DPCacheTypes() {
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020119AE", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0A 01 01 19 02 00 04 00 01 E2 40 DD");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020319B0", 0);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0A 01 01 19 02 00 04 00 01 E2 40 DD");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
@@ -433,6 +453,7 @@ void Test_TuyaMCU_DP22() {
 
 	Test_TuyaMCU_V3_NormalStartupCompatibility();
 	Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility();
+	Test_TuyaMCU_V3_DisableHeartbeatLowPowerCompatibility();
 	Test_TuyaMCU_V3_LowPowerStartupCompatibility();
 	Test_TuyaMCU_V3_DPCacheTypes();
 }
