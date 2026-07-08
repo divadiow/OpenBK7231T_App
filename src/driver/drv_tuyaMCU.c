@@ -2252,6 +2252,14 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 		// 55 AA 00 01 00 ${"p":"e7dny8zvmiyhqerw","v":"1.0.0"}$
 		// uartFakeHex 55AA000100247B2270223A226537646E79387A766D69796871657277222C2276223A22312E302E30227D24
 	case TUYA_CMD_QUERY_PRODUCT:
+		if ((version == 3) && g_tuyaMCU_v3LowPowerMode) {
+			// Treat MCU-originated product info as the start of a fresh low-power wake/session.
+			state_updated = false;
+			wifi_state_valid = false;
+			wifi_state_timer = 0;
+			g_sendQueryStatePackets = 0;
+			g_queryStateAfterWifiStateAck = false;
+		}
 		TuyaMCU_ParseQueryProductInformation(payload, payloadLen);
 		product_information_valid = true;
 		break;
