@@ -362,6 +362,36 @@ void Test_TuyaMCU_BatteryPowered_QuerySignalStrength() {
 	}
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
+static void Test_TuyaMCU_BatteryPowered_RunUntilUARTData(int maxFrames) {
+	int i;
+
+	for (i = 0; i < maxFrames; i++) {
+		if (SIM_UART_GetDataSize() != 0) {
+			break;
+		}
+		Sim_RunFrames(1, false);
+	}
+	SELFTEST_ASSERT_HAS_SOME_DATA_IN_UART();
+}
+static void Test_TuyaMCU_BatteryPowered_TmSensorWinsOverV3ModeCommand(const char *modeCommand) {
+	// reset whole device
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(1024);
+
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("startDriver tmSensor", 0);
+	CMD_ExecuteCommand(modeCommand, 0);
+
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	Test_TuyaMCU_BatteryPowered_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA000100027B7DFA", 0);
+	Test_TuyaMCU_BatteryPowered_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 01 03 05");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
 void Test_TuyaMCU_BatteryPowered() {
 	Test_TuyaMCU_BatteryPowered_Style2();
 	Test_TuyaMCU_BatteryPowered_Style1();
@@ -373,6 +403,8 @@ void Test_TuyaMCU_BatteryPowered() {
 	Test_TuyaMCU_BatteryPowered_DPcacheFeature4();
 
 	Test_TuyaMCU_BatteryPowered_QuerySignalStrength();
+	Test_TuyaMCU_BatteryPowered_TmSensorWinsOverV3ModeCommand("tuyaMcu_batteryPoweredMode");
+	Test_TuyaMCU_BatteryPowered_TmSensorWinsOverV3ModeCommand("tuyaMcu_v3LowPowerMode");
 }
 
 #endif

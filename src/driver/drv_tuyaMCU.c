@@ -269,7 +269,7 @@ enum TuyaMCUV0State {
 static byte g_tuyaBatteryPoweredState = 0;
 static byte g_hello[] = { 0x55, 0xAA, 0x00, 0x01, 0x00, 0x00, 0x00 };
 //static byte g_request_state[] = { 0x55, 0xAA, 0x00, 0x02, 0x00, 0x01, 0x04, 0x06 };
-static bool g_tuyaMCU_batteryPoweredMode = false;
+static bool g_tuyaMCU_v3LowPowerMode = false;
 
 typedef struct tuyaMCUPacket_s {
 	byte *data;
@@ -502,14 +502,6 @@ void TuyaMCU_SendCommandWithData(byte cmdType, byte* data, int payload_len) {
 	}
 }
 
-
-void TuyaMCU_SendGetDPCacheReply_Empty() {
-	byte payload[2];
-
-	payload[0] = 0x01; // Success.
-	payload[1] = 0x00; // No cached DP commands queued.
-	TuyaMCU_SendCommandWithData(TUYA_CMD_GET_DPCACHE, payload, sizeof(payload));
-}
 
 void TuyaMCU_SendModuleMAC() {
 	byte payload[7];
@@ -1952,15 +1944,36 @@ void TuyaMCU_ResetWiFi() {
 		g_openAP = 1;
 	}
 }
-void TuyaMCU_V0_SendDPCacheReply() {
-#if 0
-	// send empty?
-	byte dat = 0x00;
-	TuyaMCU_SendCommandWithData(0x10, &dat, 1);
-#else
+static bool TuyaMCU_DPCacheRequestIncludesDP(const byte *request, int requestLen, byte dpId) {
+	int i;
+	int requestedCount;
+
+	if (request == NULL || requestLen <= 0) {
+		return true;
+	}
+
+	requestedCount = request[0];
+	if (requestedCount == 0) {
+		return true;
+	}
+	if ((requestLen - 1) < requestedCount) {
+		addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "DPCache request length %i is shorter than requested DP count %i", requestLen, requestedCount);
+		requestedCount = requestLen - 1;
+	}
+
+	for (i = 0; i < requestedCount; i++) {
+		if (request[i + 1] == dpId) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void TuyaMCU_SendDPCacheReply(byte cmdType, const byte *request, int requestLen) {
 	int dataLen;
 	int value;
 	int writtenCount;
+	int itemDataLen;
 	byte *p;
 	byte buffer[64];
 	tuyaMCUMapping_t *map;
@@ -1982,7 +1995,21 @@ void TuyaMCU_V0_SendDPCacheReply() {
 	// dpId = 18 Len = 0004 Val V = 1	
 	// 
 	while (map) {
-		if (map->obkFlags & OBKTM_FLAG_DPCACHE) {
+		if ((map->obkFlags & OBKTM_FLAG_DPCACHE) && TuyaMCU_DPCacheRequestIncludesDP(request, requestLen, map->dpId)) {
+			switch (map->dpType) {
+			case DP_TYPE_VALUE:
+				itemDataLen = 4;
+				break;
+			case DP_TYPE_ENUM:
+			default:
+			case DP_TYPE_BOOL:
+				itemDataLen = 1;
+				break;
+			}
+			if (((p - buffer) + 4 + itemDataLen) > sizeof(buffer)) {
+				addLogAdv(LOG_ERROR, LOG_FEATURE_TUYAMCU, "DPCache reply buffer full before dp %i", map->dpId);
+				break;
+			}
 			writtenCount++;
 			// dpID
 			*p = map->dpId;
@@ -1993,20 +2020,17 @@ void TuyaMCU_V0_SendDPCacheReply() {
 			// lenght
 			*p = 0;
 			p++;
+			// set len
+			*p = itemDataLen;
+			p++;
 			value = CHANNEL_Get(map->channel);
 			switch (map->dpType) {
 			case DP_TYPE_ENUM:
-				// set len
-				*p = 1;
-				p++;
 				// set data 
 				*p = value;
 				p++;
 				break;
 			case DP_TYPE_VALUE:
-				// set len
-				*p = 4;
-				p++;
 				// set data 
 				p[3] = (value >> 0) & 0xFF; // first byte (lowest bits)
 				p[2] = (value >> 8) & 0xFF; // first byte (lowest bits)
@@ -2016,9 +2040,6 @@ void TuyaMCU_V0_SendDPCacheReply() {
 				break;
 			default:
 			case DP_TYPE_BOOL:
-				// set len
-				*p = 1;
-				p++;
 				// set data 
 				*p = value;
 				p++;
@@ -2030,8 +2051,15 @@ void TuyaMCU_V0_SendDPCacheReply() {
 	dataLen = p - buffer;
 	buffer[1] = writtenCount;
 
-	TuyaMCU_SendCommandWithData(0x10, buffer, dataLen);
-#endif
+	TuyaMCU_SendCommandWithData(cmdType, buffer, dataLen);
+}
+
+void TuyaMCU_V0_SendDPCacheReply() {
+	TuyaMCU_SendDPCacheReply(TUYA_V0_CMD_OBTAINDPCACHE, NULL, 0);
+}
+
+void TuyaMCU_SendGetDPCacheReply(const byte *request, int requestLen) {
+	TuyaMCU_SendDPCacheReply(TUYA_CMD_GET_DPCACHE, request, requestLen);
 }
 void TuyaMCU_ParseReportStatusType(const byte *value, int len) {
 	int subcommand = value[0];
@@ -2266,11 +2294,18 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 	break;
 	case TUYA_CMD_DISABLE_HEARTBEAT:
 		if (version == 3) {
-			// Standard v3 command 0x25. The MCU asks the module to stop heartbeat polling.
-			heartbeat_disabled = true;
-			heartbeat_valid = true;
-			TuyaMCU_SetHeartbeatCounter(0);
-			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_DISABLE_HEARTBEAT, acknowledging and stopping heartbeat polling");
+			// Standard v3 command 0x25. Normal OBK TuyaMCU setups keep the legacy
+			// heartbeat poller running; only the explicit v3 low-power mode lets
+			// this command pause polling for the current wake/session.
+			if (g_tuyaMCU_v3LowPowerMode) {
+				heartbeat_disabled = true;
+				heartbeat_valid = true;
+				TuyaMCU_SetHeartbeatCounter(0);
+				addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_DISABLE_HEARTBEAT, pausing heartbeat polling for v3 low-power session");
+			}
+			else {
+				addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_DISABLE_HEARTBEAT, acknowledging without changing normal heartbeat polling");
+			}
 			TuyaMCU_SendCommandWithData(TUYA_CMD_DISABLE_HEARTBEAT, NULL, 0);
 		}
 		else {
@@ -2288,8 +2323,8 @@ void TuyaMCU_ProcessIncoming(const byte* data, int len) {
 		break;
 	case TUYA_CMD_GET_DPCACHE:
 		if (version == 3) {
-			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_GET_DPCACHE, sending empty cache reply");
-			TuyaMCU_SendGetDPCacheReply_Empty();
+			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: received TUYA_CMD_GET_DPCACHE, sending cache reply");
+			TuyaMCU_SendGetDPCacheReply(payload, payloadLen);
 		}
 		else {
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "ProcessIncoming: TUYA_CMD_GET_DPCACHE ignored for unexpected version %i", version);
@@ -2440,7 +2475,7 @@ commandResult_t Cmd_TuyaMCU_BatteryPoweredMode(const void* context, const char* 
 	if (Tokenizer_GetArgsCount() > 0) {
 		enable = Tokenizer_GetArgInteger(0);
 	}
-	addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "TuyaMCU power saving %s", enable ? "enabled" : "disabled");
+	addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "TuyaMCU v3 low-power mode %s", enable ? "enabled" : "disabled");
 	TuyaMCU_BatteryPoweredMode(enable != 0);
 
 	return CMD_RES_OK;
@@ -2524,7 +2559,7 @@ void TuyaMCU_RunStateMachine_V3() {
 	/* For power saving mode */
 	/* Devices are powered by the TuyaMCU, transmit information and get turned off */
 	/* Use the minimal amount of communications */
-	if (g_tuyaMCU_batteryPoweredMode) {
+	if (g_tuyaMCU_v3LowPowerMode) {
 		/* Don't worry about connection after state is updated device will be turned off */
 		if (!state_updated) {
 			/* Don't send heartbeats just work on product information */
@@ -2539,8 +2574,21 @@ void TuyaMCU_RunStateMachine_V3() {
 			{
 				/* Don't bother with MCU config */
 				working_mode_valid = true;
-				/* No query state. Will be updated when connected to wifi/mqtt */
-				TuyaMCU_RunWiFiUpdateAndPackets();
+				if ((wifi_state_valid == false) && (wifi_state_timer == 0))
+				{
+					// Some v3 low-power MCUs only report DPs after the module reports
+					// its current WiFi/cloud status. Do this once early in each wake/session,
+					// before QUERY_STATE can consume the short awake window.
+					addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send current WiFi state before querying state for v3 low-power session.");
+					g_queryStateAfterWifiStateAck = true;
+					TuyaMCU_RunWiFiUpdateAndPackets();
+				}
+				else if ((g_queryStateAfterWifiStateAck == false) && (g_sendQueryStatePackets == 0))
+				{
+					addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send TUYA_CMD_QUERY_STATE for v3 low-power session.");
+					TuyaMCU_SendCommandWithData(TUYA_CMD_QUERY_STATE, NULL, 0);
+					g_sendQueryStatePackets = 1;
+				}
 			}
 		}
 		return;
@@ -2610,15 +2658,6 @@ void TuyaMCU_RunStateMachine_V3() {
 				Tuya_SetWifiState(g_defaultTuyaMCUWiFiState);
 				addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send TUYA_CMD_WIFI_STATE.");
 				TuyaMCU_SendCommandWithData(TUYA_CMD_WIFI_STATE, NULL, 0);
-			}
-			else if ((wifi_state_valid == false) && (wifi_state_timer == 0))
-			{
-				// Some v3 low-power MCUs only report DPs after the module reports
-				// its current WiFi/cloud status. Do this once early in each wake/session,
-				// before repeated QUERY_STATE retries can consume the short awake window.
-				addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_TUYAMCU, "Will send current WiFi state before querying state.");
-				g_queryStateAfterWifiStateAck = true;
-				TuyaMCU_RunWiFiUpdateAndPackets();
 			}
 			else if (state_updated == false)
 			{
@@ -2762,7 +2801,11 @@ void TuyaMCU_EnableAutomaticSending(bool enable) {
 }
 
 void TuyaMCU_BatteryPoweredMode(bool enable) {
-	g_tuyaMCU_batteryPoweredMode = enable;
+	g_tuyaMCU_v3LowPowerMode = enable;
+	if (!enable) {
+		heartbeat_disabled = false;
+		g_queryStateAfterWifiStateAck = false;
+	}
 }
 
 void TuyaMCU_OnRGBCWChange(const float *rgbcw, int bLightEnableAll, int iLightMode, float brightnessRange01, float temperatureRange01) {
@@ -2896,6 +2939,18 @@ void TuyaMCU_Init()
 	g_tuyaBatteryPoweredState = 0;
 	g_tuyaMCUConfirmationsToSend_0x05 = 0;
 	g_tuyaMCUConfirmationsToSend_0x08 = 0;
+	heartbeat_valid = false;
+	heartbeat_disabled = false;
+	heartbeat_timer = 0;
+	heartbeat_counter = 0;
+	product_information_valid = false;
+	working_mode_valid = false;
+	wifi_state_valid = false;
+	wifi_state_timer = 0;
+	self_processing_mode = true;
+	state_updated = false;
+	g_sendQueryStatePackets = 0;
+	g_queryStateAfterWifiStateAck = false;
 	if (g_tuyaMCUpayloadBuffer == 0) {
 		g_tuyaMCUpayloadBufferSize = TUYAMCU_BUFFER_SIZE;
 		g_tuyaMCUpayloadBuffer = (byte*)malloc(TUYAMCU_BUFFER_SIZE);
@@ -3000,10 +3055,15 @@ void TuyaMCU_Init()
 	CMD_RegisterCommand("tuyaMcu_enableAutoSend", Cmd_TuyaMCU_EnableAutoSend, NULL);
 
 	//cmddetail:{"name":"tuyaMcu_batteryPoweredMode","args": "[Optional 1 or 0, by default 1 is assumed]",
-	//cmddetail:"descr":"Enables battery mode communications for version 3 TuyaMCU. tuyaMcu_batteryPoweredMode 0 can be used to disable the mode.",
+	//cmddetail:"descr":"Compatibility alias for tuyaMcu_v3LowPowerMode. Enables low-power wake/session communications for version 3 TuyaMCU. tuyaMcu_batteryPoweredMode 0 can be used to disable the mode.",
 	//cmddetail:"fn":"Cmd_TuyaMCU_BatteryPoweredMode","file":"driver/drv_tuyaMCU.c","requires":"",
 	//cmddetail:"examples":"tuyaMcu_batteryPoweredMode"}
 	CMD_RegisterCommand("tuyaMcu_batteryPoweredMode", Cmd_TuyaMCU_BatteryPoweredMode, NULL);
+	//cmddetail:{"name":"tuyaMcu_v3LowPowerMode","args": "[Optional 1 or 0, by default 1 is assumed]",
+	//cmddetail:"descr":"Enables low-power wake/session communications for version 3 TuyaMCU without requiring the tmSensor/v0 state machine.",
+	//cmddetail:"fn":"Cmd_TuyaMCU_BatteryPoweredMode","file":"driver/drv_tuyaMCU.c","requires":"",
+	//cmddetail:"examples":"tuyaMcu_v3LowPowerMode"}
+	CMD_RegisterCommand("tuyaMcu_v3LowPowerMode", Cmd_TuyaMCU_BatteryPoweredMode, NULL);
 }
 
 

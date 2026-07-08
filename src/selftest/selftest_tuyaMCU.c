@@ -207,6 +207,122 @@ void Test_TuyaMCU_Boolean() {
 	//SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 }
+static void Test_TuyaMCU_RunUntilUARTData(int maxFrames) {
+	int i;
+
+	for (i = 0; i < maxFrames; i++) {
+		if (SIM_UART_GetDataSize() != 0) {
+			break;
+		}
+		Sim_RunFrames(1, false);
+	}
+	SELFTEST_ASSERT_HAS_SOME_DATA_IN_UART();
+}
+static int Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket() {
+	int wifiState;
+	int checksum;
+
+	SELFTEST_ASSERT(SIM_UART_GetDataSize() >= 8);
+	SELFTEST_ASSERT(SIM_UART_GetByte(0) == 0x55);
+	SELFTEST_ASSERT(SIM_UART_GetByte(1) == 0xAA);
+	SELFTEST_ASSERT(SIM_UART_GetByte(2) == 0x00);
+	SELFTEST_ASSERT(SIM_UART_GetByte(3) == 0x03);
+	SELFTEST_ASSERT(SIM_UART_GetByte(4) == 0x00);
+	SELFTEST_ASSERT(SIM_UART_GetByte(5) == 0x01);
+	wifiState = SIM_UART_GetByte(6);
+	checksum = (0xFF + 0x03 + 0x01 + wifiState) & 0xFF;
+	SELFTEST_ASSERT(SIM_UART_GetByte(7) == checksum);
+	SIM_UART_ConsumeBytes(8);
+	return wifiState;
+}
+static void Test_TuyaMCU_V3_NormalStartupCompatibility() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010003", 0);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100027B7DFD", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+static void Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 25 00 00 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	Test_TuyaMCU_RunUntilUARTData(500);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+static void Test_TuyaMCU_V3_LowPowerStartupCompatibility() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode", 0);
+
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100027B7DFD", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+static void Test_TuyaMCU_V3_DPCacheTypes() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 25 val 25 1", 0);
+	CMD_ExecuteCommand("setChannel 25 123456", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 26 enum 26 1", 0);
+	CMD_ExecuteCommand("setChannel 26 2", 0);
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020119AE", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0A 01 01 19 02 00 04 00 01 E2 40 DD");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03900002011AAF", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 07 01 01 1A 04 00 01 02 B9");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000010093", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0F 01 02 1A 04 00 01 02 19 02 00 04 00 01 E2 40 04");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
 void Test_TuyaMCU_DP22() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
@@ -234,6 +350,7 @@ void Test_TuyaMCU_DP22() {
 	CMD_ExecuteCommand("uartFakeHex 55AA03220028010100010002010001000301000100040100010005010001000601000100650100010066010001003C", 0);
 	Sim_RunFrames(100, false);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SIM_UART_ExpectAndConsumeHexStr("55 AA 00 00 00 00 FF");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	SELFTEST_ASSERT_CHANNEL(1, 0);
 	SELFTEST_ASSERT_CHANNEL(2, 0);
@@ -264,6 +381,19 @@ void Test_TuyaMCU_DP22() {
 	// v3 command coverage needed by TH03/T1 devices
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA03900003021718C6", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 23 bool 24 1", 0);
+	CMD_ExecuteCommand("setChannel 24 1", 0);
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020117AC", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 07 01 01 17 01 00 01 01 B2");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020118AD", 0);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
@@ -300,6 +430,11 @@ void Test_TuyaMCU_DP22() {
 		SIM_UART_ConsumeBytes(14);
 	}
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	Test_TuyaMCU_V3_NormalStartupCompatibility();
+	Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility();
+	Test_TuyaMCU_V3_LowPowerStartupCompatibility();
+	Test_TuyaMCU_V3_DPCacheTypes();
 }
 void Test_TuyaMCU_Basic() {
 	// reset whole device
