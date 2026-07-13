@@ -259,6 +259,7 @@ publish:
       - path: "output/**/*_UA_*.bin"
       - path: "output/**/*_UG_*.bin"
       - path: "output/**/*_QIO_*.bin"
+      - path: "output/**/OpenOPL1000_[0-9]*.bin"
       - path: "output/**/*.rbl"
       - path: "output/**/*.img"
       - path: "output/**/OpenBL*"

@@ -1,4 +1,6 @@
 output/**
+/.codex-tmp/
+/platforms/OPL1000/build_codex_v*/
 **/*.o
 **/*.oo
 **/*.obj

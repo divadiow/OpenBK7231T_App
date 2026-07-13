@@ -1308,3 +1308,243 @@ OpenOPL1000, version codex_v66
 Info:MAIN:Using SSID [OPL1000_AP]
 Info:MAIN:Using Pass [1234abcd]
 ```
+
+## v67 OPL1000 PWM HAL
+
+v67 wires the six fixed OPL1000 A2 PWM outputs into OpenBeken's pin HAL:
+
+- IO23 maps to PWM0;
+- IO22 maps to PWM1;
+- IO21 maps to PWM2;
+- IO20 maps to PWM3;
+- IO19 maps to PWM4;
+- IO18 maps to PWM5.
+
+The implementation initializes the vendor PWM block on first use, selects the
+22 MHz source, tracks frequency and duty per channel, and returns a stopped pin
+to a low GPIO output. Hardware testing confirmed the PWM commands succeeded on
+the test device without crashes, including the LED connected to IO21.
+
+```text
+v67 size: text 167647, data 2308, bss 3876, dec 173831
+v67 IRAM1: 159348 / 170848
+v67 SHM:    14484 / 15360
+```
+
+The tested v67 output is retained in `output/codex_v67`.
+
+## v68 remove inactive web pages and guard first-boot Wi-Fi waits
+
+The full HTTP server exposed MQTT and OTA configuration pages even though the
+OPL1000 build does not yet include an MQTT client or an OpenBeken OTA writer.
+v68 removes those inactive pages and routes from OPL1000 only. MQTT is guarded
+by the backend feature, so its page will return automatically when
+`ENABLE_MQTT` is enabled for this platform. OTA remains available to every
+other platform through the new `ENABLE_HTTP_OTA` page guard.
+
+The SDK `MwOta_Init()` boot/layout call is deliberately retained. It belongs
+to the vendor image and boot-loader layout and is separate from OpenBeken's
+currently unimplemented OTA HTTP upload path.
+
+Blank-flash testing showed a single reset during the first Wi-Fi association,
+while the next boot loaded the newly created FIM configuration and connected
+normally. OPL1000 normally feeds its watchdog from the SDK idle hook. The
+OpenBeken `idle 0/s` counter is not registered on this platform, so it cannot
+confirm whether that hook is running often enough during association. The first
+boot also writes the complete 3584-byte default configuration to FIM before
+Wi-Fi. Together with the five-second Wi-Fi startup delay and four-second scan
+wait, that makes a watchdog timing edge a plausible cause of the reset.
+
+v68 therefore feeds the watchdog at both ends of the OPL1000-only Wi-Fi startup
+delay and once per second while waiting for association. The scan and connect
+behavior itself is unchanged. This is intended to remove the blank-FIM timing
+sensitivity without affecting any other platform.
+
+Hardware checks required:
+
+- erase the configuration/FIM area and confirm the first boot reaches DHCP
+  without the one-time reset;
+- confirm a normal warm boot still connects and starts the HTTP server;
+- confirm Config no longer offers MQTT or OTA on OPL1000;
+- confirm `/cfg_mqtt`, `/ota`, and `/ota_exec` return the normal not-found page.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v67 size: text 167647, data 2308, bss 3876, dec 173831
+v68 size: text 164463, data 2308, bss 3876, dec 170647
+
+v67 IRAM1: 159348 / 170848
+v68 IRAM1: 156156 / 170848
+v68 SHM:    14492 / 15360
+```
+
+Against v67, v68 is 3184 bytes smaller overall and uses 3192 bytes less IRAM1.
+SHM use is 8 bytes higher. The build leaves 14692 bytes
+free in IRAM1 and 868 bytes free in SHM.
+
+Build output: `output/codex_v68`
+
+## v69 report the hardware reset source
+
+v68 hardware testing still showed one reset during the first captured Wi-Fi
+association. Both boots loaded the same valid FIM configuration with change
+count 1, so the earlier blank-FIM write/timing explanation does not fit this
+failure. The watchdog feeds added in v68 also did not prevent it.
+
+v69 leaves the Wi-Fi sequence unchanged and adds one early OPL1000-only reset
+diagnostic. The SDK hardware register distinguishes the M3 application-core
+watchdog, the M0 Wi-Fi/controller watchdog, software reset, and the two power
+reset sources. It is printed after debug-UART setup and then cleared so the
+next boot reports only its immediate reset cause:
+
+```text
+Reset source: 0x00 (M3WDT=0 M0WDT=0 SW=0 CPOR=0 SPOR=0)
+```
+
+The key result is the line from the boot immediately after the unexpected
+association reset. An `M0WDT=1` result would implicate the SDK Wi-Fi controller
+rather than OpenBeken's M3 watchdog; `M3WDT=1` would show that the application
+watchdog feeds are not reaching the relevant timeout; `SW=1` would point to an
+explicit SDK reset path.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v68 size: text 164463, data 2308, bss 3876, dec 170647
+v69 size: text 164591, data 2308, bss 3876, dec 170775
+
+v69 IRAM1: 156284 / 170848
+v69 SHM:    14492 / 15360
+```
+
+The diagnostic adds 128 bytes overall and to IRAM1, with no BSS or SHM
+increase. The build leaves 14564 bytes free in IRAM1 and 868 bytes free in SHM.
+
+Build output: `output/codex_v69`
+
+## v70 avoid the Wi-Fi bring-up watchdog boundary
+
+The v69 reset register proved that the association reset is the M3 application
+watchdog: the boot immediately after the failure reported only
+`Reset source: 0x01 (M3WDT=1 ...)`. It is not an M0 Wi-Fi-controller watchdog,
+a software reset, or a FIM/configuration failure.
+
+The timing also explains why the failure is marginal. OpenOPL1000 waited five
+seconds before Wi-Fi bring-up, then waited four seconds for the asynchronous
+scan cache before starting association. That reaches the SDK's ten-second M3
+watchdog boundary just as the supplicant becomes busy. All supplied OPL1000
+station demos use a two-second readiness delay instead.
+
+v70 makes two OPL1000-only changes:
+
+- use the vendor-demo two-second Wi-Fi readiness delay;
+- explicitly load a 30-second M3 watchdog period throughout scan, association,
+  and DHCP, then restore the SDK's normal ten-second period when DHCP succeeds
+  and the temporary Wi-Fi worker exits.
+
+Using `Hal_Wdt_Feed()` changes and reloads the hardware period directly. This
+replaces v68's `Hal_Wdt_Clear()` calls, which only reloaded the existing period
+and did not prevent the observed reset. The SDK idle hook continues servicing
+the watchdog normally, and no shared OpenBeken source or other platform is
+affected by this adjustment.
+
+Hardware checks required:
+
+- confirm first association reaches DHCP without rebooting;
+- confirm the next reset-source line is a normal power/software cause and not
+  `M3WDT=1`;
+- confirm warm boots and a failed/unavailable-AP retry remain stable;
+- confirm HTTP and PWM still operate after connection.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v69 size: text 164591, data 2308, bss 3876, dec 170775
+v70 size: text 164631, data 2308, bss 3876, dec 170815
+
+v70 IRAM1: 156324 / 170848
+v70 SHM:    14492 / 15360
+```
+
+The v70 watchdog-window change adds 40 bytes, with no BSS or SHM increase.
+The build leaves 14524 bytes free in IRAM1 and 868 bytes free in SHM.
+
+Build output: `output/codex_v70`
+
+Hardware result: the first tested v70 boot completed scan, association, DHCP,
+and HTTP startup without rebooting. Association began around second 7, DHCP
+completed at second 12, and free heap returned from the temporary 5624-byte
+association low point to 7688 bytes after the Wi-Fi worker exited. The startup
+`0x1d` reset status was the accumulated state present before v70 cleared the
+register; no second boot followed it, so v70 did not generate another M3
+watchdog reset during this test.
+
+Warm-reboot and unavailable-AP retry testing are still outstanding before the
+reset diagnostic can be removed and the v70 watchdog handling considered
+fully validated.
+
+## v71 build the final Opulinks flash image directly
+
+The OPL1000 build now performs the same packing operation as the Opulinks VEN
+2.0.0 programming tool. The packer reads `PatchData.txt`, the two generated M3
+images, and the SDK's variable-length M0 container, then emits the complete
+`OpenOPL1000_<version>.bin` image expected by the programming tool.
+
+The implementation preserves the Opulinks record layout, type fields,
+big-endian addresses, byte-sum header and payload checksums, and M0 segment
+ordering. M0 segment lengths and generated M3 image lengths are read from the
+input files rather than fixed in the build, so normal linker-size changes do
+not require packing changes.
+
+Only the OPL1000 Makefile is affected. Split M3 files, the M0 image, OTA loader,
+PatchData copy, map, and pack-ready zip remain available in their source/build
+locations for development but are no longer copied into the workflow output
+directory. A clean OPL1000 artifact therefore contains one directly flashable
+binary rather than the manual packing kit.
+
+Compatibility checks required:
+
+- compare a reconstructed known input with a VEN 2.0.0 packed image byte for
+  byte;
+- clean-build v71 and validate all record checksums in the generated image;
+- flash the single generated binary using the programming tool and confirm the
+  normal boot, Wi-Fi, HTTP, configuration persistence, GPIO, and PWM paths.
+
+Compatibility results:
+
+- a 116768-byte image reconstructed from a known VEN-packed input matched the
+  original byte for byte, including SHA-256
+  `761B38A31808A4B1C647A9A4CC2745CBACDFB90AA141D2986BDDDADCB7D8DBF0`;
+- the v71 image independently produced by this packer and VEN 2.0.0's packing
+  routine matched byte for byte, including SHA-256
+  `FC8D68E4418CFFE28A1F201408C4D116F4C9D6C36EDAC72DB7EFA70DE2D51B47`;
+- all six v71 records, boundaries, magic values, header checksums, and payload
+  checksums validate, consuming the complete 212048-byte image;
+- `output/codex_v71` contains only `OpenOPL1000_codex_v71.bin`.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v71 size: text 164631, data 2308, bss 3876, dec 170815
+```
+
+Packing is a host-side build change, so v71 has the same firmware memory use as
+v70. Hardware flashing of the new single image remains outstanding.
+
+The semantic-release asset list includes only the final
+`OpenOPL1000_<version>.bin` output. OPL1000 is deliberately not added to the
+main release-note platform list or asset table while the port remains under
+hardware validation.
+
+The VEN 2.0.0 UART download path treats this output as a pure patch image. In
+Release and Production modes it forces the flash start address to
+`0x00000000`, erases sectors beginning at sector 0, and writes the complete file
+in 256-byte packets from that address. It does not remove the leading `PTCH`
+record header or trim any other bytes. The tool's separate 64-byte-header split
+path is used for non-patch/OTA-style input and is not selected for this packed
+binary.
+
+For the 212048-byte v71 output this erases 52 sectors (`0x00000000` through
+`0x00033FFF`) and sends 829 packets. The final packet contains the remaining 80
+bytes without padding, so the written file range ends at `0x00033C4F`.

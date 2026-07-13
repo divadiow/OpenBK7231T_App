@@ -8,11 +8,16 @@
 #include "../hal_pins.h"
 #include "hal_pin.h"
 #include "hal_pin_def.h"
+#include "hal_pwm.h"
 #include "hal_vic.h"
 
 #define OPENOPL1000_GPIO_MAX 24
 
 static uint32_t s_outputMask;
+static uint32_t s_pwmMask;
+static uint32_t s_pwmFreq[6];
+static uint8_t s_pwmDuty[6];
+static uint8_t s_pwmInitDone;
 
 static int OpenOPL1000_PinValid(int index)
 {
@@ -27,6 +32,49 @@ static int OpenOPL1000_PinGpioCapable(int index)
 static E_GpioIdx_t OpenOPL1000_PinToGpio(int index)
 {
     return (E_GpioIdx_t)index;
+}
+
+int PIN_GetPWMIndexForPinIndex(int pin)
+{
+    switch (pin)
+    {
+    case 23: return 0;
+    case 22: return 1;
+    case 21: return 2;
+    case 20: return 3;
+    case 19: return 4;
+    case 18: return 5;
+    default: return -1;
+    }
+}
+
+static uint8_t OpenOPL1000_PinToPwmMask(int index)
+{
+    int pwmIndex = PIN_GetPWMIndexForPinIndex(index);
+    if (pwmIndex < 0) return 0;
+    return (uint8_t)(1u << pwmIndex);
+}
+
+static E_PIN_TYPE OpenOPL1000_PinToPwmType(int index)
+{
+    switch (PIN_GetPWMIndexForPinIndex(index))
+    {
+    case 0: return PIN_TYPE_PWM_0;
+    case 1: return PIN_TYPE_PWM_1;
+    case 2: return PIN_TYPE_PWM_2;
+    case 3: return PIN_TYPE_PWM_3;
+    case 4: return PIN_TYPE_PWM_4;
+    case 5: return PIN_TYPE_PWM_5;
+    default: return PIN_TYPE_NONE;
+    }
+}
+
+static void OpenOPL1000_PWM_InitOnce(void)
+{
+    if (s_pwmInitDone) return;
+    Hal_Pwm_Init();
+    Hal_Pwm_ClockSourceSet(HAL_PWM_CLK_22M);
+    s_pwmInitDone = 1;
 }
 
 static const char *OpenOPL1000_GetPinLabel(int index)
@@ -116,25 +164,68 @@ void HAL_PIN_Setup_Output(int index)
 
 void HAL_PIN_PWM_Stop(int index)
 {
-    (void)index;
+    int pwmIndex = PIN_GetPWMIndexForPinIndex(index);
+    uint8_t pwmMask = OpenOPL1000_PinToPwmMask(index);
+
+    if (pwmIndex < 0) return;
+
+    OpenOPL1000_PWM_InitOnce();
+    Hal_Pwm_Disable(pwmMask);
+    s_pwmMask &= ~((uint32_t)pwmMask);
+    s_pwmFreq[pwmIndex] = 0;
+    s_pwmDuty[pwmIndex] = 0;
+    s_outputMask &= ~(1u << index);
+    Hal_Pin_ConfigSet((uint8_t)index, PIN_TYPE_GPIO_OUTPUT_LOW, PIN_DRIVING_FLOAT);
 }
 
 void HAL_PIN_PWM_Start(int index, int freq)
 {
-    (void)index;
-    (void)freq;
+    int pwmIndex = PIN_GetPWMIndexForPinIndex(index);
+    uint8_t pwmMask = OpenOPL1000_PinToPwmMask(index);
+    E_PIN_TYPE pwmType = OpenOPL1000_PinToPwmType(index);
+
+    if (pwmIndex < 0) return;
+    if (freq <= 0) freq = 1000;
+
+    OpenOPL1000_PWM_InitOnce();
+    Hal_Pin_ConfigSet((uint8_t)index, pwmType, PIN_DRIVING_FLOAT);
+    Hal_Pwm_SimpleConfigSet(pwmMask, s_pwmDuty[pwmIndex], (uint32_t)freq);
+    Hal_Pwm_Enable(pwmMask);
+
+    s_pwmFreq[pwmIndex] = (uint32_t)freq;
+    s_pwmMask |= (uint32_t)pwmMask;
+    s_outputMask &= ~(1u << index);
 }
 
 void HAL_PIN_PWM_Update(int index, float value)
 {
-    (void)index;
-    (void)value;
+    int pwmIndex = PIN_GetPWMIndexForPinIndex(index);
+    uint8_t pwmMask = OpenOPL1000_PinToPwmMask(index);
+    uint8_t duty;
+    uint32_t freq;
+
+    if (pwmIndex < 0) return;
+    if (value < 0) value = 0;
+    if (value > 100) value = 100;
+
+    duty = (uint8_t)((value * 255.0f + 50.0f) / 100.0f);
+    freq = s_pwmFreq[pwmIndex] ? s_pwmFreq[pwmIndex] : 1000;
+
+    OpenOPL1000_PWM_InitOnce();
+    s_pwmDuty[pwmIndex] = duty;
+    Hal_Pwm_SimpleConfigSet(pwmMask, duty, freq);
+    if ((s_pwmMask & (uint32_t)pwmMask) == 0)
+    {
+        Hal_Pin_ConfigSet((uint8_t)index, OpenOPL1000_PinToPwmType(index), PIN_DRIVING_FLOAT);
+        Hal_Pwm_Enable(pwmMask);
+        s_pwmFreq[pwmIndex] = freq;
+        s_pwmMask |= (uint32_t)pwmMask;
+    }
 }
 
 int HAL_PIN_CanThisPinBePWM(int index)
 {
-    (void)index;
-    return 0;
+    return PIN_GetPWMIndexForPinIndex(index) >= 0;
 }
 
 const char *HAL_PIN_GetPinNameAlias(int index)

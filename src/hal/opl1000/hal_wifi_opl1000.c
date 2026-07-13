@@ -16,6 +16,7 @@
 #include "lwip_helper.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/netif.h"
+#include "hal_system.h"
 #include "hal_wdt.h"
 #include "sys_os_config.h"
 #include "wifi_api.h"
@@ -30,12 +31,14 @@
 #define OPENOPL1000_WIFI_PASSWORD "1234abcd"
 #endif
 
-#define OPENOPL1000_WIFI_READY_DELAY_MS       5000
+#define OPENOPL1000_WIFI_READY_DELAY_MS       2000
 #define OPENOPL1000_SCAN_RESULT_WAIT_MS       4000
 #define OPENOPL1000_DIRECT_ASSOC_WAIT_SECONDS 12
 #define OPENOPL1000_ASSOC_WAIT_SECONDS        30
 #define OPENOPL1000_SCAN_RETRY_DELAY_MS       10000
 #define OPENOPL1000_SCAN_PASS_COUNT           4
+#define OPENOPL1000_WDT_NORMAL_SECONDS        10
+#define OPENOPL1000_WDT_WIFI_SECONDS          30
 #define OPENOPL1000_WIFI_TRACE                0
 #define OPENOPL1000_WIFI_VERBOSE_SCAN         0
 #define OPENOPL1000_NETINFO_TRACE             0
@@ -72,12 +75,17 @@ static unsigned int OpenOPL1000_GetFreeHeap(void)
 }
 #endif
 
-static void OpenOPL1000_ClearWatchdog(void)
+static void OpenOPL1000_FeedWatchdog(unsigned int seconds)
 {
-    if (Hal_Wdt_Clear != NULL)
+    if (Hal_Wdt_Feed != NULL)
     {
-        Hal_Wdt_Clear();
+        Hal_Wdt_Feed(seconds * Hal_Sys_ApsPclkGet());
     }
+}
+
+static void OpenOPL1000_FeedWifiWatchdog(void)
+{
+    OpenOPL1000_FeedWatchdog(OPENOPL1000_WDT_WIFI_SECONDS);
 }
 
 static bool OpenOPL1000_IsUsableMac(const uint8_t *mac)
@@ -245,9 +253,9 @@ static int OpenOPL1000_TryDirectConnectWithoutBssid(void)
            OpenOPL1000_GetFreeHeap());
 
     OpenOPL1000_ReportStatus(WIFI_STA_CONNECTING);
-    OpenOPL1000_ClearWatchdog();
+    OpenOPL1000_FeedWifiWatchdog();
     rc = wifi_connection_connect(&wifiConfig);
-    OpenOPL1000_ClearWatchdog();
+    OpenOPL1000_FeedWifiWatchdog();
     OPL_WIFI_LOG("WiFi direct no-BSSID wifi_connection_connect rc=%d heap=%u\r\n",
            rc,
            OpenOPL1000_GetFreeHeap());
@@ -258,6 +266,7 @@ static bool OpenOPL1000_WaitForAssociation(unsigned int seconds)
 {
     for (unsigned int i = 0; i < seconds; i++)
     {
+        OpenOPL1000_FeedWifiWatchdog();
         osDelay(1000);
         if (OpenOPL1000_IsAssociated())
         {
@@ -311,7 +320,7 @@ static int OpenOPL1000_DoScanAndConnect(void)
                targeted ? "targeted" : "broad",
                rc,
                OpenOPL1000_GetFreeHeap());
-        OpenOPL1000_ClearWatchdog();
+        OpenOPL1000_FeedWifiWatchdog();
 
         if (rc != 0)
         {
@@ -320,7 +329,7 @@ static int OpenOPL1000_DoScanAndConnect(void)
         }
 
         osDelay(OPENOPL1000_SCAN_RESULT_WAIT_MS);
-        OpenOPL1000_ClearWatchdog();
+        OpenOPL1000_FeedWifiWatchdog();
 
         rc = wifi_scan_get_ap_num(&apCount);
 #if OPENOPL1000_WIFI_VERBOSE_SCAN
@@ -402,13 +411,13 @@ static bool OpenOPL1000_StartLwipAndPollForIp(void)
     if (!g_lwipStarted)
     {
         g_lwipStarted = true;
-        OpenOPL1000_ClearWatchdog();
+        OpenOPL1000_FeedWifiWatchdog();
         OPL_WIFI_LOG("WiFi lwIP network init start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
         lwip_network_init(WIFI_MODE_STA);
-        OpenOPL1000_ClearWatchdog();
+        OpenOPL1000_FeedWifiWatchdog();
         OPL_WIFI_LOG("WiFi lwIP net_start, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
         lwip_net_start(WIFI_MODE_STA);
-        OpenOPL1000_ClearWatchdog();
+        OpenOPL1000_FeedWifiWatchdog();
 
         /* Do not call lwip_net_ready() here. On OPL1000 A2 it blocks the
          * temporary Wi-Fi worker indefinitely after DHCP succeeds, so the
@@ -448,7 +457,9 @@ static void OpenOPL1000_WifiWorker(void *args)
     (void)args;
 
     OPL_WIFI_LOG("WiFi worker started, heap=%u\r\n", OpenOPL1000_GetFreeHeap());
+    OpenOPL1000_FeedWifiWatchdog();
     osDelay(OPENOPL1000_WIFI_READY_DELAY_MS);
+    OpenOPL1000_FeedWifiWatchdog();
 
     while (1)
     {
@@ -494,6 +505,7 @@ static void OpenOPL1000_WifiWorker(void *args)
                  */
                 OPL_WIFI_LOG("WiFi network ready, terminating worker to free stack, heap=%u\r\n",
                        OpenOPL1000_GetFreeHeap());
+                OpenOPL1000_FeedWatchdog(OPENOPL1000_WDT_NORMAL_SECONDS);
                 g_workerStarted = false;
                 g_workerThread = NULL;
                 osThreadTerminate(osThreadGetId());

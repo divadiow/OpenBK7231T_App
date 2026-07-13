@@ -33,6 +33,7 @@
 #define ENABLE_HTTP_FLAGS						1
 #define ENABLE_HTTP_STARTUP						1
 #define ENABLE_HTTP_PING						1
+#define ENABLE_HTTP_OTA							1
 #define ENABLE_LED_BASIC						1
 
 // for debugging: Enable logging startup to LFS (only if LFS is present)
@@ -91,8 +92,12 @@
 #define NEW_TCP_SERVER                          1
 #define ENABLE_EXPAND_CONSTANT                  1
 #define OBK_DISABLE_ALL_DRIVERS                 1
+#if !ENABLE_MQTT
+#undef ENABLE_HTTP_MQTT
+#endif
 #undef ENABLE_LED_BASIC
 #undef ENABLE_HTTP_MAC
+#undef ENABLE_HTTP_OTA
 #undef ENABLE_HTTP_PING
 
 #elif PLATFORM_W600

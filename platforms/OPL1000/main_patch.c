@@ -419,6 +419,7 @@ static void OpenOPL1000_OpenBekenTask(void *args)
 static void Main_AppInit_patch(void)
 {
     osThreadDef_t threadDef;
+    uint32_t resetStatus;
 
     /* Keep early bring-up logging on IO0/IO1.
      * The vendor default is often UART1/AT on IO0/IO1 and APS debug on IO8/IO9;
@@ -434,6 +435,16 @@ static void Main_AppInit_patch(void)
 
     Hal_DbgUart_Init(115200);
     Hal_DbgUart_RxIntEn(1);
+
+    resetStatus = Hal_Sys_ResetStatusRead();
+    printf("Reset source: 0x%02x (M3WDT=%u M0WDT=%u SW=%u CPOR=%u SPOR=%u)\r\n",
+           (unsigned int)resetStatus,
+           (unsigned int)((resetStatus & RESET_BY_M3_WDT) != 0),
+           (unsigned int)((resetStatus & RESET_BY_M0_WDT) != 0),
+           (unsigned int)((resetStatus & RESET_BY_SWRST) != 0),
+           (unsigned int)((resetStatus & RESET_BY_CPOR) != 0),
+           (unsigned int)((resetStatus & RESET_BY_SPOR) != 0));
+    Hal_Sys_ResetStatusClear(resetStatus);
 #if OPENOPL1000_BOOT_TRACE
     {
         uint32_t shmProbe = OpenOPL1000_ShmProbeFn(0x00000029u);

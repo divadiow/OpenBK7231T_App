@@ -3006,7 +3006,9 @@ int http_fn_cfg(http_request_t* request) {
 #if (ENABLE_DRIVER_DS1820_FULL)
 	postFormAction(request, "cfg_ds18b20", "Configure DS18B20 Sensors");
 #endif
+#if ENABLE_HTTP_MQTT
 	postFormAction(request, "cfg_mqtt", "Configure MQTT");
+#endif
 #if ENABLE_HTTP_NAMES
 	postFormAction(request, "cfg_name", "Configure Names");
 #endif
@@ -3022,7 +3024,9 @@ int http_fn_cfg(http_request_t* request) {
 #if ENABLE_HA_DISCOVERY
 	postFormAction(request, "ha_cfg", "Home Assistant Configuration");
 #endif
+#if ENABLE_HTTP_OTA
 	postFormAction(request, "ota", "OTA (update software by WiFi)");
+#endif
 	postFormAction(request, "cmd_tool", "Execute Custom Command");
 #if ENABLE_HTTP_STARTUP
 	postFormAction(request, "startup_command", "Change Startup Command Text");
@@ -3562,6 +3566,7 @@ int http_fn_cfg_dgr(http_request_t* request) {
 }
 #endif
 
+#if ENABLE_HTTP_OTA
 void OTA_RequestDownloadFromHTTP(const char* s) {
 #if PLATFORM_BEKEN
 	otarequest(s);
@@ -3681,6 +3686,7 @@ int http_fn_ota(http_request_t* request) {
 	poststr(request, NULL);
 	return 0;
 }
+#endif
 
 int http_fn_other(http_request_t* request) {
 	http_setup(request, httpMimeTypeHTML);

@@ -11,6 +11,7 @@ OBK_ROOT ?= ../..
 BUILD_DIR ?= build
 OUTPUT_DIR ?= ../../output/$(APP_VERSION)
 OUTPUT_BASENAME ?= $(APP_NAME)_$(APP_VERSION)
+PYTHON ?= python3
 
 ARM_GCC_PATH ?= $(ARM_NONE_EABI_GCC_PATH)
 ifneq (,$(wildcard $(ARM_GCC_PATH)/bin/arm-none-eabi-gcc))
@@ -32,8 +33,9 @@ LINK_SCRIPT    := $(OBK_ROOT)/platforms/OPL1000/link_split_m3.ld
 SYMDEFS        := $(APS_ROOT)/targets/opl1000/object/symdefs_gcc.o
 PATCH_LIB      := $(APS_ROOT)/targets/opl1000/Output-GCC/opl1000_app_m3_lite.a
 M0_IMAGE       := $(SDK_ROOT)/FW_Pack/opl1000_m0.bin
-OTA_LOADER     := $(SDK_ROOT)/FW_Pack/opl1000_ota_loader.bin
 PATCHDATA_SCRIPT := $(OBK_ROOT)/platforms/OPL1000/pack/PatchData.txt
+PACK_SCRIPT    := $(OBK_ROOT)/platforms/OPL1000/pack/pack_opl1000.py
+PACK_STAGE     := $(BUILD_DIR)/pack
 
 OBK_SRCS := $(OBK_ROOT)/src/
 
@@ -194,23 +196,14 @@ $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin: $(BUILD_DIR)/$(OUTPUT_BASENAME).elf
 $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin: $(BUILD_DIR)/$(OUTPUT_BASENAME).elf
 	$(OBJCOPY) -O binary --only-section=.shm_region $< $@
 
-package: $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin
+package: $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(M0_IMAGE) $(PATCHDATA_SCRIPT) $(PACK_SCRIPT)
 	mkdir -p $(OUTPUT_DIR)
-	mkdir -p $(OUTPUT_DIR)/pack_ready
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(OUTPUT_DIR)/$(OUTPUT_BASENAME)_main.bin
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(OUTPUT_DIR)/$(OUTPUT_BASENAME)_shm.bin
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME).map $(OUTPUT_DIR)/$(OUTPUT_BASENAME).map
-	cp $(M0_IMAGE) $(OUTPUT_DIR)/$(APP_NAME)_M0_$(APP_VERSION).bin
-	cp $(OTA_LOADER) $(OUTPUT_DIR)/$(APP_NAME)_OTA_LOADER_$(APP_VERSION).bin
-	cp $(PATCHDATA_SCRIPT) $(OUTPUT_DIR)/$(APP_NAME)_PatchData_$(APP_VERSION).txt
-	cp $(PATCHDATA_SCRIPT) $(OUTPUT_DIR)/pack_ready/PatchData.txt
-	cp $(M0_IMAGE) $(OUTPUT_DIR)/pack_ready/opl1000_m0.bin
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3_main.bin
-	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(OUTPUT_DIR)/pack_ready/opl1000_app_m3_shm.bin
-	cd $(OUTPUT_DIR)/pack_ready && if command -v zip >/dev/null 2>&1; then zip -q -r ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3_main.bin opl1000_app_m3_shm.bin; else python3 -m zipfile -c ../$(APP_NAME)_pack_ready_$(APP_VERSION).zip PatchData.txt opl1000_m0.bin opl1000_app_m3_main.bin opl1000_app_m3_shm.bin; fi
-	@echo "OpenOPL1000 output written to $(OUTPUT_DIR)"
-	@echo "Opulinks split-M3 pack-ready files written to $(OUTPUT_DIR)/pack_ready"
-	@echo "Pack with: PatchData.txt + opl1000_m0.bin + opl1000_app_m3_main.bin + opl1000_app_m3_shm.bin"
+	mkdir -p $(PACK_STAGE)
+	cp $(PATCHDATA_SCRIPT) $(PACK_STAGE)/PatchData.txt
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(PACK_STAGE)/opl1000_app_m3_main.bin
+	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(PACK_STAGE)/opl1000_app_m3_shm.bin
+	$(PYTHON) $(PACK_SCRIPT) --patch-data $(PACK_STAGE)/PatchData.txt --m0-container $(M0_IMAGE) --output $(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin
+	@echo "OpenOPL1000 packed flash image written to $(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin"
 
 clean:
 	rm -rf $(BUILD_DIR)

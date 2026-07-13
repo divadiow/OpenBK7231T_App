@@ -1040,10 +1040,12 @@ int HTTP_ProcessPacket(http_request_t *request)
 		return http_fn_cfg_ping(request);
 #endif
 
+#if ENABLE_HTTP_OTA
 	if (http_checkUrlBase(urlStr, "ota"))
 		return http_fn_ota(request);
 	if (http_checkUrlBase(urlStr, "ota_exec"))
 		return http_fn_ota_exec(request);
+#endif
 	if (http_checkUrlBase(urlStr, "cm"))
 		return http_fn_cm(request);
 
