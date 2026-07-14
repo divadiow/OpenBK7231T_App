@@ -12,6 +12,7 @@ BUILD_DIR ?= build
 OUTPUT_DIR ?= ../../output/$(APP_VERSION)
 OUTPUT_BASENAME ?= $(APP_NAME)_$(APP_VERSION)
 PYTHON ?= python3
+HOSTCC ?= cc
 
 ARM_GCC_PATH ?= $(ARM_NONE_EABI_GCC_PATH)
 ifneq (,$(wildcard $(ARM_GCC_PATH)/bin/arm-none-eabi-gcc))
@@ -40,6 +41,7 @@ PACK_STAGE     := $(BUILD_DIR)/pack
 OBK_SRCS := $(OBK_ROOT)/src/
 
 SOURCES := main_patch.c
+SOURCES += opl1000_libc.c
 SOURCES += $(OBK_SRCS)user_main.c
 SOURCES += $(OBK_SRCS)base64/base64.c
 SOURCES += $(OBK_SRCS)cJSON/cJSON.c
@@ -177,7 +179,7 @@ LDFLAGS += -Wl,--wrap=le_ctrl_pre_patch_init
 LDFLAGS += -Wl,--wrap=wpa_cli_func_init_patch
 LDFLAGS += -Xlinker --just-symbols=$(SYMDEFS)
 
-.PHONY: all package clean
+.PHONY: all package test-libc clean
 all: package
 
 $(BUILD_DIR):
@@ -204,6 +206,10 @@ package: $(BUILD_DIR)/$(OUTPUT_BASENAME)_main.bin $(BUILD_DIR)/$(OUTPUT_BASENAME
 	cp $(BUILD_DIR)/$(OUTPUT_BASENAME)_shm.bin $(PACK_STAGE)/opl1000_app_m3_shm.bin
 	$(PYTHON) $(PACK_SCRIPT) --patch-data $(PACK_STAGE)/PatchData.txt --m0-container $(M0_IMAGE) --output $(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin
 	@echo "OpenOPL1000 packed flash image written to $(OUTPUT_DIR)/$(OUTPUT_BASENAME).bin"
+
+test-libc: | $(BUILD_DIR)
+	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -DOPENOPL1000_LIBC_HOST_TEST -I. opl1000_libc.c tests/test_opl1000_libc.c -o $(BUILD_DIR)/test_opl1000_libc
+	$(BUILD_DIR)/test_opl1000_libc
 
 clean:
 	rm -rf $(BUILD_DIR)

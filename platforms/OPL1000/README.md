@@ -1548,3 +1548,67 @@ binary.
 For the 212048-byte v71 output this erases 52 sectors (`0x00000000` through
 `0x00033FFF`) and sends 829 packets. The final packet contains the remaining 80
 bytes without padding, so the written file range ends at `0x00033C4F`.
+
+## v72 replace the accidental newlib parsing/stdio chain
+
+The A2 ROM audit and the v71 linker map showed that a small number of ordinary
+C-library calls pulled nearly the entire newlib scanning, floating-point
+conversion, stdio, locale, reentrancy, multiprecision, and allocator support
+chain into scarce M3 patch RAM. The initial roots were `atof`, `strtod`,
+`sscanf`, `atol`, `strtok`, and `putchar`.
+
+v72 adds an OPL1000-only compact compatibility module. It provides:
+
+- decimal and exponent parsing for the command expression/tokenizer and cJSON
+  number paths;
+- the `sscanf` subset used by the linked OpenOPL1000 commands, logging,
+  pin-name, clock/timer, JSON, and REST paths, including field widths,
+  assignment suppression, and `hh`/`h`/`l`/`ll` integer lengths;
+- `atol` and `strtok` adapters backed by the validated A2 ROM `strtol` and
+  `strtok_r` entry points;
+- direct SDK debug-UART output from the OPL1000 HAL instead of newlib
+  `putchar`.
+
+The replacements are compiled only by `platforms/OPL1000/Makefile`; no shared
+OpenBeken source or other platform build setting is changed. A host-side test
+target covers decimal/exponent conversion, end-pointer behavior, signed and
+unsigned integer formats, 64-bit values, hexadecimal ranges, pin names, IPv4
+byte widths, timed-event widths, `%u%c`, strings, and cJSON's `%lg` conversion.
+
+Clean WSL build result with `arm-none-eabi-gcc` 13.2.1:
+
+```text
+v71 size: text 164631, data 2308, bss 3876, dec 170815
+v72 size: text 134394, data  592, bss 3500, dec 138486
+
+v71 IRAM1: 156324 / 170848 (14524 free)
+v72 IRAM1: 123996 / 170848 (46852 free)
+v72 SHM:     14492 /  15360 (  868 free)
+```
+
+This recovers 32328 bytes of IRAM1 headroom while leaving the full HTTP/REST
+surface and SHM layout unchanged. The v72 map contains none of newlib's
+`strtod`, scanf engines, locale/reentrancy state, stdio streams, allocator,
+`atof`, `atol`, `strtok`, or `putchar` objects. cJSON still pulls the independent
+257-byte newlib `_ctype_` table; that is deliberately retained for now.
+
+Verification completed:
+
+- `make -C platforms/OPL1000 BUILD_DIR=build_codex_v72_test test-libc` passes;
+- the clean firmware build links and packs six valid records;
+- `output/codex_v72/OpenOPL1000_codex_v72.bin` is 180096 bytes with SHA-256
+  `BD41739CFB3A5613BE6F57A0D19FDF63625D64ACB2AFB8C572493597521F7274`.
+
+Hardware checks required before calling v72 proven:
+
+- boot through scan, association, DHCP, and full `/app` HTTP startup;
+- load the main page, configuration page, REST/JSON endpoints, and logs;
+- exercise decimal/exponent expressions and integer/hex command arguments;
+- change pin roles, PWM values, time zone/location, log level/feature/delay,
+  and configuration values, then save and soft reboot;
+- confirm the established GPIO/PWM and Wi-Fi reconnect behavior remains stable.
+
+Future OPL1000 modules that introduce additional `sscanf` conversions must add
+focused parser coverage before being enabled. In particular, the compact
+scanner does not currently implement scansets such as `%[^:]` because no v72
+source path uses them.
