@@ -1,0 +1,543 @@
+name: Remediation Diagnostics
+
+on:
+  push:
+    branches:
+      - agent/remediate-build-diagnostics
+    paths-ignore:
+      - '.ci-results/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: remediation-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  plan:
+    name: Select remediation target set
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      set_name: ${{ steps.plan.outputs.set_name }}
+      run_linux: ${{ steps.plan.outputs.run_linux }}
+      linux_matrix: ${{ steps.plan.outputs.linux_matrix }}
+      run_idf: ${{ steps.plan.outputs.run_idf }}
+      idf_matrix: ${{ steps.plan.outputs.idf_matrix }}
+      run_txw: ${{ steps.plan.outputs.run_txw }}
+      run_sim: ${{ steps.plan.outputs.run_sim }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - name: Build target plan
+        id: plan
+        shell: bash
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+
+          linux_all = [
+              {"platform": "OpenBK7231T", "variant": "default"},
+              {"platform": "OpenBK7231N", "variant": "default"},
+              {"platform": "OpenXR809", "variant": "default", "gcc": "8-2019-q3"},
+              {"platform": "OpenXR806", "variant": "default", "gcc": "8-2019-q3"},
+              {"platform": "OpenXR806_DCDC", "variant": "default", "gcc": "8-2019-q3"},
+              {"platform": "OpenXR872", "variant": "default", "gcc": "8-2019-q3"},
+              {"platform": "OpenBL602", "variant": "default"},
+              {"platform": "OpenW800", "variant": "default"},
+              {"platform": "OpenW600", "variant": "default"},
+              {"platform": "OpenLN882H", "variant": "default", "gcc": "10.3-2021.10"},
+              {"platform": "OpenTR6260", "variant": "default"},
+              {"platform": "OpenRTL8710A", "variant": "default", "gcc": "8-2019-q3"},
+              {"platform": "OpenRTL8710B", "variant": "default", "gcc": "8-2019-q3"},
+              {"platform": "OpenRTL87X0C", "variant": "default"},
+              {"platform": "OpenRTL8720D", "variant": "default", "gcc": "10.3-2021.10"},
+              {"platform": "OpenECR6600", "variant": "default"},
+              {"platform": "OpenRDA5981", "variant": "default", "gcc": "6-2017-q2"},
+              {"platform": "OpenRTL8721DA", "variant": "default"},
+              {"platform": "OpenRTL8720E", "variant": "default"},
+              {"platform": "OpenLN8825", "variant": "default", "gcc": "10.3-2021.10"},
+              {"platform": "OpenGD32VW553", "variant": "default"},
+              {"platform": "OpenBK7231T", "variant": "berry"},
+              {"platform": "OpenBK7231T", "variant": "tuyaMCU"},
+              {"platform": "OpenBK7231T", "variant": "powerMetering"},
+              {"platform": "OpenBK7231T", "variant": "irRemoteESP"},
+              {"platform": "OpenBK7231T", "variant": "sensors"},
+              {"platform": "OpenBK7231N", "variant": "berry"},
+              {"platform": "OpenBK7231N", "variant": "tuyaMCU"},
+              {"platform": "OpenBK7231N", "variant": "powerMetering"},
+              {"platform": "OpenBK7231N", "variant": "irRemoteESP"},
+              {"platform": "OpenBK7231N", "variant": "sensors"},
+              {"platform": "OpenBK7231N", "variant": "hlw8112"},
+              {"platform": "OpenBK7231N", "variant": "battery"},
+              {"platform": "OpenBL602", "variant": "berry"},
+              {"platform": "OpenBK7231N_ALT", "variant": "default"},
+              {"platform": "OpenBK7231T_ALT", "variant": "default"},
+              {"platform": "OpenBK7231U", "variant": "default"},
+              {"platform": "OpenBK7238", "variant": "default"},
+              {"platform": "OpenBK7252", "variant": "default"},
+              {"platform": "OpenBK7252N", "variant": "default"},
+              {"platform": "OpenBK7238", "variant": "berry"},
+              {"platform": "OpenBK7238", "variant": "irRemoteESP"},
+              {"platform": "OpenBK7238", "variant": "battery"},
+              {"platform": "OpenBK7238", "variant": "btproxy"},
+              {"platform": "OpenBK7231N_ALT", "variant": "btproxy"},
+              {"platform": "OpenRTL87X0C", "variant": "btproxy"},
+              {"platform": "OpenLN882H", "variant": "btproxy", "gcc": "10.3-2021.10"},
+          ]
+          idf_all = [
+              {"platform": "OpenESP32C2", "variant": "2M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32C3", "variant": "2M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32C2", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32C3", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32C6", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32S3", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32S2", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32C5", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP32C61", "variant": "4M", "version": "v5.5.2", "sdk": "esp-idf"},
+              {"platform": "OpenESP8266", "variant": "default", "version": "v3.4", "sdk": "OpenESP8266"},
+          ]
+
+          c3_2m = [{"platform": "OpenESP32C3", "variant": "2M", "version": "v5.5.2", "sdk": "esp-idf"}]
+          sets = {
+              "none": {"linux": [], "idf": [], "txw": False, "sim": False},
+              "shared": {
+                  "linux": [
+                      {"platform": "OpenBK7231N", "variant": "default"},
+                      {"platform": "OpenW800", "variant": "default"},
+                      {"platform": "OpenRTL8720D", "variant": "default", "gcc": "10.3-2021.10"},
+                      {"platform": "OpenGD32VW553", "variant": "default"},
+                      {"platform": "OpenECR6600", "variant": "default"},
+                  ],
+                  "idf": c3_2m,
+                  "txw": True,
+                  "sim": True,
+              },
+              "beken-ir": {
+                  "linux": [
+                      {"platform": "OpenBK7231T", "variant": "default"},
+                      {"platform": "OpenBK7231N", "variant": "default"},
+                  ],
+                  "idf": [],
+                  "txw": False,
+                  "sim": False,
+              },
+              "w800": {
+                  "linux": [{"platform": "OpenW800", "variant": "default"}],
+                  "idf": [],
+                  "txw": False,
+                  "sim": False,
+              },
+              "gd32": {
+                  "linux": [{"platform": "OpenGD32VW553", "variant": "default"}],
+                  "idf": [],
+                  "txw": False,
+                  "sim": False,
+              },
+              "txw": {"linux": [], "idf": [], "txw": True, "sim": False},
+              "berry": {
+                  "linux": [
+                      {"platform": "OpenBK7231N", "variant": "berry"},
+                      {"platform": "OpenBK7238", "variant": "berry"},
+                      {"platform": "OpenBL602", "variant": "berry"},
+                      {"platform": "OpenLN882H", "variant": "btproxy", "gcc": "10.3-2021.10"},
+                      {"platform": "OpenECR6600", "variant": "default"},
+                  ],
+                  "idf": c3_2m,
+                  "txw": False,
+                  "sim": True,
+              },
+              "lfs-hass": {
+                  "linux": [
+                      {"platform": "OpenBK7231N", "variant": "default"},
+                      {"platform": "OpenW800", "variant": "default"},
+                      {"platform": "OpenRTL8720D", "variant": "default", "gcc": "10.3-2021.10"},
+                  ],
+                  "idf": c3_2m,
+                  "txw": False,
+                  "sim": True,
+              },
+              "esp-c3": {"linux": [], "idf": c3_2m, "txw": False, "sim": False},
+              "all": {"linux": linux_all, "idf": idf_all, "txw": True, "sim": True},
+          }
+
+          message = os.environ.get("COMMIT_MESSAGE", "")
+          match = re.search(r"\[set:([a-z0-9_-]+)\]", message.lower())
+          set_name = match.group(1) if match else "none"
+          if set_name not in sets:
+              raise SystemExit(f"Unknown remediation target set: {set_name}")
+
+          selected = sets[set_name]
+          branch = os.environ["GITHUB_REF_NAME"].replace("/", "_")
+          version = f"{branch}_{os.environ['GITHUB_SHA'][:12]}"
+
+          def emit(name, value):
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  handle.write(f"{name}={value}\n")
+
+          linux = selected["linux"]
+          idf = selected["idf"]
+          emit("version", version)
+          emit("set_name", set_name)
+          emit("run_linux", str(bool(linux)).lower())
+          emit("linux_matrix", json.dumps({"include": linux or [{"platform": "skip", "variant": "skip"}]}, separators=(",", ":")))
+          emit("run_idf", str(bool(idf)).lower())
+          emit("idf_matrix", json.dumps({"include": idf or [{"platform": "skip", "variant": "skip", "version": "none", "sdk": "none"}]}, separators=(",", ":")))
+          emit("run_txw", str(selected["txw"]).lower())
+          emit("run_sim", str(selected["sim"]).lower())
+          print(json.dumps({"set": set_name, **selected}, indent=2))
+          PY
+
+  build_linux:
+    name: Diagnostic Linux build ${{ matrix.platform }} ${{ matrix.variant }}
+    needs: plan
+    if: needs.plan.outputs.run_linux == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.linux_matrix) }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: ${{ matrix.platform == 'OpenBL602' || matrix.platform == 'OpenRTL8721DA' || matrix.platform == 'OpenRTL8720E' || matrix.platform == 'OpenRDA5981' }}
+        with:
+          python-version: '3.10'
+          architecture: x64
+          cache: pip
+
+      - name: Install dependencies
+        if: ${{ matrix.platform == 'OpenLN882H' || matrix.platform == 'OpenLN8825' || matrix.platform == 'OpenGD32VW553' }}
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake srecord
+          version: 1.0
+
+      - name: Install arm-none-eabi-gcc
+        if: ${{ matrix.gcc && matrix.gcc != 'apt' }}
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: ${{ matrix.gcc }}
+          path-env-var: ARM_NONE_EABI_GCC_PATH
+
+      - name: Install apt arm-none-eabi-gcc
+        if: ${{ matrix.gcc == 'apt' }}
+        shell: bash
+        run: |
+          curl -sL https://raw.githubusercontent.com/ilikenwf/apt-fast/master/quick-install.sh | sudo bash
+          sudo apt-get update
+          sudo apt-fast install -y gcc-arm-none-eabi
+
+      - name: Run make target with retained log
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.plan.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} \
+            APP_NAME=${{ matrix.platform }} \
+            VARIANT="${{ matrix.variant }}" \
+            ${{ matrix.platform }} 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect linker and size diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}" \
+            --platform "${{ matrix.platform }}" \
+            --variant "${{ matrix.variant }}" \
+            --build-log .obk-ci/build.log
+
+      - name: Upload target diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.sha }}_${{ matrix.platform }}_${{ matrix.variant }}
+          path: build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 9
+
+  build_idf:
+    name: Diagnostic IDF build ${{ matrix.platform }} ${{ matrix.variant }}
+    needs: plan
+    if: needs.plan.outputs.run_idf == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.idf_matrix) }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - name: ESP-IDF checkout
+        if: ${{ matrix.platform != 'OpenESP8266' }}
+        uses: actions/checkout@v4
+        with:
+          repository: espressif/esp-idf
+          path: sdk/esp-idf
+          ref: ${{ matrix.version }}
+          submodules: recursive
+
+      - name: OpenESP8266 checkout
+        if: ${{ matrix.platform == 'OpenESP8266' }}
+        uses: actions/checkout@v4
+        with:
+          repository: NonPIayerCharacter/OpenESP8266
+          path: sdk/OpenESP8266
+          ref: obk
+          fetch-tags: true
+          fetch-depth: '10'
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        id: pysetup
+        with:
+          python-version: '3.10'
+          architecture: x64
+          cache: pip
+
+      - name: Install dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake
+          version: 1.0
+
+      - name: Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.espressif
+          key: ${{ matrix.sdk }}_toolchain_${{ matrix.version }}_${{ steps.pysetup.outputs.python-version }}
+
+      - name: Get toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          cd sdk/${{ matrix.sdk }}
+          ./install.sh
+
+      - name: Run make target with retained log
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          cd sdk/${{ matrix.sdk }}
+          . ./export.sh
+          . ./add_path.sh
+          cd ../..
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.plan.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} \
+            APP_NAME=${{ matrix.platform }} \
+            VARIANT="${{ matrix.variant }}" \
+            ${{ matrix.platform }} 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect linker and size diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [ -d "sdk/${{ matrix.sdk }}" ]; then
+            cd sdk/${{ matrix.sdk }}
+            . ./export.sh
+            . ./add_path.sh
+            cd ../..
+          fi
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}" \
+            --platform "${{ matrix.platform }}" \
+            --variant "${{ matrix.variant }}" \
+            --build-log .obk-ci/build.log
+
+      - name: Upload target diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.sha }}_${{ matrix.platform }}_${{ matrix.variant }}
+          path: build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 9
+
+  build_txw:
+    name: Diagnostic TXW81X build
+    needs: plan
+    if: needs.plan.outputs.run_txw == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: wsl-bash {0}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - uses: Vampire/setup-wsl@v6
+        with:
+          wsl-version: 1
+          distribution: Ubuntu-22.04
+          additional-packages: make python3 file binutils
+
+      - name: Run make target with retained log
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.plan.outputs.version }} \
+            APP_NAME=OpenTXW81X \
+            VARIANT=default \
+            OpenTXW81X 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect linker and size diagnostics
+        if: ${{ always() }}
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output build-diagnostics/OpenTXW81X_default \
+            --platform OpenTXW81X \
+            --variant default \
+            --build-log .obk-ci/build.log
+
+      - name: Upload target diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.sha }}_OpenTXW81X_default
+          path: build-diagnostics/OpenTXW81X_default
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 9
+
+  build_sim:
+    name: Sanitizer simulator build and tests
+    needs: plan
+    if: needs.plan.outputs.run_sim == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout Berry submodule
+        shell: bash
+        run: |
+          git submodule update --init --recursive libraries/berry
+          mkdir -p libraries/berry/generate
+          ./libraries/berry/tools/coc/coc \
+            -o libraries/berry/generate \
+            libraries/berry/src src/berry/modules \
+            -c include/berry_conf.h
+
+      - name: Build and test with AddressSanitizer
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          ASAN=1 make -f custom.mk 2>&1 | tee .obk-ci/asan.log
+          export LSAN_OPTIONS=suppressions=platforms/linux/asan.suppressions
+          ./build/win_main -runUnitTests 2 2>&1 | tee -a .obk-ci/asan.log
+
+      - name: Build and test with UndefinedBehaviorSanitizer
+        shell: bash
+        run: |
+          rm -rf build
+          set -o pipefail
+          UBSAN=1 make -f custom.mk 2>&1 | tee .obk-ci/ubsan.log
+          export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
+          ./build/win_main -runUnitTests 2 2>&1 | tee -a .obk-ci/ubsan.log
+
+      - name: Create simulator diagnostic manifest
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          mkdir -p build-diagnostics/Simulator_sanitizers/metadata
+          cat .obk-ci/asan.log .obk-ci/ubsan.log > build-diagnostics/Simulator_sanitizers/metadata/build.log
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("build-diagnostics/Simulator_sanitizers")
+          log = root / "metadata" / "build.log"
+          payload = log.read_bytes() if log.exists() else b""
+          manifest = {
+              "platform": "Simulator",
+              "variant": "sanitizers",
+              "root": str(Path.cwd()),
+              "collected_file_count": 1 if log.exists() else 0,
+              "collected_bytes": len(payload),
+              "files": [{
+                  "path": "metadata/build.log",
+                  "bytes": len(payload),
+                  "sha256": hashlib.sha256(payload).hexdigest(),
+              }] if log.exists() else [],
+              "generated_reports": {},
+              "skipped": [],
+          }
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+          PY
+
+      - name: Upload simulator diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.sha }}_Simulator_sanitizers
+          path: build-diagnostics/Simulator_sanitizers
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 9
+
+  publish_summary:
+    name: Publish machine-readable diagnostic result
+    needs: [plan, build_linux, build_idf, build_txw, build_sim]
+    if: ${{ always() && needs.plan.outputs.set_name != 'none' }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - name: Download current-run diagnostic artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remediation_${{ github.sha }}_*
+          path: downloaded-diagnostics
+
+      - name: Summarize diagnostics
+        shell: bash
+        run: |
+          python3 .github/scripts/summarize_remediation_run.py \
+            --artifacts-root downloaded-diagnostics \
+            --output-dir .ci-results \
+            --source-sha "${{ github.sha }}" \
+            --set-name "${{ needs.plan.outputs.set_name }}" || true
+          cat ".ci-results/${{ github.sha }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit diagnostic result
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ".ci-results/${{ github.sha }}"
+          git commit -m "ci: diagnostics for ${{ github.sha }} [skip-remediation]"
+          git push
