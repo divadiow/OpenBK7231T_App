@@ -749,12 +749,14 @@ HassDeviceInfo* hass_createToggle(const char *label, const char *stateTopic, con
 	cJSON_ReplaceItemInObject(info->root, "name", cJSON_CreateString(label));
 
 	char uniq_id[HASS_UNIQUE_ID_SIZE];
-	snprintf(uniq_id, HASS_UNIQUE_ID_SIZE, "%s_%s", info->unique_id, label);
+	uint32_t uniqHash = hass_hash_unique_id(info->unique_id, label);
+	int prefixLength = (int)sizeof(uniq_id) - 10;
+	snprintf(uniq_id, sizeof(uniq_id), "%.*s_%08x", prefixLength, info->unique_id, (unsigned int)uniqHash);
 	STR_ReplaceWhiteSpacesWithUnderscore(uniq_id);
 	cJSON_ReplaceItemInObject(info->root, "uniq_id", cJSON_CreateString(uniq_id));
 
 	// update the discovery channel with the new unique_id
-	sprintf(info->channel, "switch/%s/config", uniq_id);
+	snprintf(info->channel, sizeof(info->channel), "switch/%s/config", uniq_id);
 	STR_ReplaceWhiteSpacesWithUnderscore(info->channel);
 
 	cJSON_AddStringToObject(info->root, "stat_t", stateTopic);
