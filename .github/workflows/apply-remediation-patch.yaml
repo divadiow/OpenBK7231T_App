@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/remediate-build-diagnostics
+      - agent/remediate-patch-worker
     paths:
       - '.github/remediation-patches/*.patch'
 
@@ -29,9 +30,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          patch_file="$(git diff-tree --no-commit-id --name-only -r HEAD | grep '^.github/remediation-patches/.*\.patch$' | tail -n 1)"
+          patch_file="$(git ls-files '.github/remediation-patches/*.patch' | sort | tail -n 1)"
           if [ -z "$patch_file" ]; then
-            echo "No queued patch found in the triggering commit" >&2
+            echo "No queued patch found" >&2
             exit 1
           fi
           git apply --check "$patch_file"
