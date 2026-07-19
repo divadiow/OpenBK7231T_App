@@ -1,0 +1,22 @@
+name: Apply Remediation Patch
+
+on:
+  push:
+    branches:
+      - agent/remediate-build-diagnostics
+    paths:
+      - '.github/remediation-patches/*.patch'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-remediation-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Source checkout
+        uses: actions/checkout
