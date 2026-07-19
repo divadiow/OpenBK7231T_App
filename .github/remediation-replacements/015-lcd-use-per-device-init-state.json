@@ -1,6 +1,0 @@
-{
-  "path": "src/i2c/drv_i2c_lcd_pcf8574t.c",
-  "old": "\tif(c == 0){\n\t\tPCF8574_LCD_Init(lcd);\n\t\t delay_ms(115);\n\t\tPCF8574_LCD_Clear(lcd);\n\t\tdelay_ms(115);\n\t\t//addLogAdv(LOG_INFO, LOG_FEATURE_I2C,\"Testing lcd\" );\n\n\t\tPCF8574_LCD_Write_String(lcd,\"OpenBeken BK7231T LCD\");\n\t\tdelay_ms(115);\n\t\tPCF8574_LCD_Goto(lcd,2,2);\n\t\tPCF8574_LCD_Write_String(lcd,\"Elektroda.com\");\n\t\tdelay_ms(115);\n\t\tPCF8574_LCD_Close(lcd);\n\t}\n\tc++;",
-  "new": "\tif (!lcd->initialised) {\n\t\tPCF8574_LCD_Init(lcd);\n\t\tdelay_ms(115);\n\t\tPCF8574_LCD_Clear(lcd);\n\t\tdelay_ms(115);\n\t\t//addLogAdv(LOG_INFO, LOG_FEATURE_I2C,\"Testing lcd\" );\n\n\t\tPCF8574_LCD_Write_String(lcd,\"OpenBeken BK7231T LCD\");\n\t\tdelay_ms(115);\n\t\tPCF8574_LCD_Goto(lcd,2,2);\n\t\tPCF8574_LCD_Write_String(lcd,\"Elektroda.com\");\n\t\tdelay_ms(115);\n\t\tPCF8574_LCD_Close(lcd);\n\t\tlcd->initialised = 1;\n\t}",
-  "expected_count": 1
-}
