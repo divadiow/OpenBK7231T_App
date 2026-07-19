@@ -1,0 +1,6 @@
+{
+  "path": "include/berry_conf.h",
+  "old": " // BK7231/RTL wraps malloc, free etc. to freertos ports. Some platforms don't do it.\n#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H",
+  "new": "/* Berry is compiled before some platform headers expose these allocator APIs. */\n#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H\nvoid *pvPortMalloc(size_t size);\nvoid *pvPortRealloc(void *ptr, size_t size);\nvoid vPortFree(void *ptr);\n#elif PLATFORM_TR6260 || PLATFORM_ECR6600\nvoid *os_malloc(size_t size);\nvoid *os_realloc(void *ptr, size_t size);\nvoid os_free(void *ptr);\n#endif\n#if PLATFORM_BEKEN\nvoid *os_realloc(void *ptr, size_t size);\n#endif\n\n// BK7231/RTL wraps malloc, free etc. to freertos ports. Some platforms don't do it.\n#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H",
+  "expected_count": 1
+}
