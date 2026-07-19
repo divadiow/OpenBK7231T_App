@@ -1,0 +1,2010 @@
+## Simulator / sanitizers
+48 |         printf("socket failed with error: %ld\n", WSAGetLastError());
+Error:CMD:lfs is absent
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+HTTPServer_RunQuickTick: accept failed with error: 9
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+HTTPServer_RunQuickTick: accept failed with error: 95
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+HTTPServer_RunQuickTick: accept failed with error: 9
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd thiisCooommandNotExists NOT found (args 1     5 )
+Error:CMD:Cant run 'setChannel', expected at least 2 args (given 1)
+Error:CMD:Cant run 'setChannel', expected at least 2 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:TuyaMCU:ParseState: truncated DP payload (id=1 type=2-val len=4 rem=3)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:TuyaMCU:V0_ParseRealTime: truncated DP payload (id=1 type=2-val len=4 rem=3)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:TuyaMCU:V0_ParseRealTime: truncated DP payload (id=1 type=2-val len=4 rem=3)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Lorem NOT found (args ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Phasellus pretium felis vel metus dictum, non lacinia elit interdum. Proin vehicula sem vel orci convallis pharetra. Vivamus scelerisque, erat id tincidunt fringilla, felis enim vehicula ipsum, in condimentum risus enim eget mi. Curabitur nec felis libero. Cras mattis justo a nulla malesuada, sit amet gravida urna dictum. Integer et nisi sed tortor dictum tincidunt. Donec a lectus sit amet sapien suscipit fringilla. Nulla facilisi. Morbi ac facilisis eros. Suspendisse facilisis convallis eros, in sagittis nisi eleifend vitae.)
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Cant run 'MQTTUser', expected at least 1 args (given 0)
+Error:CMD:Cant run 'MQTTUser', expected at least 1 args (given 0)
+Error:CMD:Cant run 'MQTTUser', expected at least 1 args (given 0)
+Error:CMD:Cant run 'MQTTHost', expected at least 1 args (given 0)
+Error:CMD:Cant run 'SSID1', expected at least 1 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:PinMutex[0] = ch=0, up=11, down=10, t=100ms
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Cant run 'MqttUser', expected at least 1 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Cant run 'CT', expected at least 1 args (given 0)
+Error:CMD:Cant run 'CT', expected at least 1 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+48 |         printf("socket failed with error: %ld\n", WSAGetLastError());
+Error:CMD:lfs is absent
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+HTTPServer_RunQuickTick: accept failed with error: 9
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+HTTPServer_RunQuickTick: accept failed with error: 95
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+HTTPServer_RunQuickTick: accept failed with error: 9
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd thiisCooommandNotExists NOT found (args 1     5 )
+Error:CMD:Cant run 'setChannel', expected at least 2 args (given 1)
+Error:CMD:Cant run 'setChannel', expected at least 2 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd Dp NOT found (args )
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:TuyaMCU:ParseState: truncated DP payload (id=1 type=2-val len=4 rem=3)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:TuyaMCU:V0_ParseRealTime: truncated DP payload (id=1 type=2-val len=4 rem=3)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:TuyaMCU:V0_ParseRealTime: truncated DP payload (id=1 type=2-val len=4 rem=3)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd Lorem NOT found (args ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Phasellus pretium felis vel metus dictum, non lacinia elit interdum. Proin vehicula sem vel orci convallis pharetra. Vivamus scelerisque, erat id tincidunt fringilla, felis enim vehicula ipsum, in condimentum risus enim eget mi. Curabitur nec felis libero. Cras mattis justo a nulla malesuada, sit amet gravida urna dictum. Integer et nisi sed tortor dictum tincidunt. Donec a lectus sit amet sapien suscipit fringilla. Nulla facilisi. Morbi ac facilisis eros. Suspendisse facilisis convallis eros, in sagittis nisi eleifend vitae.)
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9D)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x9C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0x8C)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd IRSend NOT found (args NEC 0x0 0xA8)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Cant run 'MQTTUser', expected at least 1 args (given 0)
+Error:CMD:Cant run 'MQTTUser', expected at least 1 args (given 0)
+Error:CMD:Cant run 'MQTTUser', expected at least 1 args (given 0)
+Error:CMD:Cant run 'MQTTHost', expected at least 1 args (given 0)
+Error:CMD:Cant run 'SSID1', expected at least 1 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:PinMutex[0] = ch=0, up=11, down=10, t=100ms
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Cant run 'MqttUser', expected at least 1 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Cant run 'CT', expected at least 1 args (given 0)
+Error:CMD:Cant run 'CT', expected at least 1 args (given 0)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:Too many args, skipped all after 32nd.
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:GEN:CHANNEL_HasChannelPinWithRole: Channel index 64 is out of range <0,64)
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+Error:CMD:cmd led_expoMode NOT found (args )
+Error:CMD:no file early.bat err -2
+bind failed with error: 13
+
