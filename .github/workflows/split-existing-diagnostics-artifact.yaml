@@ -1,0 +1,79 @@
+name: Split Existing Diagnostics Artifact
+
+on:
+  push:
+    branches:
+      - agent/split-build-diagnostics-artifact
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  split:
+    name: Split oversized diagnostics ZIP
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download original artifact ZIP without extracting
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: '8440574008'
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 5 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" \
+            --output all-build-diagnostics.zip
+          test "$(stat -c '%s' all-build-diagnostics.zip)" -eq 570375727
+          echo "981a30e95425d229a8134d52b5d6e4247c539da9c1cdc09675f3f04023e707ea  all-build-diagnostics.zip" | sha256sum --check --strict
+
+      - name: Split into connector-safe raw chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p split-output
+          split --bytes=300000000 --numeric-suffixes=1 --suffix-length=2 \
+            --additional-suffix=.part all-build-diagnostics.zip split-output/all-build-diagnostics.zip.
+          sha256sum split-output/*.part > split-output/SHA256SUMS.txt
+          cat > split-output/REASSEMBLE.txt <<'EOF'
+          Linux/macOS:
+            cat all-build-diagnostics.zip.01.part all-build-diagnostics.zip.02.part > all-build-diagnostics.zip
+
+          Windows cmd.exe:
+            copy /b all-build-diagnostics.zip.01.part+all-build-diagnostics.zip.02.part all-build-diagnostics.zip
+
+          Expected reconstructed file:
+            Size: 570375727 bytes
+            SHA-256: 981a30e95425d229a8134d52b5d6e4247c539da9c1cdc09675f3f04023e707ea
+          EOF
+          ls -lh split-output
+
+      - name: Upload part 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-build-diagnostics-zip-part-01
+          path: split-output/all-build-diagnostics.zip.01.part
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload part 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-build-diagnostics-zip-part-02
+          path: split-output/all-build-diagnostics.zip.02.part
+          compression-level: 0
+          retention-days: 7
+
+      - name: Upload reconstruction metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-build-diagnostics-reassembly-metadata
+          path: |
+            split-output/SHA256SUMS.txt
+            split-output/REASSEMBLE.txt
+          compression-level: 6
+          retention-days: 7
