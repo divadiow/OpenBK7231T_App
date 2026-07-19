@@ -1,0 +1,6 @@
+{
+  "path": "src/httpserver/hass.c",
+  "old": "\tchar uniq_id[HASS_UNIQUE_ID_SIZE];\n\tsnprintf(uniq_id, HASS_UNIQUE_ID_SIZE, \"%s_%s\", info->unique_id, label);\n\tSTR_ReplaceWhiteSpacesWithUnderscore(uniq_id);\n\tcJSON_ReplaceItemInObject(info->root, \"uniq_id\", cJSON_CreateString(uniq_id));\n\n\t// update the discovery channel with the new unique_id\n\tsprintf(info->channel, \"switch/%s/config\", uniq_id);\n\tSTR_ReplaceWhiteSpacesWithUnderscore(info->channel);",
+  "new": "\tchar uniq_id[HASS_UNIQUE_ID_SIZE];\n\tuint32_t uniqHash = hass_hash_unique_id(info->unique_id, label);\n\tint prefixLength = (int)sizeof(uniq_id) - 10;\n\tsnprintf(uniq_id, sizeof(uniq_id), \"%.*s_%08x\", prefixLength, info->unique_id, (unsigned int)uniqHash);\n\tSTR_ReplaceWhiteSpacesWithUnderscore(uniq_id);\n\tcJSON_ReplaceItemInObject(info->root, \"uniq_id\", cJSON_CreateString(uniq_id));\n\n\t// update the discovery channel with the new unique_id\n\tsnprintf(info->channel, sizeof(info->channel), \"switch/%s/config\", uniq_id);\n\tSTR_ReplaceWhiteSpacesWithUnderscore(info->channel);",
+  "expected_count": 1
+}
