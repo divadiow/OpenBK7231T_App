@@ -1,0 +1,6 @@
+{
+  "path": "src/littlefs/lfs_util.h",
+  "old": "#if PLATFORM_BEKEN\n#include \"mem_pub.h\"\n#elif PLATFORM_BL_NEW",
+  "new": "#if PLATFORM_BEKEN\n#include \"mem_pub.h\"\n#elif PLATFORM_TR6260 || PLATFORM_ECR6600\nextern void *os_malloc(size_t size);\nextern void os_free(void *ptr);\n#elif PLATFORM_BL_NEW",
+  "expected_count": 1
+}
