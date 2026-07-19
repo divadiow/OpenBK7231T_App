@@ -1,0 +1,3 @@
+Validate source commit 3ceea82dfe83ba4e6dec004f57a45aa8d35d435c.
+Issue: width-safe timeout tick extension
+Target set: gd32
