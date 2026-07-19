@@ -1,0 +1,6 @@
+{
+  "path": "src/i2c/drv_i2c_lcd_pcf8574t.c",
+  "old": "\tdev->lcd_cols = lcd_cols;\n\tdev->lcd_rows = lcd_rows;\n\tdev->charsize = charsize;\n\tdev->LCD_BL_Status = 1;",
+  "new": "\tdev->lcd_cols = lcd_cols;\n\tdev->lcd_rows = lcd_rows;\n\tdev->charsize = charsize;\n\tdev->initialised = 0;\n\tdev->LCD_BL_Status = 1;",
+  "expected_count": 1
+}
