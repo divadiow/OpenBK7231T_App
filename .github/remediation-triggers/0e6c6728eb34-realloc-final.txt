@@ -1,0 +1,4 @@
+Validate source commit 0e6c6728eb34d8ad492854db4a9746a71712d270.
+Issue: pvPortRealloc declaration only on SDKs that omit it.
+Target set: shared
+Additional target: LN8825
