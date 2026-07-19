@@ -1,0 +1,426 @@
+name: Build Diagnostics
+
+on:
+  push:
+    branches:
+      - agent/build-diagnostics-artifacts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  refs:
+    name: Prepare diagnostics version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.refs.outputs.version }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+      - name: Set version
+        id: refs
+        shell: bash
+        run: |
+          branch="${GITHUB_REF#refs/*/}"
+          branch_translated="$(printf '%s' "$branch" | tr '/' '_')"
+          version="${branch_translated}_$(git rev-parse --short=12 HEAD)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Diagnostic build ${{ matrix.platform }} ${{ matrix.variant }}
+    needs: refs
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: OpenBK7231T
+            variant: default
+          - platform: OpenBK7231N
+            variant: default
+          - platform: OpenXR809
+            variant: default
+            gcc: 8-2019-q3
+          - platform: OpenXR806
+            variant: default
+            gcc: 8-2019-q3
+          - platform: OpenXR806_DCDC
+            variant: default
+            gcc: 8-2019-q3
+          - platform: OpenXR872
+            variant: default
+            gcc: 8-2019-q3
+          - platform: OpenBL602
+            variant: default
+          - platform: OpenW800
+            variant: default
+          - platform: OpenW600
+            variant: default
+          - platform: OpenLN882H
+            variant: default
+            gcc: 10.3-2021.10
+          - platform: OpenTR6260
+            variant: default
+          - platform: OpenRTL8710A
+            variant: default
+            gcc: 8-2019-q3
+          - platform: OpenRTL8710B
+            variant: default
+            gcc: 8-2019-q3
+          - platform: OpenRTL87X0C
+            variant: default
+          - platform: OpenRTL8720D
+            variant: default
+            gcc: 10.3-2021.10
+          - platform: OpenECR6600
+            variant: default
+          - platform: OpenRDA5981
+            variant: default
+            gcc: 6-2017-q2
+          - platform: OpenRTL8721DA
+            variant: default
+          - platform: OpenRTL8720E
+            variant: default
+          - platform: OpenLN8825
+            variant: default
+            gcc: 10.3-2021.10
+          - platform: OpenGD32VW553
+            variant: default
+          - platform: OpenBK7231T
+            variant: berry
+          - platform: OpenBK7231T
+            variant: tuyaMCU
+          - platform: OpenBK7231T
+            variant: powerMetering
+          - platform: OpenBK7231T
+            variant: irRemoteESP
+          - platform: OpenBK7231T
+            variant: sensors
+          - platform: OpenBK7231N
+            variant: berry
+          - platform: OpenBK7231N
+            variant: tuyaMCU
+          - platform: OpenBK7231N
+            variant: powerMetering
+          - platform: OpenBK7231N
+            variant: irRemoteESP
+          - platform: OpenBK7231N
+            variant: sensors
+          - platform: OpenBK7231N
+            variant: hlw8112
+          - platform: OpenBK7231N
+            variant: battery
+          - platform: OpenBL602
+            variant: berry
+          - platform: OpenBK7231N_ALT
+            variant: default
+          - platform: OpenBK7231T_ALT
+            variant: default
+          - platform: OpenBK7231U
+            variant: default
+          - platform: OpenBK7238
+            variant: default
+          - platform: OpenBK7252
+            variant: default
+          - platform: OpenBK7252N
+            variant: default
+          - platform: OpenBK7238
+            variant: berry
+          - platform: OpenBK7238
+            variant: irRemoteESP
+          - platform: OpenBK7238
+            variant: battery
+          - platform: OpenBK7238
+            variant: btproxy
+          - platform: OpenBK7231N_ALT
+            variant: btproxy
+          - platform: OpenRTL87X0C
+            variant: btproxy
+          - platform: OpenLN882H
+            variant: btproxy
+            gcc: 10.3-2021.10
+
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        if: ${{ matrix.platform == 'OpenBL602' || matrix.platform == 'OpenRTL8721DA' || matrix.platform == 'OpenRTL8720E' || matrix.platform == 'OpenRDA5981' }}
+        with:
+          python-version: '3.10'
+          architecture: x64
+          cache: pip
+
+      - name: Install dependencies
+        if: ${{ matrix.platform == 'OpenLN882H' || matrix.platform == 'OpenLN8825' || matrix.platform == 'OpenGD32VW553' }}
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake srecord
+          version: 1.0
+
+      - name: Install arm-none-eabi-gcc
+        if: ${{ matrix.gcc && matrix.gcc != 'apt' }}
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: ${{ matrix.gcc }}
+          path-env-var: ARM_NONE_EABI_GCC_PATH
+
+      - name: Install apt arm-none-eabi-gcc
+        if: ${{ matrix.gcc == 'apt' }}
+        shell: bash
+        run: |
+          curl -sL https://raw.githubusercontent.com/ilikenwf/apt-fast/master/quick-install.sh | sudo bash
+          sudo apt-get update
+          sudo apt-fast install -y gcc-arm-none-eabi
+
+      - name: Run normal make target with retained log
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} \
+            APP_NAME=${{ matrix.platform }} \
+            VARIANT="${{ matrix.variant }}" \
+            ${{ matrix.platform }} 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect linker and size diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}" \
+            --platform "${{ matrix.platform }}" \
+            --variant "${{ matrix.variant }}" \
+            --build-log .obk-ci/build.log
+          cat "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic build artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ needs.refs.outputs.version }}_${{ matrix.platform }}_${{ matrix.variant }}_diagnostics
+          path: build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
+
+  build_idf:
+    name: Diagnostic IDF build ${{ matrix.platform }} ${{ matrix.variant }}
+    needs: refs
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: OpenESP32C2
+            variant: 2M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32C3
+            variant: 2M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32C2
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32C3
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32C6
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32S3
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32S2
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32C5
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP32C61
+            variant: 4M
+            version: v5.5.2
+            sdk: esp-idf
+          - platform: OpenESP8266
+            variant: default
+            version: v3.4
+            sdk: OpenESP8266
+
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - name: ESP-IDF checkout
+        if: ${{ matrix.platform != 'OpenESP8266' }}
+        uses: actions/checkout@v4
+        with:
+          repository: espressif/esp-idf
+          path: sdk/esp-idf
+          ref: ${{ matrix.version }}
+          submodules: recursive
+
+      - name: OpenESP8266 checkout
+        if: ${{ matrix.platform == 'OpenESP8266' }}
+        uses: actions/checkout@v4
+        with:
+          repository: NonPIayerCharacter/OpenESP8266
+          path: sdk/OpenESP8266
+          ref: obk
+          fetch-tags: true
+          fetch-depth: '10'
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        id: pysetup
+        with:
+          python-version: '3.10'
+          architecture: x64
+          cache: pip
+
+      - name: Install dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake
+          version: 1.0
+
+      - name: Cache toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.espressif
+          key: ${{ matrix.sdk }}_toolchain_${{ matrix.version }}_${{ steps.pysetup.outputs.python-version }}
+
+      - name: Get toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          cd sdk/${{ matrix.sdk }}
+          ./install.sh
+
+      - name: Run normal make target with retained log
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          cd sdk/${{ matrix.sdk }}
+          . ./export.sh
+          . ./add_path.sh
+          cd ../..
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} \
+            APP_NAME=${{ matrix.platform }} \
+            VARIANT="${{ matrix.variant }}" \
+            ${{ matrix.platform }} 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect linker and size diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          cd sdk/${{ matrix.sdk }}
+          . ./export.sh
+          . ./add_path.sh
+          cd ../..
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}" \
+            --platform "${{ matrix.platform }}" \
+            --variant "${{ matrix.variant }}" \
+            --build-log .obk-ci/build.log
+          cat "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic IDF artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ needs.refs.outputs.version }}_${{ matrix.platform }}_${{ matrix.variant }}_diagnostics
+          path: build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
+
+  build_txw81x:
+    name: Diagnostic TXW81X build
+    needs: refs
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: wsl-bash {0}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+
+      - uses: Vampire/setup-wsl@v6
+        with:
+          wsl-version: 1
+          distribution: Ubuntu-22.04
+          additional-packages: make python3 file binutils
+
+      - name: Run normal make target with retained log
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.refs.outputs.version }} \
+            APP_NAME=OpenTXW81X \
+            VARIANT=default \
+            OpenTXW81X 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect linker and size diagnostics
+        if: ${{ always() }}
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output build-diagnostics/OpenTXW81X_default \
+            --platform OpenTXW81X \
+            --variant default \
+            --build-log .obk-ci/build.log
+
+      - name: Upload diagnostic TXW81X artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ needs.refs.outputs.version }}_OpenTXW81X_default_diagnostics
+          path: build-diagnostics/OpenTXW81X_default
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
+
+  merge_diagnostics:
+    name: Merge all build diagnostics
+    needs: [refs, build, build_idf, build_txw81x]
+    if: ${{ always() }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Merge diagnostic artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ needs.refs.outputs.version }}_all-build-diagnostics
+          pattern: ${{ env.APP_NAME }}_${{ needs.refs.outputs.version }}_*_diagnostics
+          separate-directories: true
+          delete-merged: false
+          retention-days: 7
+          compression-level: 6
