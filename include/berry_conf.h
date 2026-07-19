@@ -9,6 +9,7 @@
 #define BERRY_CONF_H
 
 #include <assert.h>
+#include <stddef.h>
 
 /* Macro: BE_DEBUG
  * Berry interpreter debug switch.
