@@ -1,6 +1,0 @@
-{
-  "path": "src/httpserver/hass.c",
-  "old": "static char g_hassBuffer[CGF_MQTT_CLIENT_ID_SIZE + 128];",
-  "new": "static char g_hassBuffer[CGF_MQTT_CLIENT_ID_SIZE + 128];\n\nstatic uint32_t hass_hash_text(uint32_t hash, const char *text) {\n\tif (text == NULL) {\n\t\treturn hash;\n\t}\n\twhile (*text) {\n\t\thash ^= (uint8_t)*text++;\n\t\thash *= 16777619U;\n\t}\n\treturn hash;\n}\n\nstatic uint32_t hass_hash_unique_id(const char *base, const char *label) {\n\tuint32_t hash = 2166136261U;\n\thash = hass_hash_text(hash, base);\n\thash ^= (uint8_t)'_';\n\thash *= 16777619U;\n\treturn hass_hash_text(hash, label);\n}",
-  "expected_count": 1
-}

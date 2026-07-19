@@ -20,6 +20,25 @@ Sensor - https://www.home-assistant.io/integrations/sensor.mqtt/
 //Buffer used to populate values in cJSON_Add* calls. The values are based on
 //CFG_GetShortDeviceName and clientId so it needs to be bigger than them. +64 for light/switch/etc.
 static char g_hassBuffer[CGF_MQTT_CLIENT_ID_SIZE + 128];
+
+static uint32_t hass_hash_text(uint32_t hash, const char *text) {
+	if (text == NULL) {
+		return hash;
+	}
+	while (*text) {
+		hash ^= (uint8_t)*text++;
+		hash *= 16777619U;
+	}
+	return hash;
+}
+
+static uint32_t hass_hash_unique_id(const char *base, const char *label) {
+	uint32_t hash = 2166136261U;
+	hash = hass_hash_text(hash, base);
+	hash ^= (uint8_t)'_';
+	hash *= 16777619U;
+	return hass_hash_text(hash, label);
+}
 const char *g_template_lowMidHigh = "{% if value == '0' %}\n"
 			"	Low\n"
 			"{% elif value == '1' %}\n"
