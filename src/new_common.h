@@ -19,7 +19,7 @@
 
 #include "obk_config.h"
 
-#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H || PLATFORM_LN8825
+#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN8825
 #ifdef __cplusplus
 extern "C" {
 #endif
