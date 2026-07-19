@@ -920,8 +920,17 @@ void Main_OnEverySecond()
 #elif defined(PLATFORM_ESPIDF)
 	g_secondsElapsed = (int)(esp_timer_get_time() / 1000000);
 #else
-	vTaskSetTimeOutState( &myTimeout );
-	g_secondsElapsed = (int)((((uint64_t) myTimeout.xOverflowCount << (sizeof(portTickType)*8) | myTimeout.xTimeOnEntering)*portTICK_RATE_MS ) / 1000 );
+	{
+		uint64_t totalTicks;
+		unsigned int tickBits;
+		vTaskSetTimeOutState(&myTimeout);
+		totalTicks = (uint64_t)myTimeout.xTimeOnEntering;
+		tickBits = (unsigned int)(sizeof(portTickType) * 8U);
+		if (tickBits < (unsigned int)(sizeof(totalTicks) * 8U)) {
+			totalTicks |= ((uint64_t)myTimeout.xOverflowCount << tickBits);
+		}
+		g_secondsElapsed = (int)((totalTicks * portTICK_RATE_MS) / 1000U);
+	}
 #endif
 	if (bSafeMode) {
 		safe = "[SAFE] ";
