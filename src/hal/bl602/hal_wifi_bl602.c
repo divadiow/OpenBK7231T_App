@@ -45,6 +45,41 @@ extern bool g_powersave;
 __attribute__((aligned(32))) static obkFastConnectData_t fcdata = { 0 };
 extern uint16_t phy_channel_to_freq(uint8_t band, int channel);
 
+#if PLATFORM_BL602
+/*
+ * The BL602 RivieraWaves LMAC initializes its generic 2.4 GHz management
+ * frame policy at 1 Mbit/s CCK. APs configured without legacy 802.11b rates
+ * cannot receive those authentication and association frames.
+ *
+ * This declaration intentionally describes only the leading ABI-compatible
+ * portion of the SDK's txl_buffer_control structure. ratecntrlinfo[0] is at
+ * byte offset 20 and 0x00000004 selects 6 Mbit/s OFDM.
+ */
+typedef struct
+{
+	uint32_t upatterntx;
+	uint32_t phycntrlinfo1;
+	uint32_t phycntrlinfo2;
+	uint32_t maccntrlinfo1;
+	uint32_t maccntrlinfo2;
+	uint32_t ratecntrlinfo[4];
+} bl602_txl_buffer_control_prefix_t;
+
+extern volatile bl602_txl_buffer_control_prefix_t txl_buffer_control_24G;
+
+static void BL602_ForceOfdmManagementRate(void)
+{
+	uint32_t oldRateControl = txl_buffer_control_24G.ratecntrlinfo[0];
+
+	txl_buffer_control_24G.ratecntrlinfo[0] = 0x00000004u;
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 2.4GHz management TX rate control 0x%08X -> 0x%08X (6Mbps OFDM)",
+		(unsigned int)oldRateControl,
+		(unsigned int)txl_buffer_control_24G.ratecntrlinfo[0]);
+}
+#endif
+
 #if PLATFORM_BL_NEW
 static bool g_wifi_init = false;
 static bool wifi_init_done = 0;
@@ -202,6 +237,9 @@ static void wifi_event_handler(input_event_t* event, void* private_data)
 	switch(code)
 	{
 		case CODE_WIFI_ON_INIT_DONE:
+#if PLATFORM_BL602
+			BL602_ForceOfdmManagementRate();
+#endif
 #if PLATFORM_BL616
 			wifi_mgmr_task_start();
 #endif
