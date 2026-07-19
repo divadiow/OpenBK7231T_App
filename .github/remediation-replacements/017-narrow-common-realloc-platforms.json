@@ -1,0 +1,6 @@
+{
+  "path": "src/new_common.h",
+  "old": "#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H || PLATFORM_LN8825",
+  "new": "#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN8825",
+  "expected_count": 1
+}
