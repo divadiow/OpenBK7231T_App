@@ -1,0 +1,3 @@
+Validate source commit 8f229879fce7c778c6162992a275ccb71df07754.
+Issue: Home Assistant toggle IDs must be bounded and collision-resistant.
+Target set: lfs-hass
