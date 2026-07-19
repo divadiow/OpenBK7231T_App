@@ -1,0 +1,6 @@
+{
+  "path": "src/littlefs/our_lfs.c",
+  "old": "\tlfs_file_close(&lfs, &file);\n\n\n\treturn CMD_RES_OK;",
+  "new": "\tlfs_file_close(&lfs, &file);\n\tfree(formattedString);\n\n\treturn CMD_RES_OK;",
+  "expected_count": 1
+}
