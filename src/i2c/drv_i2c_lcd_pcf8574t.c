@@ -471,6 +471,7 @@ void DRV_I2C_AddDevice_PCF8574_Internal(int busType, int address, byte lcd_cols,
 	dev->lcd_cols = lcd_cols;
 	dev->lcd_rows = lcd_rows;
 	dev->charsize = charsize;
+	dev->initialised = 0;
 	dev->LCD_BL_Status = 1;
 
 	DRV_I2C_AddNextDevice((i2cDevice_t*)dev);
