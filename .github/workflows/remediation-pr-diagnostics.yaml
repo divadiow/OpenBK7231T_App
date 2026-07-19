@@ -1,0 +1,260 @@
+name: Remediation PR Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - agent/remediation-ci-base
+
+permissions:
+  contents: read
+
+concurrency:
+  group: remediation-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+env:
+  APP_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  plan:
+    name: Select target set
+    runs-on: ubuntu-22.04
+    outputs:
+      set_name: ${{ steps.plan.outputs.set_name }}
+      version: ${{ steps.plan.outputs.version }}
+      run_linux: ${{ steps.plan.outputs.run_linux }}
+      linux_matrix: ${{ steps.plan.outputs.linux_matrix }}
+      run_txw: ${{ steps.plan.outputs.run_txw }}
+      run_sim: ${{ steps.plan.outputs.run_sim }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build target plan
+        id: plan
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          message = subprocess.check_output(
+              ["git", "log", "-1", "--pretty=%B", os.environ["HEAD_SHA"]],
+              text=True,
+          )
+          match = re.search(r"\[set:([a-z0-9_-]+)\]", message.lower())
+          set_name = match.group(1) if match else "shared"
+
+          sets = {
+              "shared": {
+                  "linux": [
+                      {"platform": "OpenBK7231N", "variant": "default"},
+                      {"platform": "OpenW800", "variant": "default"},
+                      {"platform": "OpenRTL8720D", "variant": "default", "gcc": "10.3-2021.10"},
+                      {"platform": "OpenGD32VW553", "variant": "default"},
+                      {"platform": "OpenECR6600", "variant": "default"},
+                  ],
+                  "txw": True,
+                  "sim": True,
+              },
+              "beken-ir": {
+                  "linux": [
+                      {"platform": "OpenBK7231T", "variant": "default"},
+                      {"platform": "OpenBK7231N", "variant": "default"},
+                  ],
+                  "txw": False,
+                  "sim": False,
+              },
+              "w800": {
+                  "linux": [{"platform": "OpenW800", "variant": "default"}],
+                  "txw": False,
+                  "sim": False,
+              },
+              "gd32": {
+                  "linux": [{"platform": "OpenGD32VW553", "variant": "default"}],
+                  "txw": False,
+                  "sim": False,
+              },
+              "txw": {"linux": [], "txw": True, "sim": False},
+              "berry": {
+                  "linux": [
+                      {"platform": "OpenBK7231N", "variant": "berry"},
+                      {"platform": "OpenBK7238", "variant": "berry"},
+                      {"platform": "OpenBL602", "variant": "berry"},
+                      {"platform": "OpenLN882H", "variant": "btproxy", "gcc": "10.3-2021.10"},
+                      {"platform": "OpenECR6600", "variant": "default"},
+                  ],
+                  "txw": False,
+                  "sim": True,
+              },
+              "lfs-hass": {
+                  "linux": [
+                      {"platform": "OpenBK7231N", "variant": "default"},
+                      {"platform": "OpenW800", "variant": "default"},
+                      {"platform": "OpenRTL8720D", "variant": "default", "gcc": "10.3-2021.10"},
+                  ],
+                  "txw": False,
+                  "sim": True,
+              },
+          }
+          if set_name not in sets:
+              raise SystemExit(f"Unknown remediation target set: {set_name}")
+
+          selected = sets[set_name]
+          linux = selected["linux"]
+          output = os.environ["GITHUB_OUTPUT"]
+          with open(output, "a", encoding="utf-8") as handle:
+              handle.write(f"set_name={set_name}\n")
+              handle.write(f"version=remediation_{os.environ['HEAD_SHA'][:12]}\n")
+              handle.write(f"run_linux={str(bool(linux)).lower()}\n")
+              handle.write("linux_matrix=" + json.dumps(
+                  {"include": linux or [{"platform": "skip", "variant": "skip"}]},
+                  separators=(",", ":"),
+              ) + "\n")
+              handle.write(f"run_txw={str(selected['txw']).lower()}\n")
+              handle.write(f"run_sim={str(selected['sim']).lower()}\n")
+          print(json.dumps({"set": set_name, **selected}, indent=2))
+          PY
+
+  build_linux:
+    name: Build ${{ matrix.platform }} ${{ matrix.variant }}
+    needs: plan
+    if: needs.plan.outputs.run_linux == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.linux_matrix) }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-python@v5
+        if: ${{ matrix.platform == 'OpenBL602' || matrix.platform == 'OpenRTL8721DA' || matrix.platform == 'OpenRTL8720E' || matrix.platform == 'OpenRDA5981' }}
+        with:
+          python-version: '3.10'
+          architecture: x64
+          cache: pip
+
+      - name: Install dependencies
+        if: ${{ matrix.platform == 'OpenLN882H' || matrix.platform == 'OpenLN8825' || matrix.platform == 'OpenGD32VW553' }}
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake srecord
+          version: 1.0
+
+      - name: Install ARM toolchain
+        if: ${{ matrix.gcc }}
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: ${{ matrix.gcc }}
+          path-env-var: ARM_NONE_EABI_GCC_PATH
+
+      - name: Build
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make \
+            APP_VERSION=${{ needs.plan.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} \
+            APP_NAME=${{ matrix.platform }} \
+            VARIANT="${{ matrix.variant }}" \
+            ${{ matrix.platform }} 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output "build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}" \
+            --platform "${{ matrix.platform }}" \
+            --variant "${{ matrix.variant }}" \
+            --build-log .obk-ci/build.log
+
+      - name: Upload diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.event.pull_request.head.sha }}_${{ matrix.platform }}_${{ matrix.variant }}
+          path: build-diagnostics/${{ matrix.platform }}_${{ matrix.variant }}
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
+
+  build_txw:
+    name: Build OpenTXW81X
+    needs: plan
+    if: needs.plan.outputs.run_txw == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: wsl-bash {0}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: Vampire/setup-wsl@v6
+        with:
+          wsl-version: 1
+          distribution: Ubuntu-22.04
+          additional-packages: make python3 file binutils
+
+      - name: Build
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make APP_VERSION=${{ needs.plan.outputs.version }} APP_NAME=OpenTXW81X VARIANT=default OpenTXW81X 2>&1 | tee .obk-ci/build.log
+
+      - name: Collect diagnostics
+        if: ${{ always() }}
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output build-diagnostics/OpenTXW81X_default \
+            --platform OpenTXW81X \
+            --variant default \
+            --build-log .obk-ci/build.log
+
+      - name: Upload diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.event.pull_request.head.sha }}_OpenTXW81X_default
+          path: build-diagnostics/OpenTXW81X_default
+          include-hidden-files: true
+          retention-days: 7
+
+  simulator:
+    name: Simulator tests
+    needs: plan
+    if: needs.plan.outputs.run_sim == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: recursive
+
+      - name: Build simulator with UBSan
+        shell: bash
+        run: UBSAN=1 make -f custom.mk
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1:suppressions=platforms/linux/ubsan.suppressions
+          ./build/win_main -runUnitTests 2
