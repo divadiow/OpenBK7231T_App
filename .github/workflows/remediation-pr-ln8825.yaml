@@ -1,0 +1,72 @@
+name: Remediation LN8825 Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - agent/remediation-ci-base
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - id: plan
+        shell: bash
+        run: |
+          message="$(git log -1 --pretty=%B)"
+          if printf '%s' "$message" | grep -q '\[ln8825\]'; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build OpenLN8825 default
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake srecord
+          version: 1.0
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: 10.3-2021.10
+          path-env-var: ARM_NONE_EABI_GCC_PATH
+      - name: Build
+        shell: bash
+        run: |
+          mkdir -p .obk-ci
+          set -o pipefail
+          make APP_VERSION=remediation_${{ github.event.pull_request.head.sha }} APP_NAME=OpenLN8825 VARIANT=default OpenLN8825 2>&1 | tee .obk-ci/build.log
+      - name: Collect diagnostics
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          python3 .github/scripts/collect_build_diagnostics.py \
+            --root . \
+            --output build-diagnostics/OpenLN8825_default \
+            --platform OpenLN8825 \
+            --variant default \
+            --build-log .obk-ci/build.log
+      - name: Upload diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation_${{ github.event.pull_request.head.sha }}_OpenLN8825_default
+          path: build-diagnostics/OpenLN8825_default
+          include-hidden-files: true
+          retention-days: 7
