@@ -19,4 +19,24 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Source checkout
-        uses: actions/checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Apply queued patch and commit source change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          patch_file="$(git diff-tree --no-commit-id --name-only -r HEAD | grep '^.github/remediation-patches/.*\.patch$' | tail -n 1)"
+          if [ -z "$patch_file" ]; then
+            echo "No queued patch found in the triggering commit" >&2
+            exit 1
+          fi
+          git apply --check "$patch_file"
+          git apply "$patch_file"
+          source_message="$(git log -1 --pretty=%s | sed 's/^queue: //')"
+          git add -A
+          git commit -m "$source_message"
+          git push origin HEAD:agent/remediate-build-diagnostics
