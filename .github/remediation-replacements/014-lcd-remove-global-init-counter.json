@@ -1,0 +1,6 @@
+{
+  "path": "src/i2c/drv_i2c_lcd_pcf8574t.c",
+  "old": "int c = 0;\n\n\nvoid DRV_I2C_LCD_PCF8574_RunDevice",
+  "new": "void DRV_I2C_LCD_PCF8574_RunDevice",
+  "expected_count": 1
+}
