@@ -433,7 +433,7 @@ static commandResult_t CMD_LFS_Append_Internal(lcdPrintType_t type, bool bLine, 
 		lfs_file_write(&lfs, &file, "\r\n", 2);
 	}
 	lfs_file_close(&lfs, &file);
-
+	free(formattedString);
 
 	return CMD_RES_OK;
 }
