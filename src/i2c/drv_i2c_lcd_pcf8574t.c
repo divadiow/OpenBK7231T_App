@@ -18,6 +18,7 @@ typedef struct i2cDevice_PCF8574_s {
 	i2cDevice_t base;
 	// private PCF8574T variables
 	byte lcd_cols, lcd_rows, charsize;
+	byte initialised;
 	byte  LCD_BL_Status;     // 1 for POSITIVE control, 0 for NEGATIVE control
 	byte  pin_E;//   =    I2C_BYTE.2
 	byte  pin_RW;//  =    I2C_BYTE.1
