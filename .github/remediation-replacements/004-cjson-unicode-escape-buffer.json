@@ -1,0 +1,6 @@
+{
+  "path": "src/cJSON/cJSON.c",
+  "old": "                    snprintf((char*)output_pointer, sizeof(output_pointer), \"u%04x\", *input_pointer);",
+  "new": "                    snprintf((char*)output_pointer, 6, \"u%04x\", *input_pointer);",
+  "expected_count": 1
+}
