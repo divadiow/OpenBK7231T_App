@@ -1,0 +1,6 @@
+{
+  "path": "include/berry_conf.h",
+  "old": "#include <assert.h>",
+  "new": "#include <assert.h>\n#include <stddef.h>",
+  "expected_count": 1
+}
