@@ -1,7 +1,7 @@
 diff --git a/src/driver/drv_ir2.c b/src/driver/drv_ir2.c
 --- a/src/driver/drv_ir2.c
 +++ b/src/driver/drv_ir2.c
-@@ -331,11 +331,11 @@ static commandResult_t CMD_IR2_SetupIR2(const void* context, const char* cmd, co
+@@ -329,10 +329,10 @@ static commandResult_t CMD_IR2_SetupIR2(const void* context, const char* cmd, co
  	else {
  		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"bk_timer driver not initialised?");
  		if ((int)res == -5) {
