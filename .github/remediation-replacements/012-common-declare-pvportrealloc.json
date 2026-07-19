@@ -1,0 +1,6 @@
+{
+  "path": "src/new_common.h",
+  "old": "#include \"obk_config.h\"\n\ntypedef int OBK_Publish_Result;",
+  "new": "#include \"obk_config.h\"\n\n#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H || PLATFORM_LN8825\n#ifdef __cplusplus\nextern \"C\" {\n#endif\nvoid *pvPortRealloc(void *ptr, size_t size);\n#ifdef __cplusplus\n}\n#endif\n#endif\n\ntypedef int OBK_Publish_Result;",
+  "expected_count": 1
+}
