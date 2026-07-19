@@ -1,0 +1,17 @@
+# commit-message: fix: cJSON unicode escaping [set:shared]
+# issue: cjson_unicode_escape
+# expected: remove the pointer-sized snprintf truncation warning and preserve valid JSON control-character escapes
+
+diff --git a/src/cJSON/cJSON.c b/src/cJSON/cJSON.c
+index f510e165..00000000 100644
+--- a/src/cJSON/cJSON.c
++++ b/src/cJSON/cJSON.c
+@@ -1020,7 +1020,7 @@ static cJSON_bool print_string_ptr(const unsigned char * const input, printbuffer
+                     break;
+                 default:
+                     /* escape and print as unicode codepoint */
+-                    snprintf((char*)output_pointer, sizeof(output_pointer), "u%04x", *input_pointer);
++                    snprintf((char*)output_pointer, 6, "u%04x", *input_pointer);
+                     output_pointer += 4;
+                     break;
+             }
