@@ -26,6 +26,9 @@ size_t sram_free_heap_size(void)
 extern float g_wifi_temperature;
 extern void Main_Init();
 extern void Main_OnEverySecond();
+#if PLATFORM_XR809 && XR809_LINKER_SELFTEST
+extern void XR809_LinkSelfTest_Init(void);
+#endif
 static void obk_task(void* pvParameters)
 {
 #if PLATFORM_XR872 || PLATFORM_XR806
@@ -34,6 +37,9 @@ static void obk_task(void* pvParameters)
 #endif
 	vTaskDelay(50 / portTICK_PERIOD_MS);
 	Main_Init();
+#if PLATFORM_XR809 && XR809_LINKER_SELFTEST
+	XR809_LinkSelfTest_Init();
+#endif
 	for(;;)
 	{
 #if PLATFORM_XR872 || PLATFORM_XR806
