@@ -2,6 +2,10 @@ OBK_SRCS = ../shared/src/
 CC_FLAGS += -DPLATFORM_XRADIO
 CXX_FLAGS += -DPLATFORM_XRADIO
 
+# Diagnostic branch only: exercise flash/XIP transitions and verify the
+# SRAM placement introduced by the XR809 OTA linker change.
+CC_FLAGS += -DXR809_LINKER_SELFTEST=1
+
 SRCS += $(OBK_SRCS)hal/xradio/hal_adc_xradio
 SRCS += $(OBK_SRCS)hal/xradio/hal_wifi_xradio
 SRCS += $(OBK_SRCS)hal/xradio/hal_generic_xradio
@@ -13,6 +17,7 @@ SRCS += $(OBK_SRCS)hal/xradio/hal_flashVars_xradio
 SRCS += $(OBK_SRCS)hal/xradio/hal_uart_xradio
 SRCS += $(OBK_SRCS)hal/xradio/hal_ota_xradio
 SRCS += $(OBK_SRCS)hal/xradio/xr809/hal_pins_xr809
+SRCS += $(OBK_SRCS)hal/xradio/xr809/hal_linker_selftest_xr809
 #SRCS += $(OBK_SRCS)hal/xradio/xr806/hal_bt_proxy_xr806
 SRCS += $(OBK_SRCS)hal/xradio/xr806/hal_pins_xr806
 SRCS += $(OBK_SRCS)hal/xradio/xr872/hal_pins_xr872
