@@ -90,7 +90,7 @@ static void XRST_UpdateMinHeap(void)
 
 /* This callback must remain in SRAM. It deliberately fires while flash XIP
  * is disabled, exercising the relocated timer IRQ path and its callback. */
-static void __attribute__((noinline)) XRST_TimerCallback(void *arg)
+void __attribute__((noinline)) XRST_TimerCallback(void *arg)
 {
 	(void)arg;
 	g_xrst.timerCallbacks++;
@@ -102,7 +102,7 @@ static void __attribute__((noinline)) XRST_TimerCallback(void *arg)
 /* This task is deliberately in XIP. The flash controller must suspend the
  * scheduler before XIP is disabled, so this task must never be dispatched
  * during a flash transaction. A scheduling leak will fault immediately. */
-static void __attribute__((section(".xip_text.xr809_linktest_task"), noinline))
+void __attribute__((section(".xip_text.xr809_linktest_task"), noinline))
 XRST_XIPTask(void *arg)
 {
 	uint32_t state = 0x6D2B79F5U;
@@ -175,7 +175,7 @@ static void XRST_PrintStatus(const char *state)
 		(unsigned int)XRST_TotalFailures());
 }
 
-static void XRST_FlashTask(void *arg)
+void XRST_FlashTask(void *arg)
 {
 	(void)arg;
 	while (!g_xrst.stopRequested &&
