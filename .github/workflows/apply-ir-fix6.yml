@@ -1,0 +1,148 @@
+name: Apply integer IR receive timing
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/apply-ir-fix6.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Replace the receiver float clock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          driver = Path('src/driver/drv_ir_new.cpp')
+          source = driver.read_text()
+          assert 'gIRUseVirtualMicros' in source
+          assert 'IR_ISR_ResetClock' not in source
+
+          old = '''extern "C" void DRV_IR_ISR(void* arg);
+          extern void IR_ISR(float period_us);
+          '''
+          new = '''extern "C" void DRV_IR_ISR(void* arg);
+          extern void IR_ISR(float period_us);
+          extern void IR_ISR_ResetClock(float period_us);
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''\tir_chan = HAL_RequestHWTimer(ir_periodus, &ir_periodus, DRV_IR_ISR, NULL);
+          \tADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer %u, %.2f us period", ir_chan, ir_periodus);
+          '''
+          new = '''\tir_chan = HAL_RequestHWTimer(ir_periodus, &ir_periodus, DRV_IR_ISR, NULL);
+          \tIR_ISR_ResetClock(ir_periodus);
+          \tADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer %u, %.2f us period", ir_chan, ir_periodus);
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+          driver.write_text(source)
+
+          recv = Path('src/libraries/IRremoteESP8266/src/IRrecv.cpp')
+          source = recv.read_text()
+          assert 'static float        ir_now = 0;' in source
+          start = source.index('static float        ir_now = 0;')
+          signature = source.index('void IR_ISR(float period_us)', start)
+          brace = source.index('{', signature)
+          depth = 0
+          end = None
+          for index in range(brace, len(source)):
+              if source[index] == '{':
+                  depth += 1
+              elif source[index] == '}':
+                  depth -= 1
+                  if depth == 0:
+                      end = index + 1
+                      break
+          assert end is not None
+
+          replacement = '''static uint32_t ir_sample_count = 0;
+          static uint32_t ir_edge_sample = 0;
+          static uint_fast8_t ir_old = 0;
+          static uint32_t ir_period_us_q16 = 0;
+          static uint32_t ir_timeout_samples = 1;
+
+          static uint32_t IR_PeriodToQ16(float period_us) {
+            if (period_us < 1.0f) period_us = 1.0f;
+            return (uint32_t)(period_us * 65536.0f + 0.5f);
+          }
+
+          void IR_ISR_ResetClock(float period_us) {
+            ir_sample_count = 0;
+            ir_edge_sample = 0;
+            ir_period_us_q16 = IR_PeriodToQ16(period_us);
+            const uint64_t timeout_q16 =
+                (uint64_t)params.timeout * 1000U * 65536U;
+            ir_timeout_samples = (uint32_t)(
+                (timeout_q16 + ir_period_us_q16 - 1) / ir_period_us_q16);
+            if (!ir_timeout_samples) ir_timeout_samples = 1;
+          }
+
+          void IR_ISR(float period_us) {
+            if (!ir_period_us_q16) IR_ISR_ResetClock(period_us);
+            ir_sample_count++;
+            if (params.rcvstate == kStopState) return;
+
+            const uint_fast8_t tIRInputLevel =
+                (uint_fast8_t)digitalReadFast(params.recvpin);
+            const uint32_t elapsed_samples = ir_sample_count - ir_edge_sample;
+
+            if (elapsed_samples >= ir_timeout_samples && params.rawlen) {
+              params.rcvstate = kStopState;
+              return;
+            }
+
+            if (tIRInputLevel == ir_old) return;
+
+            ir_old = tIRInputLevel;
+            const uint16_t rawlen = params.rawlen;
+            if (rawlen >= params.bufsize) {
+              params.overflow = true;
+              params.rcvstate = kStopState;
+              return;
+            }
+
+            if (params.rcvstate == kIdleState) {
+              params.rcvstate = kMarkState;
+              params.rawbuf[rawlen] = 1;
+            } else {
+              const uint64_t elapsed_q16 =
+                  (uint64_t)elapsed_samples * ir_period_us_q16;
+              uint32_t raw_ticks = (uint32_t)(
+                  elapsed_q16 / ((uint64_t)kRawTick * 65536U));
+              if (!raw_ticks) raw_ticks = 1;
+              if (raw_ticks > UINT16_MAX) raw_ticks = UINT16_MAX;
+              params.rawbuf[rawlen] = (uint16_t)raw_ticks;
+            }
+            params.rawlen++;
+            ir_edge_sample = ir_sample_count;
+          }'''
+
+          source = source[:start] + replacement + source[end:]
+          assert 'static float        ir_now = 0;' not in source
+          assert source.count('void IR_ISR_ResetClock(float period_us)') == 1
+          recv.write_text(source)
+          PY
+
+          git diff --check
+          test -n "$(git diff --name-only)"
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add src/driver/drv_ir_new.cpp src/libraries/IRremoteESP8266/src/IRrecv.cpp
+          git commit -m "ir: use integer ticks for receive timing"
+          git push origin HEAD:irremotesp8266_290
