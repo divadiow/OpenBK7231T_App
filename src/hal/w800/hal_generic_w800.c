@@ -3,6 +3,7 @@
 #include "../hal_generic.h"
 #include "wm_include.h"
 #include "wm_watchdog.h"
+#include "wm_watchdog.h"
 
 void HAL_RebootModule()
 {
