@@ -1,0 +1,6 @@
+{
+  "path": "src/httpserver/http_fns.c",
+  "old": "\tt_http_fwup(s);",
+  "new": "\tt_http_fwup((char *)s);",
+  "expected_count": 1
+}
