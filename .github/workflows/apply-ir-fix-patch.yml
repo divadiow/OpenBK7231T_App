@@ -6,6 +6,11 @@ on:
       - agent/irremote-fix-runner
     paths:
       - .github/ir-fix.patch
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/ir-fix.patch
 
 permissions:
   contents: read
