@@ -584,35 +584,27 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 			return CMD_RES_ERROR;
 		}
 
-		switch(protocol)
-		{
-			case decode_type_t::RC5:
-				pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command));
-				break;
-			case decode_type_t::RC6:
-				pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command));
-				break;
-			case decode_type_t::NEC:
-				pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command));
-				break;
-			case decode_type_t::PANASONIC:
-				pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command);
-				break;
-			case decode_type_t::JVC:
-				pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command));
-				break;
-			case decode_type_t::SAMSUNG:
-				pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command));
-				break;
-			case decode_type_t::LG:
-				pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command));
-				break;
-			default:
-				pIRsend->abortSendTransaction();
-				ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
-				return CMD_RES_ERROR;
-				break;
-		};
+		// BK7238 is built for Thumb-1 without the libgcc switch-table helper.
+		// Keep this dispatch as comparisons so GCC cannot emit __gnu_thumb1_case_si.
+		if (protocol == decode_type_t::RC5) {
+			pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command));
+		} else if (protocol == decode_type_t::RC6) {
+			pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command));
+		} else if (protocol == decode_type_t::NEC) {
+			pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command));
+		} else if (protocol == decode_type_t::PANASONIC) {
+			pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command);
+		} else if (protocol == decode_type_t::JVC) {
+			pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command));
+		} else if (protocol == decode_type_t::SAMSUNG) {
+			pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command));
+		} else if (protocol == decode_type_t::LG) {
+			pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command));
+		} else {
+			pIRsend->abortSendTransaction();
+			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
+			return CMD_RES_ERROR;
+		}
 
 		// add a 100ms delay after command
 		// NOTE: this is NOT a delay here.  it adds 100ms 'space' in the TX queue
