@@ -1,0 +1,140 @@
+2026-07-21T20:54:32.0467188Z   [0;32mAR   libfunc.a[0m 
+2026-07-21T20:54:32.0726763Z   [0;32mAR   libsrc_s.a[0m 
+2026-07-21T20:54:32.2515490Z   [0;32mAR   libmisc.a[0m 
+2026-07-21T20:54:32.2556065Z   [0;32mLD   ./out/bk7238.elf[0m 
+2026-07-21T20:54:33.8220280Z /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk/toolchain/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: /tmp/ccRHET10.ltrans0.ltrans.o: in function `IR_Send_Cmd':
+2026-07-21T20:54:33.8222264Z <artificial>:(.text+0x3876): undefined reference to `__gnu_thumb1_case_si'
+2026-07-21T20:54:33.8934664Z collect2: error: ld returned 1 exit status
+2026-07-21T20:54:33.8940710Z make[2]: *** [application.mk:644: application] Error 1
+2026-07-21T20:54:33.8941876Z make[2]: Leaving directory '/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk'
+2026-07-21T20:54:33.8949221Z make[1]: *** [Makefile:157: bk7238] Error 2
+2026-07-21T20:54:33.8950390Z make[1]: Leaving directory '/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk'
+2026-07-21T20:54:33.8958430Z Open file ./out/bsp.bin failed
+2026-07-21T20:54:33.8962551Z make: *** [Makefile:710: OpenBK7238] Error 255
+2026-07-21T20:54:33.8982859Z ##[error]Process completed with exit code 2.
+2026-07-21T20:54:33.9128844Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-21T20:54:33.9130316Z Post job cleanup.
+2026-07-21T20:54:34.0004977Z [command]/usr/bin/git version
+2026-07-21T20:54:34.0049412Z git version 2.54.0
+
+--- final 120 lines ---
+2026-07-21T20:54:29.6655160Z  1698 | static void Uart_command_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6655990Z       |             ^~~~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6656833Z beken378/func/wlan_ui/wlan_cli.c:1603:13: warning: 'flash_command_test' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6658120Z  1603 | static void flash_command_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6659049Z       |             ^~~~~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6659913Z beken378/func/wlan_ui/wlan_cli.c:1509:13: warning: 'Gpio_int_Command' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6661171Z  1509 | static void Gpio_int_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6661990Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6662762Z beken378/func/wlan_ui/wlan_cli.c:1472:13: warning: 'Gpio_op_Command' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6664212Z  1472 | static void Gpio_op_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6665008Z       |             ^~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6665801Z beken378/func/wlan_ui/wlan_cli.c:1463:13: warning: 'cli_exit_handler' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6667026Z  1463 | static void cli_exit_handler(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6667833Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6668626Z beken378/func/wlan_ui/wlan_cli.c:1442:13: warning: 'echo_cmd_handler' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6670066Z  1442 | static void echo_cmd_handler(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6670897Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6684581Z beken378/func/wlan_ui/wlan_cli.c:603:13: warning: 'uptime_Command' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6714564Z   603 | static void uptime_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6734138Z       |             ^~~~~~~~~~~~~~
+2026-07-21T20:54:29.6764620Z beken378/func/wlan_ui/wlan_cli.c:585:13: warning: 'partShow_Command' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6794507Z   585 | static void partShow_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:54:29.6804011Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:54:29.6834442Z beken378/func/wlan_ui/wlan_cli.c:560:13: warning: 'task_Command' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6854512Z   560 | static void task_Command( char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv )
+2026-07-21T20:54:29.6884089Z       |             ^~~~~~~~~~~~
+2026-07-21T20:54:29.6894414Z beken378/func/wlan_ui/wlan_cli.c:514:13: warning: 'cli_main' defined but not used [-Wunused-function]
+2026-07-21T20:54:29.6924038Z   514 | static void cli_main( uint32_t data )
+2026-07-21T20:54:29.6953971Z       |             ^~~~~~~~
+2026-07-21T20:54:29.7228387Z beken378/func/power_save/low_voltage_ps.c: In function 'lv_ps_cal_tick':
+2026-07-21T20:54:29.7274152Z beken378/func/power_save/low_voltage_ps.c:763:9: warning: implicit declaration of function 'fclk_cal_tick'; did you mean 'fclk_get_tick'? [-Wimplicit-function-declaration]
+2026-07-21T20:54:29.7275563Z   763 |         fclk_cal_tick();
+2026-07-21T20:54:29.7314051Z       |         ^~~~~~~~~~~~~
+2026-07-21T20:54:29.7314504Z       |         fclk_get_tick
+2026-07-21T20:54:29.9669045Z   [0;32mCC   beken378/func/net_param_intf/net_param.c[0m 
+2026-07-21T20:54:30.0195778Z   [0;32mCC   beken378/func/base64/base_64.c[0m 
+2026-07-21T20:54:30.0569833Z   [0;32mCC   beken378/func/airkiss/bk_airkiss.c[0m 
+2026-07-21T20:54:30.1443733Z   [0;32mCC   beken378/func/airkiss/airkiss_main.c[0m 
+2026-07-21T20:54:30.1854953Z   [0;32mCC   beken378/func/airkiss/airkiss_pingpong.c[0m 
+2026-07-21T20:54:30.3254176Z   [0;32mCC   beken378/func/force_sleep/force_mac_ps.c[0m 
+2026-07-21T20:54:30.3348659Z   [0;32mCC   beken378/func/force_sleep/force_mcu_ps.c[0m 
+2026-07-21T20:54:30.3569698Z   [0;32mCC   beken378/func/libc/errno/lib_errno.c[0m 
+2026-07-21T20:54:30.3701104Z   [0;32mCC   beken378/func/libc/math/lib_exp.c[0m 
+2026-07-21T20:54:30.3874606Z   [0;32mCC   beken378/func/libc/math/lib_libexpi.c[0m 
+2026-07-21T20:54:30.4754960Z   [0;32mCC   beken378/func/libc/math/lib_log.c[0m 
+2026-07-21T20:54:30.4844253Z   [0;32mCC   beken378/func/libc/math/lib_pow.c[0m 
+2026-07-21T20:54:30.5112611Z   [0;32mCC   beken378/func/libc/stdio/lib_libvscanf.c[0m 
+2026-07-21T20:54:30.5201664Z   [0;32mCC   beken378/func/libc/stdio/lib_memsistream.c[0m 
+2026-07-21T20:54:30.5514606Z   [0;32mCC   beken378/func/libc/stdio/lib_meminstream.c[0m 
+2026-07-21T20:54:30.5664409Z   [0;32mCC   beken378/func/libc/stdio/lib_sscanf.c[0m 
+2026-07-21T20:54:30.6324896Z   [0;32mCC   beken378/func/libc/stdio/lib_vsscanf.c[0m 
+2026-07-21T20:54:30.6514745Z   [0;32mCC   beken378/func/libc/stdlib/lib_checkbase.c[0m 
+2026-07-21T20:54:30.6516053Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtod.c[0m 
+2026-07-21T20:54:30.7325051Z   [0;32mCC   beken378/func/libc/stdlib/lib_qsort.c[0m 
+2026-07-21T20:54:30.7674783Z   [0;32mCC   beken378/func/libc/stdlib/lib_srand.c[0m 
+2026-07-21T20:54:30.8454638Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtol.c[0m 
+2026-07-21T20:54:30.8504569Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtoll.c[0m 
+2026-07-21T20:54:30.8744450Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtoul.c[0m 
+2026-07-21T20:54:30.8824879Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtoull.c[0m 
+2026-07-21T20:54:31.0116049Z   [0;32mCC   beken378/func/libc/string/lib_isbasedigit.c[0m 
+2026-07-21T20:54:31.0132999Z   [0;32mCC   beken378/func/ble_wifi_exchange/ble_wifi_port.c[0m 
+2026-07-21T20:54:31.0484453Z   [0;32mCC   beken378/func/bk7011_cal/bk_cal_pub.c[0m 
+2026-07-21T20:54:31.0604587Z   [0;32mCC   beken378/func/wpa_supplicant_2_9/src/crypto/crypto_mbedtls.c[0m 
+2026-07-21T20:54:31.1314850Z   [0;32mCC   beken378/func/bk_player/test/player_test.c[0m 
+2026-07-21T20:54:31.1644630Z   [0;32mCC   beken378/app/app.c[0m 
+2026-07-21T20:54:31.1844557Z   [0;32mCC   beken378/app/ate_app.c[0m 
+2026-07-21T20:54:31.3605581Z   [0;32mCC   beken378/app/config/param_config.c[0m 
+2026-07-21T20:54:31.4175041Z   [0;32mCC   beken378/app/standalone-ap/sa_ap.c[0m 
+2026-07-21T20:54:31.7342756Z   [0;32mCC   beken378/app/standalone-station/sa_station.c[0m 
+2026-07-21T20:54:31.7734943Z   [0;32mCC   beken378/demo/ieee802_11_demo.c[0m 
+2026-07-21T20:54:31.8784678Z   [0;32mCC   fixes/blank.c[0m 
+2026-07-21T20:54:31.8844559Z   [0;32mAS   beken378/driver/entry/boot_handlers.S[0m 
+2026-07-21T20:54:31.9144888Z   [0;32mAS   beken378/driver/entry/boot_vectors.S[0m 
+2026-07-21T20:54:31.9424886Z   [0;32mAR   libapp.a[0m 
+2026-07-21T20:54:31.9484913Z   [0;32mAR   beken378/lib/libwpa.a[0m 
+2026-07-21T20:54:31.9525293Z   [0;32mAR   libos.a[0m 
+2026-07-21T20:54:31.9634322Z   [0;32mAR   liblwip.a[0m 
+2026-07-21T20:54:31.9894333Z   [0;32mAR   libmbedtls.a[0m 
+2026-07-21T20:54:32.0275040Z   [0;32mAR   libdriver.a[0m 
+2026-07-21T20:54:32.0467188Z   [0;32mAR   libfunc.a[0m 
+2026-07-21T20:54:32.0726763Z   [0;32mAR   libsrc_s.a[0m 
+2026-07-21T20:54:32.2515490Z   [0;32mAR   libmisc.a[0m 
+2026-07-21T20:54:32.2556065Z   [0;32mLD   ./out/bk7238.elf[0m 
+2026-07-21T20:54:33.8220280Z /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk/toolchain/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: /tmp/ccRHET10.ltrans0.ltrans.o: in function `IR_Send_Cmd':
+2026-07-21T20:54:33.8222264Z <artificial>:(.text+0x3876): undefined reference to `__gnu_thumb1_case_si'
+2026-07-21T20:54:33.8934664Z collect2: error: ld returned 1 exit status
+2026-07-21T20:54:33.8940710Z make[2]: *** [application.mk:644: application] Error 1
+2026-07-21T20:54:33.8941876Z make[2]: Leaving directory '/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk'
+2026-07-21T20:54:33.8949221Z make[1]: *** [Makefile:157: bk7238] Error 2
+2026-07-21T20:54:33.8950390Z make[1]: Leaving directory '/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk'
+2026-07-21T20:54:33.8958430Z Open file ./out/bsp.bin failed
+2026-07-21T20:54:33.8962551Z make: *** [Makefile:710: OpenBK7238] Error 255
+2026-07-21T20:54:33.8982859Z ##[error]Process completed with exit code 2.
+2026-07-21T20:54:33.9128844Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-21T20:54:33.9130316Z Post job cleanup.
+2026-07-21T20:54:34.0004977Z [command]/usr/bin/git version
+2026-07-21T20:54:34.0049412Z git version 2.54.0
+2026-07-21T20:54:34.0092377Z Temporarily overriding HOME='/home/runner/work/_temp/1fdb54ce-a580-499e-a1c0-3fbac0750a0a' before making global git config changes
+2026-07-21T20:54:34.0094020Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-21T20:54:34.0099029Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/OpenBK7231T_App/OpenBK7231T_App
+2026-07-21T20:54:34.0138565Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-21T20:54:34.0175239Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-21T20:54:34.0431373Z Entering 'libraries/berry'
+2026-07-21T20:54:34.0487149Z Entering 'sdk/beken_freertos_sdk'
+2026-07-21T20:54:34.0575154Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-21T20:54:34.0605371Z http.https://github.com/.extraheader
+2026-07-21T20:54:34.0617785Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-21T20:54:34.0653149Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-21T20:54:34.0913959Z Entering 'libraries/berry'
+2026-07-21T20:54:34.0965102Z Entering 'sdk/beken_freertos_sdk'
+2026-07-21T20:54:34.1058520Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T20:54:34.1102301Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-21T20:54:34.1345108Z Entering 'libraries/berry'
+2026-07-21T20:54:34.1366711Z file:/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/libraries/berry/config	remote.origin.url
+2026-07-21T20:54:34.1388107Z Entering 'sdk/beken_freertos_sdk'
+2026-07-21T20:54:34.1412928Z file:/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/sdk/beken_freertos_sdk/config	remote.origin.url
+2026-07-21T20:54:34.1467422Z [command]/usr/bin/git config --file /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/libraries/berry/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T20:54:34.1506521Z [command]/usr/bin/git config --file /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/sdk/beken_freertos_sdk/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T20:54:34.1680721Z Cleaning up orphan processes
+2026-07-21T20:54:34.1959155Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
