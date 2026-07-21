@@ -13,7 +13,7 @@ on:
       - .github/ir-fix.patch
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   render:
@@ -67,4 +67,18 @@ jobs:
           name: rendered-ir-fix
           path: runner/output
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
+
+      - name: Commit patch to target branch
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch_file="$GITHUB_WORKSPACE/runner/.github/ir-fix.patch"
+          commit_message="$(sed -n '1s/^# COMMIT: //p' "$patch_file")"
+          git -C "$GITHUB_WORKSPACE/target" config user.name "openai-agent"
+          git -C "$GITHUB_WORKSPACE/target" config user.email "openai-agent@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE/target" add -- $(cat "$RUNNER_TEMP/changed-files.txt")
+          git -C "$GITHUB_WORKSPACE/target" commit -m "$commit_message"
+          git -C "$GITHUB_WORKSPACE/target" push origin HEAD:irremotesp8266_290
