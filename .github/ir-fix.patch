@@ -2,7 +2,7 @@
 # BASE: 4480a440b25603b2ae3be96805aeee6e39339a2c
 --- a/src/driver/drv_ir_new.cpp
 +++ b/src/driver/drv_ir_new.cpp
-@@ -586,32 +586,25 @@
+@@ -584,35 +584,27 @@
  			return CMD_RES_ERROR;
  		}
  
@@ -58,3 +58,4 @@
 +		}
  
  		// add a 100ms delay after command
+ 		// NOTE: this is NOT a delay here.  it adds 100ms 'space' in the TX queue
