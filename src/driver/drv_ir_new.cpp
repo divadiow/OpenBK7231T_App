@@ -174,16 +174,16 @@ SpoofIrReceiver IrReceiver;
 
 // override aspects of sending for our own interrupt driven sends
 // basically, IRsend calls mark(us) and space(us) to send.
-// we simply note the numbers into a rolling buffer, assume the first is a mark()
-// and then every 50us service the rolling buffer, changing the PWM from 0 duty to 50% duty
-// appropriately.
+// Build a complete waveform in a private transaction first, then expose it to
+// the 50us ISR in one step. This prevents the ISR from transmitting a partial
+// frame when a protocol exceeds the fixed queue capacity.
 // Queue size for the interrupt-driven IR send buffer.
 // Each IR frame is encoded as a sequence of mark/space durations; each
 // duration occupies one slot.  A rough upper bound is 2 * bits + overhead:
-//   - NEC 32-bit:        ~68 slots
+//   - NEC 32-bit:         ~68 slots
 //   - Fujitsu AC 128-bit: ~270 slots
-//   - Daikin 312-bit:    ~640 slots
-// 1024 slots gives comfortable headroom for even the longest known protocols.
+//   - Daikin 312-bit:     ~640 slots
+// 1024 slots gives comfortable headroom for one longest known protocol frame.
 #define SEND_QUEUE_ITEMS 1024
 
 class myIRsend : public IRsend {
@@ -201,39 +201,56 @@ public:
 		return our_ms;
 	}
 
+	bool beginSendTransaction() {
+		if (isBusy()) {
+			return false;
+		}
+		transactionCount = 0;
+		transactionFailed = false;
+		overflows = 0;
+		transactionBuilding = 1;
+		return true;
+	}
+
+	bool commitSendTransaction() {
+		if (!transactionBuilding || transactionFailed || transactionCount == 0) {
+			abortSendTransaction();
+			return false;
+		}
+
+		// The ISR only looks at the queue after transactionReady is set. Publish
+		// all queue metadata first, then flip that single-byte flag last.
+		timeout = 0;
+		timein = transactionCount;
+		timecount = transactionCount;
+		timecounttotal = transactionCount;
+		transactionReady = 1;
+		transactionBuilding = 0;
+		return true;
+	}
+
+	void abortSendTransaction() {
+		transactionBuilding = 0;
+		transactionFailed = false;
+		transactionCount = 0;
+	}
+
+	bool isBusy() const {
+		return transactionBuilding || transactionReady || currentsendtime;
+	}
+
 	void delay(long int ms) {
 		// add a pure delay to our queue
 		space(ms * 1000);
 	}
 
 	uint16_t mark(uint16_t aMarkMicros) {
-		// sends a high for aMarkMicros
-		uint32_t newtimein = (timein + 1) % SEND_QUEUE_ITEMS;
-		if (newtimein != timeout) {
-			// store mark bits in highest +ve bit of count
-			times[timein] = aMarkMicros | 0x10000000;
-			timein = newtimein;
-			timecount++;
-			timecounttotal++;
-		}
-		else {
-			overflows++;
-		}
-		return 1;
+		// store mark bits in highest +ve bit of count
+		return appendDuration(aMarkMicros | 0x10000000) ? 1 : 0;
 	}
 
 	void space(uint32_t aMarkMicros) {
-		// sends a low for aMarkMicros
-		uint32_t newtimein = (timein + 1) % SEND_QUEUE_ITEMS;
-		if (newtimein != timeout) {
-			times[timein] = aMarkMicros;
-			timein = newtimein;
-			timecount++;
-			timecounttotal++;
-		}
-		else {
-			overflows++;
-		}
+		appendDuration(aMarkMicros);
 	}
 
 	void enableIROut(uint32_t freq, uint8_t duty=50) {
@@ -250,7 +267,11 @@ public:
 	}
 
 	void resetsendqueue() {
-		// sends a low for aMarkMicros
+		// Hide the queue from the ISR before resetting shared metadata.
+		transactionReady = 0;
+		transactionBuilding = 0;
+		transactionFailed = false;
+		transactionCount = 0;
 		timein = timeout = 0;
 		timecount = 0;
 		overflows = 0;
@@ -258,30 +279,59 @@ public:
 		currentbitval = 0;
 		timecounttotal = 0;
 	}
-	int32_t times[SEND_QUEUE_ITEMS]; // mark/space duration queue; see SEND_QUEUE_ITEMS above
-	unsigned short timein;
-	unsigned short timeout;
-	unsigned short timecount;
-	unsigned short overflows;
-	uint32_t timecounttotal;
 
-	int32_t getsendqueue() {
-		int32_t val = 0;
-		if (timein != timeout) {
-			val = times[timeout];
-			timeout = (timeout + 1) % SEND_QUEUE_ITEMS;
+	bool getsendqueue(int32_t *value) {
+		if (!value || !transactionReady) {
+			return false;
+		}
+		if (timeout >= timein) {
+			transactionReady = 0;
+			timein = timeout = 0;
+			timecount = 0;
+			return false;
+		}
+
+		*value = times[timeout++];
+		if (timecount) {
 			timecount--;
 		}
-		return val;
+		return true;
 	}
-	int currentsendtime;
-	int currentbitval;
+
+	int32_t times[SEND_QUEUE_ITEMS]; // committed mark/space transaction
+	volatile unsigned short timein;
+	volatile unsigned short timeout;
+	volatile unsigned short timecount;
+	unsigned short overflows;
+	uint32_t timecounttotal;
+	volatile int currentsendtime;
+	volatile int currentbitval;
 
 	uint8_t sendPin;
 	uint32_t pwmduty;
 
 	uint32_t our_ms;
 	float our_us;
+
+private:
+	bool appendDuration(const uint32_t duration) {
+		if (!transactionBuilding || transactionFailed) {
+			return false;
+		}
+		if (transactionCount >= SEND_QUEUE_ITEMS) {
+			transactionFailed = true;
+			overflows++;
+			return false;
+		}
+
+		times[transactionCount++] = duration;
+		return true;
+	}
+
+	volatile uint8_t transactionReady;
+	volatile uint8_t transactionBuilding;
+	bool transactionFailed;
+	uint16_t transactionCount;
 };
 
 
@@ -307,8 +357,8 @@ extern "C" void DRV_IR_ISR(void* arg)
 			pIRsend->currentsendtime -= ir_periodus;
 			if (pIRsend->currentsendtime <= 0) {
 				int32_t remains = pIRsend->currentsendtime;
-				int32_t newtime = pIRsend->getsendqueue();
-				if (0 == newtime) {
+				int32_t newtime = 0;
+				if (!pIRsend->getsendqueue(&newtime)) {
 					// if it was the last one
 					pIRsend->currentsendtime = 0;
 					pIRsend->currentbitval = 0;
@@ -326,8 +376,8 @@ extern "C" void DRV_IR_ISR(void* arg)
 			}
 		}
 		else {
-			int32_t newtime = pIRsend->getsendqueue();
-			if (!newtime) {
+			int32_t newtime = 0;
+			if (!pIRsend->getsendqueue(&newtime)) {
 				pIRsend->currentsendtime = 0;
 				pIRsend->currentbitval = 0;
 			}
@@ -451,6 +501,10 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 					}
 					if(payloadEnd && *payloadEnd==',')
 						repeats=strtol(payloadEnd+1,NULL,10);
+					if (!pIRsend->beginSendTransaction()) {
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
+						return CMD_RES_ERROR;
+					}
 					if (bits > 64 || hasACState(protocol))
 					{
 						bool sent = true;
@@ -463,13 +517,16 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 								pIRsend->delay(100);
 							}
 						}
-						if( sent )
-						{
+						if (sent) {
 							pIRsend->delay(100);
+						}
+						if (sent && pIRsend->commitSendTransaction())
+						{
 							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
 							return CMD_RES_OK;
 						}
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
+						pIRsend->abortSendTransaction();
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
 						return CMD_RES_BAD_ARGUMENT;
 					}
 					else
@@ -478,13 +535,17 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 						for (uint16_t bi = 0; bi < nbytes; bi++) {
 							data = (data << 8) | state[bi];
 						}
-						if( pIRsend->send(protocol,data,bits,repeats) )
-						{
+						bool sent = pIRsend->send(protocol,data,bits,repeats);
+						if (sent) {
 							pIRsend->delay(100);
+						}
+						if (sent && pIRsend->commitSendTransaction())
+						{
 							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
 							return CMD_RES_OK;
 						}
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
+						pIRsend->abortSendTransaction();
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
 						return CMD_RES_BAD_ARGUMENT;
 					}
 				}
@@ -518,7 +579,10 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 	}
 
 	if (pIRsend) {
-		bool success = true;  // Assume success.
+		if (!pIRsend->beginSendTransaction()) {
+			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
+			return CMD_RES_ERROR;
+		}
 
 		switch(protocol)
 		{
@@ -544,6 +608,7 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 				pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command));
 				break;
 			default:
+				pIRsend->abortSendTransaction();
 				ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
 				return CMD_RES_ERROR;
 				break;
@@ -552,6 +617,11 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 		// add a 100ms delay after command
 		// NOTE: this is NOT a delay here.  it adds 100ms 'space' in the TX queue
 		pIRsend->delay(100);
+		if (!pIRsend->commitSendTransaction()) {
+			pIRsend->abortSendTransaction();
+			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s", args);
+			return CMD_RES_ERROR;
+		}
 
 		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s protocol %d addr 0x%X cmd 0x%X repeats %d", args, (int)protocol, (int)addr, (int)command, (int)repeats);
 		return CMD_RES_OK;
