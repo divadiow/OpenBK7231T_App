@@ -1,0 +1,6 @@
+{
+  "path": "src/hal/w800/hal_generic_w800.c",
+  "old": "#include \"wm_watchdog.h\"\n#include \"wm_watchdog.h\"",
+  "new": "#include \"wm_watchdog.h\"",
+  "expected_count": 1
+}
