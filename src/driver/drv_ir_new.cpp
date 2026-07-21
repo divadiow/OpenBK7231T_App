@@ -455,7 +455,13 @@ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, u
 	return true;
 }
 
-extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
+#if PLATFORM_BEKEN && defined(__GNUC__)
+#define IR_SEND_CMD_OPT __attribute__((optimize("no-jump-tables")))
+#else
+#define IR_SEND_CMD_OPT
+#endif
+
+extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
 	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	char args[384];
 	strncpy(args, args_in, sizeof(args) - 1);
