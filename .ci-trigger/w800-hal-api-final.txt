@@ -1,0 +1,1 @@
+Validate the completed W800 HAL/API declaration cycle.
