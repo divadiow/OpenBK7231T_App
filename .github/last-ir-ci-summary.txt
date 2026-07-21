@@ -1,0 +1,66 @@
+run_id=29864189864
+88748154079	Prepare CI Environment	completed	success
+88749066241	Build Linux Simulator and Run Tests With Address Sanitizer	completed	success
+88749066250	Build TXW81X (OpenTXW81X, default)	completed	success
+88749066267	Build Linux Simulator and Run Tests With Undefined Behavior Sanitizer	completed	success
+88749066300	Build Simulator	completed	success
+88749066375	Build IDF (OpenESP32C2, 4M, v5.5.2, esp-idf)	completed	success
+88749066386	Build IDF (OpenESP32C2, 2M, v5.5.2, esp-idf)	completed	success
+88749066403	Build IDF (OpenESP32C6, 4M, v5.5.2, esp-idf)	completed	success
+88749066431	Build IDF (OpenESP32C3, 2M, v5.5.2, esp-idf)	completed	success
+88749066432	Build IDF (OpenESP32C3, 4M, v5.5.2, esp-idf)	completed	success
+88749066438	Build IDF (OpenESP32S3, 4M, v5.5.2, esp-idf)	completed	success
+88749066449	Build IDF (OpenESP32C5, 4M, v5.5.2, esp-idf)	completed	success
+88749066466	Build IDF (OpenESP32S2, 4M, v5.5.2, esp-idf)	completed	success
+88749066481	Build IDF (OpenESP32C61, 4M, v5.5.2, esp-idf)	completed	success
+88749066494	Build IDF (OpenESP8266, default, v3.4, OpenESP8266)	completed	success
+88749066514	Build IDF (OpenESP32, 4M, v5.5.2, esp-idf)	completed	success
+88749066889	Build (OpenRTL8710B, default, 8-2019-q3)	completed	success
+88749066890	Build (OpenBL602, default)	completed	success
+88749066913	Build (OpenXR809, default, 8-2019-q3)	completed	success
+88749066921	Build (OpenW600, default)	completed	success
+88749066924	Build (OpenRTL8721DA, default)	completed	success
+88749066939	Build (OpenTR6260, default)	completed	success
+88749066941	Build (OpenBK7231N, default)	completed	success
+88749066942	Build (OpenECR6600, default)	completed	success
+88749066945	Build (OpenBK7231T, default)	completed	success
+88749066947	Build (OpenXR806, default, 8-2019-q3)	completed	success
+88749066951	Build (OpenRTL87X0C, default)	completed	success
+88749066955	Build (OpenLN882H, default, 10.3-2021.10)	completed	success
+88749066956	Build (OpenRTL8710A, default, 8-2019-q3)	completed	success
+88749066957	Build (OpenBK7231T, powerMetering)	completed	success
+88749066958	Build (OpenW800, default)	completed	success
+88749066959	Build (OpenRTL8720E, default)	completed	success
+88749066965	Build (OpenBK7231T, irRemoteESP)	completed	success
+88749066973	Build (OpenLN8825, default, 10.3-2021.10)	completed	success
+88749066974	Build (OpenRTL8720D, default, 10.3-2021.10)	completed	success
+88749066978	Build (OpenRDA5981, default, 6-2017-q2)	completed	success
+88749066989	Build (OpenXR806_DCDC, default, 8-2019-q3)	completed	success
+88749066995	Build (OpenXR872, default, 8-2019-q3)	completed	success
+88749066998	Build (OpenGD32VW553, default)	completed	success
+88749067030	Build (OpenBK7231T, sensors)	completed	success
+88749067046	Build (OpenBK7231N, battery)	completed	success
+88749067051	Build (OpenBK7231T, berry)	completed	success
+88749067063	Build (OpenBK7231N_ALT, default)	completed	success
+88749067072	Build (OpenBK7231N, powerMetering)	completed	success
+88749067075	Build (OpenBK7231N, hlw8112)	completed	success
+88749067083	Build (OpenBK7252, default)	completed	success
+88749067085	Build (OpenBK7238, battery)	completed	success
+88749067086	Build (OpenBK7231T_ALT, default)	completed	success
+88749067087	Build (OpenBK7238, irRemoteESP)	completed	failure
+88749067101	Build (OpenLN882H, btproxy, 10.3-2021.10)	completed	success
+88749067102	Build (OpenBK7252N, default)	completed	success
+88749067104	Build (OpenBL602, berry)	completed	success
+88749067112	Build (OpenBK7231T, tuyaMCU)	completed	success
+88749067117	Build (OpenBK7238, berry)	completed	success
+88749067122	Build (OpenBK7231U, default)	completed	success
+88749067145	Build (OpenRTL87X0C, btproxy)	completed	success
+88749067146	Build (OpenBK7231N, sensors)	completed	success
+88749067155	Build (OpenBK7231N_ALT, btproxy)	completed	success
+88749067164	Build (OpenBK7238, btproxy)	completed	success
+88749067176	Build (OpenBK7231N, irRemoteESP)	completed	success
+88749067184	Build (OpenBK7231N, berry)	completed	success
+88749067185	Build (OpenBK7238, default)	completed	success
+88749069726	Build (OpenBK7231N, tuyaMCU)	completed	success
+88753140650	Merge Artifacts	completed	skipped
+88753140752	Semantic Release Images and Artifacts	completed	skipped
