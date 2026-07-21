@@ -6,11 +6,13 @@ on:
       - agent/irremote-fix-runner
     paths:
       - .github/ir-fix.patch
+      - .github/workflows/apply-ir-fix-patch.yml
   pull_request:
     branches:
       - main
     paths:
       - .github/ir-fix.patch
+      - .github/workflows/apply-ir-fix-patch.yml
 
 permissions:
   contents: write
