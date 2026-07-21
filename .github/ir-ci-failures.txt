@@ -1,0 +1,306 @@
+run_id=29864189864
+failed_jobs=1
+JOB	88749067087	Build (OpenBK7238, irRemoteESP)	completed	failure
+STEP	8	Run make	completed	failure
+
+===== JOB 88749067087 LOG (tail 300 lines) =====
+2026-07-21T20:24:19.5036509Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/pkwrite.c[0m 
+2026-07-21T20:24:19.5064853Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/platform.c[0m 
+2026-07-21T20:24:19.6575435Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/platform_util.c[0m 
+2026-07-21T20:24:19.7012331Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/poly1305.c[0m 
+2026-07-21T20:24:19.7547916Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto.c[0m 
+2026-07-21T20:24:19.7858472Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_aead.c[0m 
+2026-07-21T20:24:19.8395675Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_cipher.c[0m 
+2026-07-21T20:24:19.8435051Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_client.c[0m 
+2026-07-21T20:24:19.8527459Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_driver_wrappers.c[0m 
+2026-07-21T20:24:19.8917827Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_ecp.c[0m 
+2026-07-21T20:24:19.9291588Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_hash.c[0m 
+2026-07-21T20:24:20.0057848Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_mac.c[0m 
+2026-07-21T20:24:20.0123249Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_rsa.c[0m 
+2026-07-21T20:24:20.0228755Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_se.c[0m 
+2026-07-21T20:24:20.0985286Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_slot_management.c[0m 
+2026-07-21T20:24:20.1185684Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_crypto_storage.c[0m 
+2026-07-21T20:24:20.1275144Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/psa_its_file.c[0m 
+2026-07-21T20:24:20.1450061Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ripemd160.c[0m 
+2026-07-21T20:24:20.1812627Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/rsa.c[0m 
+2026-07-21T20:24:20.2155554Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/rsa_internal.c[0m 
+2026-07-21T20:24:20.3036981Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/sha1.c[0m 
+2026-07-21T20:24:20.3090466Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/sha256.c[0m 
+2026-07-21T20:24:20.4225893Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/sha512.c[0m 
+2026-07-21T20:24:20.7561700Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_cache.c[0m 
+2026-07-21T20:24:20.7584839Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_ciphersuites.c[0m 
+2026-07-21T20:24:20.7903378Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_cli.c[0m 
+2026-07-21T20:24:20.8506059Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_cookie.c[0m 
+2026-07-21T20:24:20.8543731Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_msg.c[0m 
+2026-07-21T20:24:20.8604934Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_srv.c[0m 
+2026-07-21T20:24:20.8717498Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_ticket.c[0m 
+2026-07-21T20:24:20.9335391Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_tls.c[0m 
+2026-07-21T20:24:20.9465307Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/ssl_tls13_keys.c[0m 
+2026-07-21T20:24:20.9505033Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/threading.c[0m 
+2026-07-21T20:24:20.9565169Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/timing.c[0m 
+2026-07-21T20:24:21.0285314Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/version.c[0m 
+2026-07-21T20:24:21.0287247Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/version_features.c[0m 
+2026-07-21T20:24:21.0340251Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509.c[0m 
+2026-07-21T20:24:21.0747919Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509_create.c[0m 
+2026-07-21T20:24:21.1164944Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509_crl.c[0m 
+2026-07-21T20:24:21.1166212Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509_crt.c[0m 
+2026-07-21T20:24:21.1605698Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509_csr.c[0m 
+2026-07-21T20:24:21.2045612Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509write_crt.c[0m 
+2026-07-21T20:24:21.2514510Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/x509write_csr.c[0m 
+2026-07-21T20:24:21.2935187Z   [0;32mCC   beken378/func/mbedtls/mbedtls-2.27.0/library/xtea.c[0m 
+2026-07-21T20:24:21.3335454Z   [0;32mCC   beken378/func/mbedtls/mbedtls-port/src/timing_alt.c[0m 
+2026-07-21T20:24:21.3514338Z   [0;32mCC   beken378/driver/common/dd.c[0m 
+2026-07-21T20:24:21.3764889Z   [0;32mCC   beken378/driver/common/drv_model.c[0m 
+2026-07-21T20:24:21.5055047Z   [0;32mCC   beken378/driver/dma/dma.c[0m 
+2026-07-21T20:24:21.5765895Z   [0;32mCC   beken378/driver/driver.c[0m 
+2026-07-21T20:24:21.6455040Z   [0;32mCC   beken378/driver/entry/arch_main.c[0m 
+2026-07-21T20:24:21.8184968Z   [0;32mCC   beken378/driver/fft/fft.c[0m 
+2026-07-21T20:24:21.8421551Z   [0;32mCC   beken378/driver/flash/flash.c[0m 
+2026-07-21T20:24:21.8486611Z   [0;32mCC   beken378/driver/gpio/gpio.c[0m 
+2026-07-21T20:24:21.8804306Z   [0;32mCC   beken378/driver/icu/icu.c[0m 
+2026-07-21T20:24:21.9765379Z   [0;32mCC   beken378/driver/intc/intc.c[0m 
+2026-07-21T20:24:22.0708390Z   [0;32mCC   beken378/driver/macphy_bypass/mac_phy_bypass.c[0m 
+2026-07-21T20:24:22.1005095Z In file included from beken378/driver/macphy_bypass/mac_phy_bypass.c:19:
+2026-07-21T20:24:22.1055245Z beken378/driver/macphy_bypass/mac_phy_bypass.h:15: warning: header guard '_MAC_PHY_BYPASSH_' followed by '#define' of a different macro [-Wheader-guard]
+2026-07-21T20:24:22.1064652Z    15 | #ifndef _MAC_PHY_BYPASSH_
+2026-07-21T20:24:22.1114761Z beken378/driver/macphy_bypass/mac_phy_bypass.h:16: note: '_MAC_PHY_BYPASS_H_' is defined here; did you mean '_MAC_PHY_BYPASSH_'?
+2026-07-21T20:24:22.1148056Z    16 | #define _MAC_PHY_BYPASS_H_
+2026-07-21T20:24:22.1434939Z   [0;32mCC   beken378/driver/phy/phy_trident.c[0m 
+2026-07-21T20:24:22.2283371Z   [0;32mCC   beken378/driver/pwm/pwm.c[0m 
+2026-07-21T20:24:22.2425262Z   [0;32mCC   beken378/driver/pwm/pwm_bk7231n.c[0m 
+2026-07-21T20:24:22.2585456Z beken378/driver/intc/intc.c: In function 'bk_cpu_shutdown':
+2026-07-21T20:24:22.2604894Z beken378/driver/intc/intc.c:348:5: warning: this 'while' clause does not guard... [-Wmisleading-indentation]
+2026-07-21T20:24:22.2624510Z   348 |     while(1);
+2026-07-21T20:24:22.2644217Z       |     ^~~~~
+2026-07-21T20:24:22.2665039Z In file included from /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk/beken378/common/include.h:23,
+2026-07-21T20:24:22.2666720Z                  from /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk/beken378/common/generic.h:18,
+2026-07-21T20:24:22.2667987Z                  from beken378/driver/intc/intc.h:18,
+2026-07-21T20:24:22.2668729Z                  from beken378/driver/intc/intc.c:18:
+2026-07-21T20:24:22.2670333Z /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk/beken378/driver/entry/arch.h:76:36: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'while'
+2026-07-21T20:24:22.2672011Z    76 | #define GLOBAL_INT_RESTORE()       do{                         \
+2026-07-21T20:24:22.2672806Z       |                                    ^~
+2026-07-21T20:24:22.2673890Z beken378/driver/intc/intc.c:349:9: note: in expansion of macro 'GLOBAL_INT_RESTORE'
+2026-07-21T20:24:22.2675218Z   349 |         GLOBAL_INT_RESTORE();
+2026-07-21T20:24:22.2675835Z       |         ^~~~~~~~~~~~~~~~~~
+2026-07-21T20:24:22.2935261Z   [0;32mCC   beken378/driver/pwm/mcu_ps_timer.c[0m 
+2026-07-21T20:24:22.4393549Z   [0;32mCC   beken378/driver/pwm/bk_timer.c[0m 
+2026-07-21T20:24:22.5035638Z   [0;32mCC   beken378/driver/pwm/bk_timer_extense.c[0m 
+2026-07-21T20:24:22.5405280Z   [0;32mCC   beken378/driver/pwm/pwm_mutex.c[0m 
+2026-07-21T20:24:22.6255062Z   [0;32mCC   beken378/driver/qspi/qspi.c[0m 
+2026-07-21T20:24:22.6494050Z   [0;32mCC   beken378/driver/rw_pub/rw_platf_pub.c[0m 
+2026-07-21T20:24:22.6865185Z   [0;32mCC   beken378/driver/saradc/saradc.c[0m 
+2026-07-21T20:24:22.7746271Z   [0;32mCC   beken378/driver/saradc/saradc_bk7238.c[0m 
+2026-07-21T20:24:22.7953850Z   [0;32mCC   beken378/driver/spidma/spidma.c[0m 
+2026-07-21T20:24:22.8535340Z   [0;32mCC   beken378/driver/sys_ctrl/sys_ctrl.c[0m 
+2026-07-21T20:24:22.8696408Z   [0;32mCC   beken378/driver/uart/Retarget.c[0m 
+2026-07-21T20:24:22.8836170Z   [0;32mCC   beken378/driver/uart/uart.c[0m 
+2026-07-21T20:24:22.9035236Z   [0;32mCC   beken378/driver/uart/printf.c[0m 
+2026-07-21T20:24:23.0017595Z   [0;32mCC   beken378/driver/wdt/wdt.c[0m 
+2026-07-21T20:24:23.1345928Z   [0;32mCC   beken378/driver/calendar/calendar.c[0m 
+2026-07-21T20:24:23.1933311Z beken378/driver/uart/uart.c: In function 'uart2_init':
+2026-07-21T20:24:23.1965305Z beken378/driver/uart/uart.c:1054:12: warning: unused variable 'ret' [-Wunused-variable]
+2026-07-21T20:24:23.1984444Z  1054 |     UINT32 ret;
+2026-07-21T20:24:23.1994397Z       |            ^~~
+2026-07-21T20:24:23.2205198Z   [0;32mCC   beken378/driver/i2s/i2s.c[0m 
+2026-07-21T20:24:23.3635384Z   [0;32mCC   beken378/driver/irda/irda.c[0m 
+2026-07-21T20:24:23.4145050Z   [0;32mCC   beken378/driver/general_dma/general_dma.c[0m 
+2026-07-21T20:24:23.5339756Z   [0;32mCC   beken378/driver/jpeg/jpeg_encoder.c[0m 
+2026-07-21T20:24:23.5659411Z   [0;32mCC   beken378/driver/i2c/i2c1.c[0m 
+2026-07-21T20:24:23.5965931Z   [0;32mCC   beken378/driver/security/security.c[0m 
+2026-07-21T20:24:23.6244371Z   [0;32mCC   beken378/driver/security/hal_aes.c[0m 
+2026-07-21T20:24:23.6305104Z   [0;32mCC   beken378/driver/security/hal_sha.c[0m 
+2026-07-21T20:24:23.6555160Z   [0;32mCC   beken378/driver/i2c/i2c2.c[0m 
+2026-07-21T20:24:23.6612174Z   [0;32mCC   beken378/driver/spi/spi_bk7231n.c[0m 
+2026-07-21T20:24:23.6985283Z   [0;32mCC   beken378/driver/spi/spi_flash.c[0m 
+2026-07-21T20:24:23.7105089Z   [0;32mCC   beken378/driver/spi/spi_master_bk7231n.c[0m 
+2026-07-21T20:24:23.7134772Z   [0;32mCC   beken378/driver/spi/spi_master_dma_bk7231n.c[0m 
+2026-07-21T20:24:23.8178695Z   [0;32mCC   beken378/driver/spi/spi_slave_dma_bk7231n.c[0m 
+2026-07-21T20:24:23.8320103Z   [0;32mCC   beken378/driver/spi/spi_slave_bk7231n.c[0m 
+2026-07-21T20:24:23.8754828Z   [0;32mCC   beken378/func/func.c[0m 
+2026-07-21T20:24:23.9625298Z   [0;32mCC   beken378/func/usb_plug/usb_plug.c[0m 
+2026-07-21T20:24:24.0515280Z   [0;32mCC   beken378/func/security/security_func.c[0m 
+2026-07-21T20:24:24.0572344Z   [0;32mCC   beken378/func/joint_up/role_launch.c[0m 
+2026-07-21T20:24:24.0791212Z   [0;32mCC   beken378/func/ntp/ntp.c[0m 
+2026-07-21T20:24:24.0934907Z   [0;32mCC   beken378/func/rtc/rtc.c[0m 
+2026-07-21T20:24:24.1595174Z   [0;32mCC   beken378/func/rtc/soft_rtc.c[0m 
+2026-07-21T20:24:24.2015148Z   [0;32mCC   beken378/func/rtc/rtc_time.c[0m 
+2026-07-21T20:24:24.2119781Z   [0;32mCC   beken378/func/misc/fake_clock.c[0m 
+2026-07-21T20:24:24.2139077Z   [0;32mCC   beken378/func/misc/pseudo_random.c[0m 
+2026-07-21T20:24:24.2675249Z   [0;32mCC   beken378/func/misc/target_util.c[0m 
+2026-07-21T20:24:24.3415304Z   [0;32mCC   beken378/func/misc/start_type.c[0m 
+2026-07-21T20:24:24.3595194Z   [0;32mCC   beken378/func/misc/soft_encrypt.c[0m 
+2026-07-21T20:24:24.3675036Z   [0;32mCC   beken378/func/misc/flash_bypass.c[0m 
+2026-07-21T20:24:24.4905156Z   [0;32mCC   beken378/func/misc/mem_check.c[0m 
+2026-07-21T20:24:24.5925293Z   [0;32mCC   beken378/func/power_save/power_save.c[0m 
+2026-07-21T20:24:24.6925021Z   [0;32mCC   beken378/func/power_save/manual_ps.c[0m 
+2026-07-21T20:24:24.7074859Z   [0;32mCC   beken378/func/power_save/mcu_ps.c[0m 
+2026-07-21T20:24:24.7345187Z   [0;32mCC   beken378/func/power_save/ap_idle.c[0m 
+2026-07-21T20:24:25.1455011Z   [0;32mCC   beken378/func/saradc_intf/saradc_intf.c[0m 
+2026-07-21T20:24:25.1665006Z   [0;32mCC   beken378/func/rwnx_intf/rw_ieee80211.c[0m 
+2026-07-21T20:24:25.2665429Z   [0;32mCC   beken378/func/rwnx_intf/rw_msdu.c[0m 
+2026-07-21T20:24:25.3844968Z   [0;32mCC   beken378/func/rwnx_intf/rw_tx_buffering.c[0m 
+2026-07-21T20:24:25.4295269Z   [0;32mCC   beken378/func/rwnx_intf/rw_msg_rx.c[0m 
+2026-07-21T20:24:25.6325270Z   [0;32mCC   beken378/func/rwnx_intf/rw_msg_tx.c[0m 
+2026-07-21T20:24:25.7895334Z   [0;32mCC   beken378/func/sim_uart/gpio_uart.c[0m 
+2026-07-21T20:24:25.9845049Z   [0;32mCC   beken378/func/sim_uart/pwm_uart.c[0m 
+2026-07-21T20:24:26.0108531Z   [0;32mCC   beken378/func/spidma_intf/spidma_intf.c[0m 
+2026-07-21T20:24:26.0725275Z   [0;32mCC   beken378/func/temp_detect/temp_detect.c[0m 
+2026-07-21T20:24:26.1145130Z   [0;32mCC   beken378/func/user_driver/BkDriverFlash.c[0m 
+2026-07-21T20:24:26.1414994Z   [0;32mCC   beken378/func/user_driver/BkDriverGpio.c[0m 
+2026-07-21T20:24:26.2775169Z   [0;32mCC   beken378/func/user_driver/BkDriverI2c.c[0m 
+2026-07-21T20:24:26.3315028Z   [0;32mCC   beken378/func/user_driver/BkDriverPwm.c[0m 
+2026-07-21T20:24:26.3377239Z   [0;32mCC   beken378/func/user_driver/BkDriverUart.c[0m 
+2026-07-21T20:24:26.3904769Z   [0;32mCC   beken378/func/user_driver/BkDriverWdg.c[0m 
+2026-07-21T20:24:26.4617920Z   [0;32mCC   beken378/func/user_driver/BkDriverRng.c[0m 
+2026-07-21T20:24:26.4784869Z   [0;32mCC   beken378/func/user_driver/BkDriverTimer.c[0m 
+2026-07-21T20:24:26.4989057Z   [0;32mCC   beken378/func/wlan_ui/wlan_cli.c[0m 
+2026-07-21T20:24:26.5165377Z   [0;32mCC   beken378/func/wlan_ui/bk_peripheral_test.c[0m 
+2026-07-21T20:24:26.5635176Z   [0;32mCC   beken378/func/utf8/conv_utf8.c[0m 
+2026-07-21T20:24:26.5935309Z   [0;32mCC   beken378/func/power_save/low_voltage_ps.c[0m 
+2026-07-21T20:24:26.6545531Z   [0;32mCC   beken378/func/power_save/low_voltage_compensation.c[0m 
+2026-07-21T20:24:26.6765313Z   [0;32mCC   beken378/func/wlan_ui/wlan_ui.c[0m 
+2026-07-21T20:24:26.8255278Z beken378/func/wlan_ui/wlan_cli.c:5804:33: warning: 'ate_clis' defined but not used [-Wunused-const-variable=]
+2026-07-21T20:24:26.8284765Z  5804 | static const struct cli_command ate_clis[] =
+2026-07-21T20:24:26.8294606Z       |                                 ^~~~~~~~
+2026-07-21T20:24:26.8325329Z beken378/func/wlan_ui/wlan_cli.c:5761:33: warning: 'user_clis' defined but not used [-Wunused-const-variable=]
+2026-07-21T20:24:26.8344652Z  5761 | static const struct cli_command user_clis[] =
+2026-07-21T20:24:26.8374477Z       |                                 ^~~~~~~~~
+2026-07-21T20:24:26.8384888Z beken378/func/wlan_ui/wlan_cli.c:5444:13: warning: 'adc_command' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8414710Z  5444 | static void adc_command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8434381Z       |             ^~~~~~~~~~~
+2026-07-21T20:24:26.8464725Z beken378/func/wlan_ui/wlan_cli.c:4067:13: warning: 'cmd_wifi_mgmt_filter' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8474584Z  4067 | static void cmd_wifi_mgmt_filter(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8504222Z       |             ^~~~~~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8535259Z beken378/func/wlan_ui/wlan_cli.c:1914:13: warning: 'reg_write_read_test' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8536392Z  1914 | static void reg_write_read_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8537117Z       |             ^~~~~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8537765Z beken378/func/wlan_ui/wlan_cli.c:1841:13: warning: 'phy_cca_test' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8539132Z  1841 | static void phy_cca_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8539725Z       |             ^~~~~~~~~~~~
+2026-07-21T20:24:26.8540339Z beken378/func/wlan_ui/wlan_cli.c:1769:13: warning: 'efuse_mac_cmd_test' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8541265Z  1769 | static void efuse_mac_cmd_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8541914Z       |             ^~~~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8542593Z beken378/func/wlan_ui/wlan_cli.c:1743:13: warning: 'efuse_cmd_test' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8543544Z  1743 | static void efuse_cmd_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8544394Z       |             ^~~~~~~~~~~~~~
+2026-07-21T20:24:26.8545054Z beken378/func/wlan_ui/wlan_cli.c:1698:13: warning: 'Uart_command_test' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8546056Z  1698 | static void Uart_command_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8546719Z       |             ^~~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8547403Z beken378/func/wlan_ui/wlan_cli.c:1603:13: warning: 'flash_command_test' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8548399Z  1603 | static void flash_command_test(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8549064Z       |             ^~~~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8549753Z beken378/func/wlan_ui/wlan_cli.c:1509:13: warning: 'Gpio_int_Command' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8550744Z  1509 | static void Gpio_int_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8551398Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8552040Z beken378/func/wlan_ui/wlan_cli.c:1472:13: warning: 'Gpio_op_Command' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8553011Z  1472 | static void Gpio_op_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8553868Z       |             ^~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8554578Z beken378/func/wlan_ui/wlan_cli.c:1463:13: warning: 'cli_exit_handler' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8555631Z  1463 | static void cli_exit_handler(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8556337Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8557042Z beken378/func/wlan_ui/wlan_cli.c:1442:13: warning: 'echo_cmd_handler' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8558373Z  1442 | static void echo_cmd_handler(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8559107Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8559815Z beken378/func/wlan_ui/wlan_cli.c:603:13: warning: 'uptime_Command' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8560866Z   603 | static void uptime_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8561545Z       |             ^~~~~~~~~~~~~~
+2026-07-21T20:24:26.8562246Z beken378/func/wlan_ui/wlan_cli.c:585:13: warning: 'partShow_Command' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8563286Z   585 | static void partShow_Command(char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv)
+2026-07-21T20:24:26.8594539Z       |             ^~~~~~~~~~~~~~~~
+2026-07-21T20:24:26.8595311Z beken378/func/wlan_ui/wlan_cli.c:560:13: warning: 'task_Command' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8596363Z   560 | static void task_Command( char *pcWriteBuffer, int xWriteBufferLen, int argc, char **argv )
+2026-07-21T20:24:26.8597091Z       |             ^~~~~~~~~~~~
+2026-07-21T20:24:26.8597755Z beken378/func/wlan_ui/wlan_cli.c:514:13: warning: 'cli_main' defined but not used [-Wunused-function]
+2026-07-21T20:24:26.8598905Z   514 | static void cli_main( uint32_t data )
+2026-07-21T20:24:26.8599334Z       |             ^~~~~~~~
+2026-07-21T20:24:26.8859239Z beken378/func/power_save/low_voltage_ps.c: In function 'lv_ps_cal_tick':
+2026-07-21T20:24:26.8904914Z beken378/func/power_save/low_voltage_ps.c:763:9: warning: implicit declaration of function 'fclk_cal_tick'; did you mean 'fclk_get_tick'? [-Wimplicit-function-declaration]
+2026-07-21T20:24:26.8934210Z   763 |         fclk_cal_tick();
+2026-07-21T20:24:26.8964115Z       |         ^~~~~~~~~~~~~
+2026-07-21T20:24:26.8994153Z       |         fclk_get_tick
+2026-07-21T20:24:27.1564981Z   [0;32mCC   beken378/func/net_param_intf/net_param.c[0m 
+2026-07-21T20:24:27.2044997Z   [0;32mCC   beken378/func/base64/base_64.c[0m 
+2026-07-21T20:24:27.2165334Z   [0;32mCC   beken378/func/airkiss/bk_airkiss.c[0m 
+2026-07-21T20:24:27.3341885Z   [0;32mCC   beken378/func/airkiss/airkiss_main.c[0m 
+2026-07-21T20:24:27.3649976Z   [0;32mCC   beken378/func/airkiss/airkiss_pingpong.c[0m 
+2026-07-21T20:24:27.4905128Z   [0;32mCC   beken378/func/force_sleep/force_mac_ps.c[0m 
+2026-07-21T20:24:27.5115114Z   [0;32mCC   beken378/func/force_sleep/force_mcu_ps.c[0m 
+2026-07-21T20:24:27.5234978Z   [0;32mCC   beken378/func/libc/errno/lib_errno.c[0m 
+2026-07-21T20:24:27.5435009Z   [0;32mCC   beken378/func/libc/math/lib_exp.c[0m 
+2026-07-21T20:24:27.5827853Z   [0;32mCC   beken378/func/libc/math/lib_libexpi.c[0m 
+2026-07-21T20:24:27.6564892Z   [0;32mCC   beken378/func/libc/math/lib_log.c[0m 
+2026-07-21T20:24:27.6744647Z   [0;32mCC   beken378/func/libc/math/lib_pow.c[0m 
+2026-07-21T20:24:27.6835016Z   [0;32mCC   beken378/func/libc/stdio/lib_libvscanf.c[0m 
+2026-07-21T20:24:27.7067502Z   [0;32mCC   beken378/func/libc/stdio/lib_memsistream.c[0m 
+2026-07-21T20:24:27.7438514Z   [0;32mCC   beken378/func/libc/stdio/lib_meminstream.c[0m 
+2026-07-21T20:24:27.7476565Z   [0;32mCC   beken378/func/libc/stdio/lib_sscanf.c[0m 
+2026-07-21T20:24:27.8156309Z   [0;32mCC   beken378/func/libc/stdio/lib_vsscanf.c[0m 
+2026-07-21T20:24:27.8395062Z   [0;32mCC   beken378/func/libc/stdlib/lib_checkbase.c[0m 
+2026-07-21T20:24:27.8485024Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtod.c[0m 
+2026-07-21T20:24:27.9184139Z   [0;32mCC   beken378/func/libc/stdlib/lib_qsort.c[0m 
+2026-07-21T20:24:27.9532347Z   [0;32mCC   beken378/func/libc/stdlib/lib_srand.c[0m 
+2026-07-21T20:24:28.0309170Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtol.c[0m 
+2026-07-21T20:24:28.0425111Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtoll.c[0m 
+2026-07-21T20:24:28.0484835Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtoul.c[0m 
+2026-07-21T20:24:28.0694969Z   [0;32mCC   beken378/func/libc/stdlib/lib_strtoull.c[0m 
+2026-07-21T20:24:28.2042246Z   [0;32mCC   beken378/func/libc/string/lib_isbasedigit.c[0m 
+2026-07-21T20:24:28.2125129Z   [0;32mCC   beken378/func/ble_wifi_exchange/ble_wifi_port.c[0m 
+2026-07-21T20:24:28.2274929Z   [0;32mCC   beken378/func/bk7011_cal/bk_cal_pub.c[0m 
+2026-07-21T20:24:28.2464746Z   [0;32mCC   beken378/func/wpa_supplicant_2_9/src/crypto/crypto_mbedtls.c[0m 
+2026-07-21T20:24:28.3195150Z   [0;32mCC   beken378/func/bk_player/test/player_test.c[0m 
+2026-07-21T20:24:28.3285048Z   [0;32mCC   beken378/app/app.c[0m 
+2026-07-21T20:24:28.3765068Z   [0;32mCC   beken378/app/ate_app.c[0m 
+2026-07-21T20:24:28.4395072Z   [0;32mCC   beken378/app/config/param_config.c[0m 
+2026-07-21T20:24:28.5185080Z   [0;32mCC   beken378/app/standalone-ap/sa_ap.c[0m 
+2026-07-21T20:24:28.9115042Z   [0;32mCC   beken378/app/standalone-station/sa_station.c[0m 
+2026-07-21T20:24:28.9254952Z   [0;32mCC   beken378/demo/ieee802_11_demo.c[0m 
+2026-07-21T20:24:28.9311689Z   [0;32mAS   beken378/driver/entry/boot_handlers.S[0m 
+2026-07-21T20:24:28.9345108Z   [0;32mCC   fixes/blank.c[0m 
+2026-07-21T20:24:28.9600695Z   [0;32mAS   beken378/driver/entry/boot_vectors.S[0m 
+2026-07-21T20:24:28.9874493Z   [0;32mAR   libapp.a[0m 
+2026-07-21T20:24:29.0035318Z   [0;32mAR   beken378/lib/libwpa.a[0m 
+2026-07-21T20:24:29.0064650Z   [0;32mAR   libos.a[0m 
+2026-07-21T20:24:29.0184906Z   [0;32mAR   liblwip.a[0m 
+2026-07-21T20:24:29.0425008Z   [0;32mAR   libmbedtls.a[0m 
+2026-07-21T20:24:29.0805209Z   [0;32mAR   libdriver.a[0m 
+2026-07-21T20:24:29.1024972Z   [0;32mAR   libfunc.a[0m 
+2026-07-21T20:24:29.1324964Z   [0;32mAR   libsrc_s.a[0m 
+2026-07-21T20:24:29.3785022Z   [0;32mAR   libmisc.a[0m 
+2026-07-21T20:24:29.3829927Z   [0;32mLD   ./out/bk7238.elf[0m 
+2026-07-21T20:24:31.0464940Z /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk/toolchain/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: /tmp/ccRSBzKt.ltrans0.ltrans.o: in function `IR_Send_Cmd':
+2026-07-21T20:24:31.0466078Z <artificial>:(.text+0x3876): undefined reference to `__gnu_thumb1_case_si'
+2026-07-21T20:24:31.1300946Z collect2: error: ld returned 1 exit status
+2026-07-21T20:24:31.1306173Z make[2]: *** [application.mk:644: application] Error 1
+2026-07-21T20:24:31.1306749Z make[2]: Leaving directory '/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk'
+2026-07-21T20:24:31.1315084Z make[1]: *** [Makefile:157: bk7238] Error 2
+2026-07-21T20:24:31.1315821Z make[1]: Leaving directory '/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/beken_freertos_sdk'
+2026-07-21T20:24:31.1325176Z Open file ./out/bsp.bin failed
+2026-07-21T20:24:31.1329338Z make: *** [Makefile:710: OpenBK7238] Error 255
+2026-07-21T20:24:31.1351132Z ##[error]Process completed with exit code 2.
+2026-07-21T20:24:31.1495360Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-21T20:24:31.1497617Z Post job cleanup.
+2026-07-21T20:24:31.2408009Z [command]/usr/bin/git version
+2026-07-21T20:24:31.2455619Z git version 2.54.0
+2026-07-21T20:24:31.2498687Z Temporarily overriding HOME='/home/runner/work/_temp/90efad3d-0748-45aa-8bb1-579083a56d8d' before making global git config changes
+2026-07-21T20:24:31.2500277Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-21T20:24:31.2505285Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/OpenBK7231T_App/OpenBK7231T_App
+2026-07-21T20:24:31.2555681Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-21T20:24:31.2599065Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-21T20:24:31.2876591Z Entering 'libraries/berry'
+2026-07-21T20:24:31.2936157Z Entering 'sdk/beken_freertos_sdk'
+2026-07-21T20:24:31.3041085Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-21T20:24:31.3075917Z http.https://github.com/.extraheader
+2026-07-21T20:24:31.3102229Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-21T20:24:31.3146739Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-21T20:24:31.3437641Z Entering 'libraries/berry'
+2026-07-21T20:24:31.3503063Z Entering 'sdk/beken_freertos_sdk'
+2026-07-21T20:24:31.3594268Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T20:24:31.3668838Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-21T20:24:31.3946246Z Entering 'libraries/berry'
+2026-07-21T20:24:31.3968396Z file:/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/libraries/berry/config	remote.origin.url
+2026-07-21T20:24:31.3991971Z Entering 'sdk/beken_freertos_sdk'
+2026-07-21T20:24:31.4016044Z file:/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/sdk/beken_freertos_sdk/config	remote.origin.url
+2026-07-21T20:24:31.4073279Z [command]/usr/bin/git config --file /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/libraries/berry/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T20:24:31.4114707Z [command]/usr/bin/git config --file /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/.git/modules/sdk/beken_freertos_sdk/config --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-21T20:24:31.4295740Z Cleaning up orphan processes
+2026-07-21T20:24:31.4591428Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
