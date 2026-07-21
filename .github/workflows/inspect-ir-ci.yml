@@ -16,26 +16,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect BK7238 IR job
+      - name: Capture BK7238 IR failure
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '29866514887'
+          FAILED_JOB_ID: '88757598045'
         shell: bash
         run: |
           set -euo pipefail
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
-          curl --fail --silent --show-error \
+          log_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${FAILED_JOB_ID}/logs"
+          curl --fail --location --silent --show-error \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$api" > "$RUNNER_TEMP/jobs.json"
-          jq -r '.jobs[] | select(.name == "Build (OpenBK7238, irRemoteESP)") | [.id, .name, .status, (.conclusion // "-")] | @tsv' "$RUNNER_TEMP/jobs.json" > .github/last-bk7238-ir-job.txt
-      - name: Commit summary
+            "$log_api" > "$RUNNER_TEMP/failed-job.log"
+          {
+            grep -E -i -C 5 '(^|[^[:alpha:]])(error:|fatal:|undefined reference|collect2:|make(\[[0-9]+\])?: \*\*\*)' "$RUNNER_TEMP/failed-job.log" || true
+            echo
+            echo '--- final 120 lines ---'
+            tail -n 120 "$RUNNER_TEMP/failed-job.log"
+          } > .github/current-bk7238-failure-log.txt
+      - name: Commit excerpt
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "openai-agent"
           git config user.email "openai-agent@users.noreply.github.com"
-          git add .github/last-bk7238-ir-job.txt
-          git commit -m "ci: record corrected BK7238 IR job status"
+          git add .github/current-bk7238-failure-log.txt
+          git commit -m "ci: record corrected BK7238 failure"
           git push
