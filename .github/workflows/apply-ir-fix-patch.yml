@@ -1,0 +1,65 @@
+name: Render isolated IR fix patch
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/ir-fix.patch
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out patch runner
+        uses: actions/checkout@v4
+        with:
+          path: runner
+
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+          path: target
+
+      - name: Validate and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch_file="$GITHUB_WORKSPACE/runner/.github/ir-fix.patch"
+          commit_message="$(sed -n '1s/^# COMMIT: //p' "$patch_file")"
+          expected_base="$(sed -n '2s/^# BASE: //p' "$patch_file")"
+          actual_base="$(git -C "$GITHUB_WORKSPACE/target" rev-parse HEAD)"
+
+          test -n "$commit_message"
+          test -n "$expected_base"
+          test "$actual_base" = "$expected_base"
+
+          tail -n +3 "$patch_file" > "$RUNNER_TEMP/ir-fix.diff"
+          git -C "$GITHUB_WORKSPACE/target" apply --check "$RUNNER_TEMP/ir-fix.diff"
+          git -C "$GITHUB_WORKSPACE/target" apply "$RUNNER_TEMP/ir-fix.diff"
+          git -C "$GITHUB_WORKSPACE/target" diff --check
+
+          mkdir -p "$GITHUB_WORKSPACE/runner/output"
+          git -C "$GITHUB_WORKSPACE/target" diff --name-only > "$RUNNER_TEMP/changed-files.txt"
+          test -s "$RUNNER_TEMP/changed-files.txt"
+          while IFS= read -r file; do
+            mkdir -p "$GITHUB_WORKSPACE/runner/output/$(dirname "$file")"
+            cp "$GITHUB_WORKSPACE/target/$file" "$GITHUB_WORKSPACE/runner/output/$file"
+          done < "$RUNNER_TEMP/changed-files.txt"
+
+          printf '%s\n' "$commit_message" > "$GITHUB_WORKSPACE/runner/output/.agent-commit-message"
+          printf '%s\n' "$expected_base" > "$GITHUB_WORKSPACE/runner/output/.agent-base-sha"
+          cp "$RUNNER_TEMP/changed-files.txt" "$GITHUB_WORKSPACE/runner/output/.agent-changed-files"
+
+      - name: Upload rendered files
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-ir-fix
+          path: runner/output
+          if-no-files-found: error
+          retention-days: 1
