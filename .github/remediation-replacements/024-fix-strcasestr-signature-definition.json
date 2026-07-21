@@ -1,0 +1,6 @@
+{
+  "path": "src/new_common.c",
+  "old": "const char* strcasestr(const char* str1, const char* str2)",
+  "new": "char* strcasestr(const char* str1, const char* str2)",
+  "expected_count": 1
+}
