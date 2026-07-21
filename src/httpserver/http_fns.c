@@ -3495,7 +3495,7 @@ void OTA_RequestDownloadFromHTTP(const char* s) {
 	if(ret != -1) ota_done(1);
 	else ota_done(0);
 #elif PLATFORM_W600 || PLATFORM_W800
-	t_http_fwup(s);
+	t_http_fwup((char *)s);
 #elif PLATFORM_XRADIO
 	uint32_t* verify_value;
 	ota_verify_t      verify_type;
