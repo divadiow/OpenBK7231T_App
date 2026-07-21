@@ -35,6 +35,7 @@
 #include <bl602_glb.h>  //  For BL602 Global Register Standard Driver
 #include <wifi_mgmr_ext.h> //For BL602 WiFi AP Scan
 #elif PLATFORM_W600 || PLATFORM_W800
+extern int t_http_fwup(char *url);
 
 #elif PLATFORM_XRADIO
 #include <image/flash.h>
