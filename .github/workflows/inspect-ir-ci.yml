@@ -1,0 +1,45 @@
+name: Inspect IR validation workflow
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/inspect-ir-ci.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect workflow job conclusions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: '29864189864'
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api" > "$RUNNER_TEMP/jobs.json"
+          {
+            echo "run_id=${RUN_ID}"
+            jq -r '.jobs[] | [.id, .name, .status, (.conclusion // "-")] | @tsv' "$RUNNER_TEMP/jobs.json"
+          } > .github/last-ir-ci-summary.txt
+          jq -r '.jobs[] | select(.conclusion != null and (.conclusion != "success" and .conclusion != "skipped")) | [.id, .name, .conclusion] | @tsv' "$RUNNER_TEMP/jobs.json" > .github/last-ir-ci-failures.txt
+      - name: Commit summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add .github/last-ir-ci-summary.txt .github/last-ir-ci-failures.txt
+          git commit -m "ci: record IR workflow failure summary"
+          git push
