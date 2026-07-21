@@ -1,0 +1,143 @@
+name: Apply IR state-length validation
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/apply-ir-fix3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Apply protocol-aware state validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/driver/drv_ir_new.cpp')
+          source = path.read_text()
+          assert 'parseBoundedDecimal' in source
+          assert 'transactionCount' in source
+          assert 'getStagedItemCount' not in source
+          assert 'isValidStatePayloadLength' not in source
+
+          def insert_after_function(text, signature, addition):
+              start = text.index(signature)
+              brace = text.index('{', start)
+              depth = 0
+              for index in range(brace, len(text)):
+                  if text[index] == '{':
+                      depth += 1
+                  elif text[index] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          end = index + 1
+                          return text[:end] + addition + text[end:]
+              raise RuntimeError('unterminated function: ' + signature)
+
+          source = insert_after_function(
+              source,
+              '\tbool isBusy() const',
+              '\n\n\tuint16_t getStagedItemCount() const {\n\t\treturn transactionCount;\n\t}')
+
+          validation = '''
+
+          static bool isValidStatePayloadLength(const decode_type_t protocol,
+          \tconst uint16_t bits, const uint16_t nbytes) {
+          \tif (!nbytes || nbytes != (bits + 7) / 8) return false;
+
+          \t// Carrier AC84 carries four data bits in its first byte, followed by ten
+          \t// complete bytes. It is the only supported state protocol that is not byte
+          \t// aligned.
+          \tif (protocol == decode_type_t::CARRIER_AC84)
+          \t\treturn bits == kCarrierAc84Bits;
+          \tif (bits & 7) return false;
+
+          \t// Protocols with more than one valid state frame size.
+          \tif (protocol == decode_type_t::ARGO)
+          \t\treturn bits == 32 || bits == 96;
+          \tif (protocol == decode_type_t::CORONA_AC)
+          \t\treturn bits == 56 || bits == 168;
+          \tif (protocol == decode_type_t::DAIKIN)
+          \t\treturn bits == 216 || bits == 280;
+          \tif (protocol == decode_type_t::FUJITSU_AC)
+          \t\treturn bits == 48 || bits == 56 || bits == 120 || bits == 128;
+          \tif (protocol == decode_type_t::HITACHI_AC3)
+          \t\treturn bits == 120 || bits == 136 || bits == 168 ||
+          \t\t\tbits == 184 || bits == 216;
+          \tif (protocol == decode_type_t::PANASONIC_AC)
+          \t\treturn bits == 128 || bits == 216;
+          \tif (protocol == decode_type_t::SAMSUNG_AC)
+          \t\treturn bits == 112 || bits == 168;
+          \tif (protocol == decode_type_t::TOSHIBA_AC)
+          \t\treturn bits >= 56 && bits <= 80;
+
+          \t// MWM is intentionally variable length. The per-frame staging check below
+          \t// still rejects lengths for which the upstream sender emits nothing.
+          \tif (protocol == decode_type_t::MWM) return true;
+
+          \tconst uint16_t expectedBits = IRsend::defaultBits(protocol);
+          \treturn expectedBits && bits == expectedBits;
+          }
+          '''
+          source = insert_after_function(source, 'static bool parseBoundedDecimal', validation)
+
+          old = '''\t\t\t\t\tif (!pIRsend->beginSendTransaction()) {
+          \t\t\t\t\t\tADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
+          \t\t\t\t\t\treturn CMD_RES_ERROR;
+          \t\t\t\t\t}
+          \t\t\t\t\tif (bits > 64 || hasACState(protocol))
+          '''
+          new = '''\t\t\t\t\tconst bool statePayload = bits > 64 || hasACState(protocol);
+          \t\t\t\t\tif (statePayload && !isValidStatePayloadLength(protocol, bits, nbytes)) {
+          \t\t\t\t\t\tADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid state length for %s: bits %d bytes %d", args, (int)bits, (int)nbytes);
+          \t\t\t\t\t\treturn CMD_RES_BAD_ARGUMENT;
+          \t\t\t\t\t}
+          \t\t\t\t\tif (!pIRsend->beginSendTransaction()) {
+          \t\t\t\t\t\tADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
+          \t\t\t\t\t\treturn CMD_RES_ERROR;
+          \t\t\t\t\t}
+          \t\t\t\t\tif (statePayload)
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''\t\t\t\t\t\tfor (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
+          \t\t\t\t\t\t\tif (!pIRsend->send(protocol,state,nbytes)) {
+          \t\t\t\t\t\t\t\tsent = false;
+          \t\t\t\t\t\t\t\tbreak;
+          \t\t\t\t\t\t\t}
+          '''
+          new = '''\t\t\t\t\t\tfor (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
+          \t\t\t\t\t\t\tconst uint16_t stagedBefore = pIRsend->getStagedItemCount();
+          \t\t\t\t\t\t\tif (!pIRsend->send(protocol,state,nbytes) ||
+          \t\t\t\t\t\t\t\tpIRsend->getStagedItemCount() == stagedBefore) {
+          \t\t\t\t\t\t\t\tsent = false;
+          \t\t\t\t\t\t\t\tbreak;
+          \t\t\t\t\t\t\t}
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+          path.write_text(source)
+          PY
+
+          git diff --check
+          test -n "$(git diff --name-only)"
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add src/driver/drv_ir_new.cpp
+          git commit -m "ir: validate protocol state lengths"
+          git push origin HEAD:irremotesp8266_290
