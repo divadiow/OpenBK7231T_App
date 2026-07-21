@@ -1,19 +1,72 @@
-# COMMIT: ir: disable jump tables in Beken command parser
-# BASE: 639b9abfbd8b0dc64fd30572048c8f42f1cee8c6
+# COMMIT: ir: validate command bit and repeat counts
+# BASE: dafde490add82e43148f2cb8ab2a76669b093640
 --- a/src/driver/drv_ir_new.cpp
 +++ b/src/driver/drv_ir_new.cpp
-@@ -457,7 +457,13 @@ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uin
- 	return true;
+@@ -422,6 +422,30 @@
+ 	return -1;
  }
  
--extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
-+#if PLATFORM_BEKEN && defined(__GNUC__)
-+#define IR_SEND_CMD_OPT __attribute__((optimize("no-jump-tables")))
-+#else
-+#define IR_SEND_CMD_OPT
-+#endif
++static const uint16_t kIRSendMaxStateBytes = 64;
++static const uint16_t kIRSendMaxBits = kIRSendMaxStateBytes * 8;
++static const uint8_t kIRSendMaxRepeats = 10;
 +
-+extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
- 	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
- 	char args[384];
- 	strncpy(args, args_in, sizeof(args) - 1);
++static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
++	const uint32_t maxValue, uint32_t *result) {
++	if (!text || !text[0] || !result || minValue > maxValue) return false;
++
++	uint32_t value = 0;
++	for (const char *cursor = text; *cursor; cursor++) {
++		if (*cursor < '0' || *cursor > '9') return false;
++		const uint32_t digit = (uint32_t)(*cursor - '0');
++		if (value > maxValue / 10 ||
++			(value == maxValue / 10 && digit > maxValue % 10)) {
++			return false;
++		}
++		value = value * 10 + digit;
++	}
++	if (value < minValue) return false;
++
++	*result = value;
++	return true;
++}
++
+ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
+ 
+ 
+@@ -492,21 +516,32 @@
+ 			if(*p==',')
+ 			{
+ 				*p='\0';
+-				uint16_t bits = (uint16_t)strtol(_bits,NULL,10);
++				uint32_t bitsValue = 0;
++				if (!parseBoundedDecimal(_bits, 1, kIRSendMaxBits, &bitsValue)) {
++					ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid bit count '%s' (expected 1-%u)", _bits, (unsigned int)kIRSendMaxBits);
++					return CMD_RES_BAD_ARGUMENT;
++				}
++				const uint16_t bits = (uint16_t)bitsValue;
+ 				p++;
+ 				if(protocol!=decode_type_t::UNKNOWN && pIRsend)
+ 				{
+ 					int repeats=0;
+ 					char *_data=p;
+-					uint8_t state[64];
++					uint8_t state[kIRSendMaxStateBytes];
+ 					uint16_t nbytes = 0;
+ 					const char *payloadEnd = NULL;
+ 					if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
+ 						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
+ 						return CMD_RES_BAD_ARGUMENT;
+ 					}
+-					if(payloadEnd && *payloadEnd==',')
+-						repeats=strtol(payloadEnd+1,NULL,10);
++					if(payloadEnd && *payloadEnd==',') {
++						uint32_t repeatValue = 0;
++						if (!parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats, &repeatValue)) {
++							ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid repeat count '%s' (expected 0-%u)", payloadEnd + 1, (unsigned int)kIRSendMaxRepeats);
++							return CMD_RES_BAD_ARGUMENT;
++						}
++						repeats = (int)repeatValue;
++					}
+ 					if (!pIRsend->beginSendTransaction()) {
+ 
+ 
