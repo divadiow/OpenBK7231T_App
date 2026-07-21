@@ -1,0 +1,6 @@
+{
+  "path": "src/httpserver/http_fns.c",
+  "old": "#elif PLATFORM_W600 || PLATFORM_W800\n\n#elif PLATFORM_XRADIO",
+  "new": "#elif PLATFORM_W600 || PLATFORM_W800\nextern int t_http_fwup(char *url);\n\n#elif PLATFORM_XRADIO",
+  "expected_count": 1
+}
