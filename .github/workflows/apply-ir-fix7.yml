@@ -1,0 +1,169 @@
+name: Apply transactional IR carrier settings
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/apply-ir-fix7.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Stage carrier settings and suppress zero durations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/driver/drv_ir_new.cpp')
+          source = path.read_text()
+          assert 'static uint32_t ir_sample_count' not in source  # lives in IRrecv.cpp
+          assert 'gIRUseVirtualMicros' in source
+          assert 'transactionFrequencyHz' not in source
+
+          old = '''\tmyIRsend(uint_fast8_t aSendPin) :IRsend(aSendPin) {
+          \t\tsendPin = aSendPin;
+          \t\tour_us = 0;
+          \t\tour_ms = 0;
+          \t\tresetsendqueue();
+          \t}
+          '''
+          new = '''\tmyIRsend(uint_fast8_t aSendPin) :IRsend(aSendPin) {
+          \t\tsendPin = aSendPin;
+          \t\tour_us = 0;
+          \t\tour_ms = 0;
+          \t\tpwmfrequency = 38000;
+          \t\tpwmduty = 50;
+          \t\ttransactionFrequencyHz = pwmfrequency;
+          \t\ttransactionDuty = (uint8_t)pwmduty;
+          \t\tresetsendqueue();
+          \t}
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''\t\ttransactionActive = true;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\tgIRVirtualMicros = 0;
+          \t\tgIRUseVirtualMicros = true;
+          '''
+          new = '''\t\ttransactionActive = true;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttransactionFrequencyHz = pwmfrequency;
+          \t\ttransactionDuty = (uint8_t)pwmduty;
+          \t\tgIRVirtualMicros = 0;
+          \t\tgIRUseVirtualMicros = true;
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''\tuint16_t mark(uint16_t aMarkMicros) {
+          \t\tIR_AdvanceVirtualMicros(aMarkMicros);
+          '''
+          new = '''\tuint16_t mark(uint16_t aMarkMicros) {
+          \t\tif (!aMarkMicros) return 0;
+          \t\tIR_AdvanceVirtualMicros(aMarkMicros);
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''\tvoid space(uint32_t aMarkMicros) {
+          \t\tIR_AdvanceVirtualMicros(aMarkMicros);
+          '''
+          new = '''\tvoid space(uint32_t aMarkMicros) {
+          \t\tif (!aMarkMicros) return;
+          \t\tIR_AdvanceVirtualMicros(aMarkMicros);
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          start = source.index('\tvoid enableIROut(uint32_t freq, uint8_t duty=50)')
+          brace = source.index('{', start)
+          depth = 0
+          end = None
+          for index in range(brace, len(source)):
+              if source[index] == '{':
+                  depth += 1
+              elif source[index] == '}':
+                  depth -= 1
+                  if depth == 0:
+                      end = index + 1
+                      break
+          assert end is not None
+          replacement = '''\tvoid enableIROut(uint32_t freq, uint8_t duty=50) {
+          \t\tif (freq < 1000)  // Were we given kHz? Supports the old call usage.
+          \t\t\tfreq *= 1000;
+          \t\tADDLOG_INFO(LOG_FEATURE_IR, (char *)"enableIROut %d freq %d duty",(int)freq, (int)duty);
+          \t\tif (duty < 1)
+          \t\t\tduty = 1;
+          \t\tif (duty > 100)
+          \t\t\tduty = 100;
+
+          \t\tif (transactionActive) {
+          \t\t\ttransactionFrequencyHz = freq;
+          \t\t\ttransactionDuty = duty;
+          \t\t\treturn;
+          \t\t}
+
+          \t\tpwmfrequency = freq;
+          \t\tpwmduty = duty;
+          \t\tHAL_PIN_PWM_Start(sendPin, pwmfrequency);
+          \t}'''
+          source = source[:start] + replacement + source[end:]
+
+          old = '''\t\ttransactionActive = false;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttransactionReady = true;
+          \t\treturn true;
+          '''
+          new = '''\t\ttransactionActive = false;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\tpwmfrequency = transactionFrequencyHz;
+          \t\tpwmduty = transactionDuty;
+          \t\tHAL_PIN_PWM_Start(sendPin, pwmfrequency);
+          \t\ttransactionReady = true;
+          \t\treturn true;
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''\tuint8_t sendPin;
+          \tuint32_t pwmduty;
+          '''
+          new = '''\tuint8_t sendPin;
+          \tuint32_t pwmduty;
+          \tuint32_t pwmfrequency;
+          \tuint32_t transactionFrequencyHz;
+          \tuint8_t transactionDuty;
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          assert source.count('if (!aMarkMicros) return') == 2
+          assert source.count('HAL_PIN_PWM_Start(sendPin, pwmfrequency);') == 2
+          path.write_text(source)
+          PY
+
+          git diff --check
+          test -n "$(git diff --name-only)"
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add src/driver/drv_ir_new.cpp
+          git commit -m "ir: stage carrier settings with send transaction"
+          git push origin HEAD:irremotesp8266_290
