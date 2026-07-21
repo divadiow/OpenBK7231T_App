@@ -1,0 +1,309 @@
+name: Apply IR adapter regression tests
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/apply-ir-fix8.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Add and execute focused adapter regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e tests/ir_adapter_regression.py
+          test ! -e .github/workflows/ir-adapter-regression.yml
+          mkdir -p tests .github/workflows
+
+          cat > tests/ir_adapter_regression.py <<'PYTEST'
+          #!/usr/bin/env python3
+          """Focused behavioural and source-contract tests for the OpenBeken IR adapter."""
+
+          from __future__ import annotations
+
+          import shutil
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+
+          ROOT = Path(__file__).resolve().parents[1]
+          DRIVER_PATH = ROOT / "src/driver/drv_ir_new.cpp"
+          RECV_PATH = ROOT / "src/libraries/IRremoteESP8266/src/IRrecv.cpp"
+
+
+          def require(condition: bool, message: str) -> None:
+              if not condition:
+                  raise AssertionError(message)
+
+
+          def function_block(source: str, signature: str) -> str:
+              start = source.find(signature)
+              require(start >= 0, f"missing function signature: {signature}")
+              brace = source.find("{", start)
+              require(brace >= 0, f"missing function body: {signature}")
+              depth = 0
+              for index in range(brace, len(source)):
+                  char = source[index]
+                  if char == "{":
+                      depth += 1
+                  elif char == "}":
+                      depth -= 1
+                      if depth == 0:
+                          return source[start : index + 1]
+              raise AssertionError(f"unterminated function: {signature}")
+
+
+          def compile_and_run_parser_tests(driver: str) -> None:
+              compiler = shutil.which("c++") or shutil.which("g++")
+              require(compiler is not None, "a C++ compiler is required")
+
+              functions = "\n\n".join(
+                  function_block(driver, signature)
+                  for signature in (
+                      "static int hexNibbleValue",
+                      "static bool parseBoundedDecimal",
+                      "static bool parseHexStateBytes",
+                  )
+              )
+              harness = f"""
+          #include <cassert>
+          #include <cstdint>
+          #include <cstring>
+
+          {functions}
+
+          int main() {{
+            uint32_t value = 0;
+            assert(parseBoundedDecimal("1", 1, 512, &value) && value == 1);
+            assert(parseBoundedDecimal("512", 1, 512, &value) && value == 512);
+            assert(parseBoundedDecimal("0", 0, 10, &value) && value == 0);
+            assert(parseBoundedDecimal("10", 0, 10, &value) && value == 10);
+            assert(!parseBoundedDecimal("", 1, 512, &value));
+            assert(!parseBoundedDecimal("0", 1, 512, &value));
+            assert(!parseBoundedDecimal("513", 1, 512, &value));
+            assert(!parseBoundedDecimal("11", 0, 10, &value));
+            assert(!parseBoundedDecimal("-1", 0, 10, &value));
+            assert(!parseBoundedDecimal("+1", 0, 10, &value));
+            assert(!parseBoundedDecimal("32junk", 1, 512, &value));
+            assert(!parseBoundedDecimal("999999999999999999", 1, 512, &value));
+
+            uint8_t bytes[64] = {{0}};
+            uint16_t nbytes = 0;
+            const char *end = nullptr;
+
+            assert(parseHexStateBytes("F", 4, bytes, sizeof(bytes), &nbytes, &end));
+            assert(nbytes == 1 && bytes[0] == 0x0F && *end == '\\0');
+
+            std::memset(bytes, 0, sizeof(bytes));
+            assert(!parseHexStateBytes("F0", 4, bytes, sizeof(bytes), &nbytes, &end));
+
+            std::memset(bytes, 0, sizeof(bytes));
+            assert(parseHexStateBytes("ABC", 12, bytes, sizeof(bytes), &nbytes, &end));
+            assert(nbytes == 2 && bytes[0] == 0x0A && bytes[1] == 0xBC);
+
+            std::memset(bytes, 0, sizeof(bytes));
+            assert(!parseHexStateBytes("FABC", 12, bytes, sizeof(bytes), &nbytes, &end));
+
+            std::memset(bytes, 0, sizeof(bytes));
+            assert(parseHexStateBytes("ABC,3", 12, bytes, sizeof(bytes), &nbytes, &end));
+            assert(*end == ',');
+
+            std::memset(bytes, 0, sizeof(bytes));
+            assert(parseHexStateBytes("0011223344556677", 56, bytes, sizeof(bytes), &nbytes, &end));
+            const uint8_t expected[] = {{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}};
+            assert(nbytes == sizeof(expected));
+            assert(std::memcmp(bytes, expected, sizeof(expected)) == 0);
+
+            assert(!parseHexStateBytes("12G4", 16, bytes, sizeof(bytes), &nbytes, &end));
+            assert(!parseHexStateBytes("0", 0, bytes, sizeof(bytes), &nbytes, &end));
+            assert(!parseHexStateBytes("0", 513, bytes, sizeof(bytes), &nbytes, &end));
+            return 0;
+          }}
+          """
+
+              with tempfile.TemporaryDirectory(prefix="ir-adapter-test-") as temp_dir:
+                  temp = Path(temp_dir)
+                  source_path = temp / "parser_test.cpp"
+                  binary_path = temp / "parser_test"
+                  source_path.write_text(harness)
+                  subprocess.run(
+                      [
+                          compiler,
+                          "-std=c++11",
+                          "-Wall",
+                          "-Wextra",
+                          "-Werror",
+                          str(source_path),
+                          "-o",
+                          str(binary_path),
+                      ],
+                      check=True,
+                  )
+                  subprocess.run([str(binary_path)], check=True)
+
+
+          def check_transaction_contracts(driver: str) -> None:
+              begin = function_block(driver, "bool beginSendTransaction()")
+              commit = function_block(driver, "bool commitSendTransaction()")
+              abort = function_block(driver, "void abortSendTransaction()")
+              mark = function_block(driver, "uint16_t mark(uint16_t aMarkMicros)")
+              space = function_block(driver, "void space(uint32_t aMarkMicros)")
+              carrier = function_block(driver, "void enableIROut(uint32_t freq, uint8_t duty=50)")
+              dequeue = function_block(driver, "bool getsendqueue(int32_t *val)")
+
+              for token in (
+                  "transactionActive",
+                  "transactionReady",
+                  "timein != timeout",
+                  "currentsendtime",
+                  "transactionCount",
+              ):
+                  require(token in begin, f"begin transaction lost busy guard: {token}")
+              require("transactionFrequencyHz = pwmfrequency" in begin, "carrier is not snapshotted")
+              require("transactionDuty = (uint8_t)pwmduty" in begin, "duty is not snapshotted")
+              require("gIRUseVirtualMicros = true" in begin, "virtual send clock is not enabled")
+
+              require("gIRUseVirtualMicros = false" in commit, "commit leaves virtual clock enabled")
+              require("gIRUseVirtualMicros = false" in abort, "abort leaves virtual clock enabled")
+              require("HAL_PIN_PWM_Start(sendPin, pwmfrequency)" in commit, "commit does not apply carrier")
+              require(
+                  commit.index("HAL_PIN_PWM_Start(sendPin, pwmfrequency)")
+                  < commit.index("transactionReady = true"),
+                  "waveform became visible before carrier was applied",
+              )
+
+              require(mark.index("if (!aMarkMicros) return 0") < mark.index("IR_AdvanceVirtualMicros"),
+                      "zero marks enter timing or queue logic")
+              require(space.index("if (!aMarkMicros) return") < space.index("IR_AdvanceVirtualMicros"),
+                      "zero spaces enter timing or queue logic")
+
+              require("if (transactionActive)" in carrier, "carrier changes are not staged")
+              require("transactionFrequencyHz = freq" in carrier, "staged frequency is missing")
+              require("transactionDuty = duty" in carrier, "staged duty is missing")
+              require(
+                  carrier.index("if (transactionActive)")
+                  < carrier.index("HAL_PIN_PWM_Start(sendPin, pwmfrequency)"),
+                  "transaction carrier path can mutate live PWM",
+              )
+
+              require("if (!val) return false" in dequeue, "dequeue does not validate its output")
+              require("if (timein == timeout) return false" in dequeue, "queue-empty status regressed")
+              require("*val = times[timeout]" in dequeue, "dequeue does not return queued duration")
+
+
+          def check_validation_contracts(driver: str) -> None:
+              state_validator = function_block(driver, "static bool isValidStatePayloadLength")
+              for protocol in (
+                  "CARRIER_AC84",
+                  "ARGO",
+                  "CORONA_AC",
+                  "DAIKIN",
+                  "FUJITSU_AC",
+                  "HITACHI_AC3",
+                  "PANASONIC_AC",
+                  "SAMSUNG_AC",
+                  "TOSHIBA_AC",
+                  "MWM",
+              ):
+                  require(protocol in state_validator, f"missing state-length rule for {protocol}")
+              require("IRsend::defaultBits" in state_validator, "fixed-length fallback is missing")
+              require("nbytes != (bits + 7) / 8" in state_validator, "bit/byte consistency check is missing")
+
+              command = function_block(driver, 'extern "C" commandResult_t IR_Send_Cmd')
+              require("parseBoundedDecimal(_bits, 1, kIRSendMaxBits" in command,
+                      "bit count is not strictly bounded")
+              require("parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats" in command,
+                      "repeat count is not strictly bounded")
+              require(
+                  command.index("isValidStatePayloadLength")
+                  < command.index("beginSendTransaction"),
+                  "invalid state length can begin a send transaction",
+              )
+              require("getStagedItemCount() == stagedBefore" in command,
+                      "upstream no-op senders can still report success")
+
+
+          def check_receive_clock_contracts(driver: str, receiver: str) -> None:
+              require("IR_ISR_ResetClock(ir_periodus)" in driver,
+                      "receiver clock is not reset from the actual hardware period")
+              require("static float        ir_now" not in receiver,
+                      "unbounded floating-point receive clock returned")
+              for token in (
+                  "ir_sample_count",
+                  "ir_edge_sample",
+                  "ir_period_us_q16",
+                  "ir_timeout_samples",
+                  "ir_sample_count - ir_edge_sample",
+                  "void IR_ISR_ResetClock(float period_us)",
+              ):
+                  require(token in receiver, f"missing integer receive-clock element: {token}")
+
+
+          def main() -> None:
+              driver = DRIVER_PATH.read_text()
+              receiver = RECV_PATH.read_text()
+              compile_and_run_parser_tests(driver)
+              check_transaction_contracts(driver)
+              check_validation_contracts(driver)
+              check_receive_clock_contracts(driver, receiver)
+              print("IR adapter regression tests passed")
+
+
+          if __name__ == "__main__":
+              main()
+          PYTEST
+
+          cat > .github/workflows/ir-adapter-regression.yml <<'WORKFLOW'
+          name: IR Adapter Regression
+
+          on:
+            pull_request:
+              paths:
+                - src/driver/drv_ir_new.cpp
+                - src/libraries/IRremoteESP8266/src/IRrecv.cpp
+                - tests/ir_adapter_regression.py
+                - .github/workflows/ir-adapter-regression.yml
+            push:
+              branches:
+                - irremotesp8266_290
+              paths:
+                - src/driver/drv_ir_new.cpp
+                - src/libraries/IRremoteESP8266/src/IRrecv.cpp
+                - tests/ir_adapter_regression.py
+                - .github/workflows/ir-adapter-regression.yml
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          jobs:
+            regression:
+              runs-on: ubuntu-latest
+              steps:
+                - name: Check out source
+                  uses: actions/checkout@v4
+                - name: Run IR adapter regression tests
+                  run: python3 tests/ir_adapter_regression.py
+          WORKFLOW
+
+          python3 tests/ir_adapter_regression.py
+          git diff --check
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add tests/ir_adapter_regression.py .github/workflows/ir-adapter-regression.yml
+          git commit -m "test: cover IR adapter parsing and contracts"
+          git push origin HEAD:irremotesp8266_290
