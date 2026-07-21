@@ -237,9 +237,6 @@ static void wifi_event_handler(input_event_t* event, void* private_data)
 	switch(code)
 	{
 		case CODE_WIFI_ON_INIT_DONE:
-#if PLATFORM_BL602
-			BL602_ForceOfdmManagementRate();
-#endif
 #if PLATFORM_BL616
 			wifi_mgmr_task_start();
 #endif
@@ -373,6 +370,7 @@ void HAL_ConnectToWiFi(const char* ssid, const char* psk, obkStaticIP_t* ip)
 	if(g_powersave) wifi_mgmr_sta_ps_exit();
 
 	wifi_interface_t wifi_interface = wifi_mgmr_sta_enable();
+	BL602_ForceOfdmManagementRate();
 	wifi_mgmr_sta_connect_mid(wifi_interface,
 		(char*)ssid,
 		(char*)psk,
@@ -466,6 +464,7 @@ void HAL_FastConnectToWiFi(const char* oob_ssid, const char* connect_key, obkSta
 		if(g_powersave) wifi_mgmr_sta_ps_exit();
 		wifi_interface_t wifi_interface;
 		wifi_interface = wifi_mgmr_sta_enable();
+		BL602_ForceOfdmManagementRate();
 		wifi_mgmr_sta_connect_ext(wifi_interface, (char*)oob_ssid, (char*)connect_key, &ext_param);
 		g_bAccessPointMode = 0;
 		return;
