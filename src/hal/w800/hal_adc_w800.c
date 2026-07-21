@@ -2,6 +2,8 @@
 
 #include "../hal_adc.h"
 #include "../../new_common.h"
+#include "wm_adc.h"
+#include "wm_gpio_afsel.h"
 
 #if defined(PLATFORM_W800)
 

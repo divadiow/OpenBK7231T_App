@@ -18,6 +18,7 @@ typedef struct i2cDevice_PCF8574_s {
 	i2cDevice_t base;
 	// private PCF8574T variables
 	byte lcd_cols, lcd_rows, charsize;
+	byte initialised;
 	byte  LCD_BL_Status;     // 1 for POSITIVE control, 0 for NEGATIVE control
 	byte  pin_E;//   =    I2C_BYTE.2
 	byte  pin_RW;//  =    I2C_BYTE.1
@@ -427,9 +428,6 @@ void DRV_I2C_Commands_Init() {
 
 // addRepeatingEvent 2 -1 backlog addChannel 12 1; lcd_goto Soft 0x23 1 1; lcd_printFloat Soft 0x23 $CH12
 // addRepeatingEvent 2 -1 backlog addChannel 12 1; lcd_goto Soft 0x23 1 1; lcd_printFloat Soft 0x23 $CH12 2; lcd_print Soft 0x23 " C"
-int c = 0;
-
-
 void DRV_I2C_LCD_PCF8574_RunDevice(i2cDevice_t *dev)
 {
 	i2cDevice_PCF8574_t *lcd;
@@ -440,9 +438,9 @@ void DRV_I2C_LCD_PCF8574_RunDevice(i2cDevice_t *dev)
 	}
 	lcd = (i2cDevice_PCF8574_t*)dev;
 
-	if(c == 0){
+	if (!lcd->initialised) {
 		PCF8574_LCD_Init(lcd);
-		 delay_ms(115);
+		delay_ms(115);
 		PCF8574_LCD_Clear(lcd);
 		delay_ms(115);
 		//addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"Testing lcd" );
@@ -453,8 +451,8 @@ void DRV_I2C_LCD_PCF8574_RunDevice(i2cDevice_t *dev)
 		PCF8574_LCD_Write_String(lcd,"Elektroda.com");
 		delay_ms(115);
 		PCF8574_LCD_Close(lcd);
+		lcd->initialised = 1;
 	}
-	c++;
 
 }
 
@@ -473,6 +471,7 @@ void DRV_I2C_AddDevice_PCF8574_Internal(int busType, int address, byte lcd_cols,
 	dev->lcd_cols = lcd_cols;
 	dev->lcd_rows = lcd_rows;
 	dev->charsize = charsize;
+	dev->initialised = 0;
 	dev->LCD_BL_Status = 1;
 
 	DRV_I2C_AddNextDevice((i2cDevice_t*)dev);

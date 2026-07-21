@@ -19,6 +19,16 @@
 
 #include "obk_config.h"
 
+#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN8825
+#ifdef __cplusplus
+extern "C" {
+#endif
+void *pvPortRealloc(void *ptr, size_t size);
+#ifdef __cplusplus
+}
+#endif
+#endif
+
 typedef int OBK_Publish_Result;
 
 // Our fast/lightweight/stack-saving sprintfs?
@@ -40,6 +50,10 @@ int sprintf2(char *o, const char* fmt, ...);
 extern unsigned char hexbyte(const char* hex);
 
 void OTA_RequestDownloadFromHTTP(const char *s);
+
+#if WINDOWS || PLATFORM_W800 || PLATFORM_TXW81X
+char *strcasestr(const char *str1, const char *str2);
+#endif
 
 #if WINDOWS
 #ifndef LINUX

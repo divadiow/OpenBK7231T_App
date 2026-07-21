@@ -1,0 +1,3 @@
+Validate the current branch after the cJSON Unicode escape replacement.
+Issue: snprintf bound must cover uXXXX plus terminator.
+Target set: shared

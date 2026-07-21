@@ -9,6 +9,7 @@
 #define BERRY_CONF_H
 
 #include <assert.h>
+#include <stddef.h>
 
 /* Macro: BE_DEBUG
  * Berry interpreter debug switch.
@@ -234,7 +235,21 @@
 #define BE_EXPLICIT_ABORT abort
 #define BE_EXPLICIT_EXIT exit
 #endif
- // BK7231/RTL wraps malloc, free etc. to freertos ports. Some platforms don't do it.
+/* Berry is compiled before some platform headers expose these allocator APIs. */
+#if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H
+void *pvPortMalloc(size_t size);
+void *pvPortRealloc(void *ptr, size_t size);
+void vPortFree(void *ptr);
+#elif PLATFORM_TR6260 || PLATFORM_ECR6600
+void *os_malloc(size_t size);
+void *os_realloc(void *ptr, size_t size);
+void os_free(void *ptr);
+#endif
+#if PLATFORM_BEKEN
+void *os_realloc(void *ptr, size_t size);
+#endif
+
+// BK7231/RTL wraps malloc, free etc. to freertos ports. Some platforms don't do it.
 #if PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H
 #define BE_EXPLICIT_MALLOC pvPortMalloc
 #define BE_EXPLICIT_REALLOC pvPortRealloc

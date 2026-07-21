@@ -1,0 +1,6 @@
+## OpenW800 / default
+../sharedAppContainer/sharedApp/src/libraries/rc-switch/src/../../../new_common.h:55:13: error: conflicting declaration of C function ‘const char* strcasestr(const char*, const char*)’
+make[2]: *** [../tools/w800/rules.mk:176: ../bin/build/w800/obj/app/../sharedAppContainer/sharedApp/src/libraries/rc-switch/src/RCSwitch.o] Error 1
+make[1]: *** [tools/w800/rules.mk:158: .subdirs] Error 2
+make: *** [Makefile:535: OpenW800] Error 2
+

@@ -154,8 +154,6 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 		return http_rest_error(request, -20, "writelen < 0");
 	}
 
-	struct pbuf* p;
-
 	//The code below is based on W600 code and adopted to the differences in sdk\OpenW800\src\app\ota\wm_http_fwup.c
 	// fiexd crashing caused by not checking "writelen" before doing memcpy
 	// e.g. if more than 2 packets arrived before next loop, writelen could be > 2048 !!
@@ -215,7 +213,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 				}
 			}
 
-			p = pbuf_alloc(PBUF_TRANSPORT, actwrite + FWUP_MSG_SIZE, PBUF_REF);
+			struct pbuf* p = pbuf_alloc(PBUF_TRANSPORT, actwrite + FWUP_MSG_SIZE, PBUF_REF);
 			if (!p)
 			{
 				sprintf(error_message, "Unable to allocate memory for buffer");
@@ -272,7 +270,6 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	} while ((nRetCode == 0) && (towrite > 0) && (writelen >= 0));
 	bk_printf("Download completed (%d / %d)\n", recvLen, totalLen);
 	if (Buffer) os_free(Buffer);
-	if (p) pbuf_free(p);
 
 
 	if (nRetCode != 0)

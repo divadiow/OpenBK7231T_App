@@ -1,0 +1,3 @@
+Validate source commit 330d37947f465baa1a0a6a8e99ccfa54784d98d6.
+Issue: LittleFS platform allocator declarations.
+Target set: berry

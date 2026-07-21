@@ -1,0 +1,3 @@
+Validate source commit 43ae03245a0153ead3261f48289e5e104449872b
+Issue: IR2 timer error paths return CMD_RES_ERROR
+Target set: beken-ir

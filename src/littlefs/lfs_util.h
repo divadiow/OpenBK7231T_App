@@ -44,6 +44,9 @@
 
 #if PLATFORM_BEKEN
 #include "mem_pub.h"
+#elif PLATFORM_TR6260 || PLATFORM_ECR6600
+extern void *os_malloc(size_t size);
+extern void os_free(void *ptr);
 #elif PLATFORM_BL_NEW
 #include "mm.h"
 #define os_malloc(x) kmalloc(x, MM_FLAG_ALIGN_32BYTE);

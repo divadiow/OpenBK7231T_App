@@ -1,0 +1,1 @@
+Validate the corrected W800 HAL/API declaration cycle after aligning strcasestr with libc.

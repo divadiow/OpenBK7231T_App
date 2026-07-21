@@ -369,10 +369,14 @@ static commandResult_t CMD_LFS_Format(const void *context, const char *cmd, cons
 static commandResult_t CMD_LFS_Append_Internal(lcdPrintType_t type, bool bLine, bool bAppend, const char *args) {
 	const char *fileName;
 	const char *str;
+	char *formattedString;
 	float f;
 	int i;
-	char buffer[8];
+	int formattedLength;
+	size_t formattedSize;
+	char intBuffer[16];
 
+	formattedString = NULL;
 	Tokenizer_TokenizeString(args, 0);
 
 	if (Tokenizer_GetArgsCount() < 2) {
@@ -383,13 +387,32 @@ static commandResult_t CMD_LFS_Append_Internal(lcdPrintType_t type, bool bLine, 
 	fileName = Tokenizer_GetArg(0);
 	if (type == LCD_PRINT_FLOAT) {
 		f = Tokenizer_GetArgFloat(1);
-		snprintf(buffer, sizeof(buffer), "%f", f);
-		str = buffer;
+		formattedLength = snprintf(NULL, 0, "%f", (double)f);
+		if (formattedLength < 0) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "Failed to determine formatted float length.");
+			return CMD_RES_ERROR;
+		}
+		formattedSize = (size_t)formattedLength + 1U;
+		formattedString = (char *)malloc(formattedSize);
+		if (formattedString == NULL) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "Unable to allocate float formatting buffer.");
+			return CMD_RES_ERROR;
+		}
+		if (snprintf(formattedString, formattedSize, "%f", (double)f) != formattedLength) {
+			free(formattedString);
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "Failed to format float value.");
+			return CMD_RES_ERROR;
+		}
+		str = formattedString;
 	}
 	else if (type == LCD_PRINT_INT) {
 		i = Tokenizer_GetArgInteger(1);
-		snprintf(buffer, sizeof(buffer), "%i", i);
-		str = buffer;
+		formattedLength = snprintf(intBuffer, sizeof(intBuffer), "%i", i);
+		if ((formattedLength < 0) || ((size_t)formattedLength >= sizeof(intBuffer))) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD, "Failed to format integer value.");
+			return CMD_RES_ERROR;
+		}
+		str = intBuffer;
 	}
 	else {
 		str = Tokenizer_GetArgFrom(1);
@@ -410,7 +433,7 @@ static commandResult_t CMD_LFS_Append_Internal(lcdPrintType_t type, bool bLine, 
 		lfs_file_write(&lfs, &file, "\r\n", 2);
 	}
 	lfs_file_close(&lfs, &file);
-
+	free(formattedString);
 
 	return CMD_RES_OK;
 }

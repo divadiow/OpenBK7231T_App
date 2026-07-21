@@ -1,0 +1,13 @@
+diff --git a/src/cJSON/cJSON.c b/src/cJSON/cJSON.c
+--- a/src/cJSON/cJSON.c
++++ b/src/cJSON/cJSON.c
+@@ -1021,8 +1021,8 @@
+                 case '\t':
+                     *output_pointer = 't';
+                     break;
+                 default:
+                     /* escape and print as unicode codepoint */
+-                    snprintf((char*)output_pointer, sizeof(output_pointer), "u%04x", *input_pointer);
++                    snprintf((char*)output_pointer, 6, "u%04x", *input_pointer);
+                     output_pointer += 4;
+                     break;
