@@ -1,6 +1,0 @@
-{
-  "path": "src/new_common.h",
-  "old": "void OTA_RequestDownloadFromHTTP(const char *s);",
-  "new": "void OTA_RequestDownloadFromHTTP(const char *s);\n\n#if WINDOWS || PLATFORM_W800 || PLATFORM_TXW81X\nconst char *strcasestr(const char *str1, const char *str2);\n#endif",
-  "expected_count": 1
-}

@@ -51,6 +51,10 @@ extern unsigned char hexbyte(const char* hex);
 
 void OTA_RequestDownloadFromHTTP(const char *s);
 
+#if WINDOWS || PLATFORM_W800 || PLATFORM_TXW81X
+const char *strcasestr(const char *str1, const char *str2);
+#endif
+
 #if WINDOWS
 #ifndef LINUX
 #define DEVICENAME_PREFIX_FULL "WinTest"
