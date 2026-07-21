@@ -16,21 +16,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Cancel obsolete helper matrices
+      - name: Cancel helper branch build matrices
         env:
           GH_TOKEN: ${{ github.token }}
-          CANCEL_RUNS: '29866265992 29866386937'
+          BUILD_WORKFLOW_ID: '148636797'
+          HELPER_BRANCH: 'agent/irremote-fix-runner'
         shell: bash
         run: |
           set -euo pipefail
-          for run_id in ${CANCEL_RUNS}; do
-            curl --fail --silent --show-error -X POST \
+          : > .github/last-ir-ci-cancelled.txt
+          for status in queued in_progress; do
+            api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${BUILD_WORKFLOW_ID}/runs?branch=${HELPER_BRANCH}&status=${status}&per_page=100"
+            curl --fail --silent --show-error \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
+              "$api" > "$RUNNER_TEMP/runs-${status}.json"
+            jq -r '.workflow_runs[].id' "$RUNNER_TEMP/runs-${status}.json" | while read -r run_id; do
+              test -n "$run_id" || continue
+              printf '%s\t%s\n' "$run_id" "$status" >> .github/last-ir-ci-cancelled.txt
+              curl --fail --silent --show-error -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
+            done
           done
-          printf '%s\n' "cancelled obsolete helper runs: ${CANCEL_RUNS}" > .github/last-ir-ci-cancelled.txt
       - name: Commit summary
         shell: bash
         run: |
@@ -38,5 +49,5 @@ jobs:
           git config user.name "openai-agent"
           git config user.email "openai-agent@users.noreply.github.com"
           git add .github/last-ir-ci-cancelled.txt
-          git commit -m "ci: record cancelled helper runs"
+          git commit -m "ci: record cleared helper build queue"
           git push
