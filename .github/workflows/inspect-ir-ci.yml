@@ -8,7 +8,7 @@ on:
       - .github/workflows/inspect-ir-ci.yml
 
 permissions:
-  actions: read
+  actions: write
   contents: write
 
 jobs:
@@ -16,44 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Collect workflow job conclusions
+      - name: Cancel obsolete helper matrices
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '29864189864'
-          FAILED_JOB_ID: '88749067087'
+          CANCEL_RUNS: '29866265992 29866386937'
         shell: bash
         run: |
           set -euo pipefail
-          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100"
-          curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$api" > "$RUNNER_TEMP/jobs.json"
-          {
-            echo "run_id=${RUN_ID}"
-            jq -r '.jobs[] | [.id, .name, .status, (.conclusion // "-")] | @tsv' "$RUNNER_TEMP/jobs.json"
-          } > .github/last-ir-ci-summary.txt
-          jq -r '.jobs[] | select(.conclusion != null and (.conclusion != "success" and .conclusion != "skipped")) | [.id, .name, .conclusion] | @tsv' "$RUNNER_TEMP/jobs.json" > .github/last-ir-ci-failures.txt
-
-          log_api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${FAILED_JOB_ID}/logs"
-          curl --fail --location --silent --show-error \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$log_api" > "$RUNNER_TEMP/failed-job.log"
-          {
-            grep -E -i -C 4 '(^|[^[:alpha:]])(error:|fatal:|undefined reference|collect2:|make(\[[0-9]+\])?: \*\*\*)' "$RUNNER_TEMP/failed-job.log" || true
-            echo
-            echo '--- final 100 lines ---'
-            tail -n 100 "$RUNNER_TEMP/failed-job.log"
-          } > .github/last-ir-ci-failure-log.txt
+          for run_id in ${CANCEL_RUNS}; do
+            curl --fail --silent --show-error -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
+          done
+          printf '%s\n' "cancelled obsolete helper runs: ${CANCEL_RUNS}" > .github/last-ir-ci-cancelled.txt
       - name: Commit summary
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "openai-agent"
           git config user.email "openai-agent@users.noreply.github.com"
-          git add .github/last-ir-ci-summary.txt .github/last-ir-ci-failures.txt .github/last-ir-ci-failure-log.txt
-          git commit -m "ci: record IR workflow failure log"
+          git add .github/last-ir-ci-cancelled.txt
+          git commit -m "ci: record cancelled helper runs"
           git push
