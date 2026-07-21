@@ -1,0 +1,154 @@
+name: Apply queued IR virtual time
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/apply-ir-fix5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Make IRtimer observe queued waveform time
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/driver/drv_ir_new.cpp')
+          source = path.read_text()
+          assert 'unusedHighBits' in source
+          assert 'gIRUseVirtualMicros' not in source
+
+          anchor = '#define __FlashStringHelper char\n\n'
+          addition = '''#define __FlashStringHelper char
+
+          // IRremoteESP8266 normally measures time spent inside blocking mark()/space()
+          // calls. OpenBeken queues those calls instead, so expose the queued duration to
+          // IRtimer while a send transaction is being constructed.
+          static bool gIRUseVirtualMicros = false;
+          static uint32_t gIRVirtualMicros = 0;
+
+          static void IR_AdvanceVirtualMicros(const uint32_t usec) {
+          \tif (gIRUseVirtualMicros) gIRVirtualMicros += usec;
+          }
+
+          '''
+          assert source.count(anchor) == 1
+          source = source.replace(anchor, addition)
+
+          old = '''unsigned long millis()
+          {
+          \treturn 0;
+          }
+          unsigned long micros()
+          {
+          \treturn 0;
+          }
+          '''
+          new = '''unsigned long millis()
+          {
+          \tif (gIRUseVirtualMicros) return gIRVirtualMicros / 1000;
+          \treturn 0;
+          }
+          unsigned long micros()
+          {
+          \tif (gIRUseVirtualMicros) return gIRVirtualMicros;
+          \treturn 0;
+          }
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          old = '''unsigned long millis()
+          {
+          \treturn g_timeMs;
+          }
+          unsigned long micros()
+          {
+          \treturn g_timeMs * 1000;
+          }
+          '''
+          new = '''unsigned long millis()
+          {
+          \tif (gIRUseVirtualMicros) return gIRVirtualMicros / 1000;
+          \treturn g_timeMs;
+          }
+          unsigned long micros()
+          {
+          \tif (gIRUseVirtualMicros) return gIRVirtualMicros;
+          \treturn g_timeMs * 1000;
+          }
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+
+          def function_span(text, signature):
+              start = text.index(signature)
+              brace = text.index('{', start)
+              depth = 0
+              for index in range(brace, len(text)):
+                  if text[index] == '{':
+                      depth += 1
+                  elif text[index] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return start, brace, index + 1
+              raise RuntimeError('unterminated function: ' + signature)
+
+          def insert_after_brace(text, signature, code):
+              _, brace, _ = function_span(text, signature)
+              return text[:brace + 1] + code + text[brace + 1:]
+
+          def insert_before_last(text, signature, needle, code):
+              _, brace, end = function_span(text, signature)
+              position = text.rfind(needle, brace, end)
+              if position < 0:
+                  raise RuntimeError('missing insertion point: ' + signature)
+              return text[:position] + code + text[position:]
+
+          source = insert_before_last(
+              source,
+              '\tbool beginSendTransaction()',
+              '\t\treturn true;',
+              '\t\tgIRVirtualMicros = 0;\n\t\tgIRUseVirtualMicros = true;\n')
+          source = insert_after_brace(
+              source, '\tbool commitSendTransaction()',
+              '\n\t\tgIRUseVirtualMicros = false;')
+          source = insert_after_brace(
+              source, '\tvoid abortSendTransaction()',
+              '\n\t\tgIRUseVirtualMicros = false;')
+          source = insert_after_brace(
+              source, '\tvoid resetsendqueue()',
+              '\n\t\tgIRUseVirtualMicros = false;')
+          source = insert_after_brace(
+              source, '\tuint16_t mark(uint16_t aMarkMicros)',
+              '\n\t\tIR_AdvanceVirtualMicros(aMarkMicros);')
+          source = insert_after_brace(
+              source, '\tvoid space(uint32_t aMarkMicros)',
+              '\n\t\tIR_AdvanceVirtualMicros(aMarkMicros);')
+
+          assert source.count('IR_AdvanceVirtualMicros(aMarkMicros);') == 2
+          assert source.count('gIRUseVirtualMicros = true;') == 1
+          path.write_text(source)
+          PY
+
+          git diff --check
+          test -n "$(git diff --name-only)"
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add src/driver/drv_ir_new.cpp
+          git commit -m "ir: use queued time for frame duration"
+          git push origin HEAD:irremotesp8266_290
