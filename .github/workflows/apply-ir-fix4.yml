@@ -1,0 +1,78 @@
+name: Apply IR partial-byte validation
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/apply-ir-fix4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Reject payload bits outside the requested width
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/driver/drv_ir_new.cpp')
+          source = path.read_text()
+          assert 'isValidStatePayloadLength' in source
+          assert 'unusedHighBits' not in source
+
+          old = '''\tfor (uint16_t i = 0; i < nibbleCount; i++) {
+          \t\tint v = hexNibbleValue(hex[i]);
+          \t\tuint16_t pos = nibbleOffset + i;
+          \t\tuint16_t byteIndex = pos / 2;
+          \t\tif ((pos & 1) == 0)
+          \t\t\tout[byteIndex] |= (uint8_t)(v << 4);
+          \t\telse
+          \t\t\tout[byteIndex] |= (uint8_t)v;
+          \t}
+          \t*outBytes = nbytes;
+          '''
+          new = '''\tfor (uint16_t i = 0; i < nibbleCount; i++) {
+          \t\tint v = hexNibbleValue(hex[i]);
+          \t\tuint16_t pos = nibbleOffset + i;
+          \t\tuint16_t byteIndex = pos / 2;
+          \t\tif ((pos & 1) == 0)
+          \t\t\tout[byteIndex] |= (uint8_t)(v << 4);
+          \t\telse
+          \t\t\tout[byteIndex] |= (uint8_t)v;
+          \t}
+
+          \t// State bytes are right-aligned. For a partial first byte, reject any
+          \t// supplied high bits that are outside the requested bit count instead of
+          \t// silently dropping them when the scalar value is assembled.
+          \tconst uint8_t unusedHighBits = (uint8_t)(nbytes * 8 - bits);
+          \tif (unusedHighBits) {
+          \t\tconst uint8_t unusedMask = (uint8_t)(0xFFU << (8 - unusedHighBits));
+          \t\tif (out[0] & unusedMask) return false;
+          \t}
+
+          \t*outBytes = nbytes;
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new)
+          path.write_text(source)
+          PY
+
+          git diff --check
+          test -n "$(git diff --name-only)"
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add src/driver/drv_ir_new.cpp
+          git commit -m "ir: reject payload bits outside requested width"
+          git push origin HEAD:irremotesp8266_290
