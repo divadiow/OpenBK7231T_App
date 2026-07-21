@@ -1,0 +1,6 @@
+{
+  "path": "src/hal/w800/hal_adc_w800.c",
+  "old": "#include \"../../new_common.h\"\n#include \"wm_adc.h\"",
+  "new": "#include \"../../new_common.h\"\n#include \"wm_adc.h\"\n#include \"wm_gpio_afsel.h\"",
+  "expected_count": 1
+}
