@@ -457,10 +457,7 @@ jobs:
   build_txw81x:
     name: Build TXW81X
     needs: refs
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: wsl-bash {0}
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -470,11 +467,8 @@ jobs:
     steps:
       - name: Source checkout
         uses: actions/checkout@v4
-      - uses: Vampire/setup-wsl@v6
-        with:
-          wsl-version: 1
-          distribution: Ubuntu-22.04
-          additional-packages: make
+      - name: Test native TXW81x packer
+        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
       - name: Run make
         run: |
           make APP_VERSION=${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} APP_NAME=${{ matrix.platform }} VARIANT="${{ matrix.variant }}" ${{ matrix.platform }}
@@ -486,7 +480,6 @@ jobs:
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}_ota.img
           if-no-files-found: warn
-
   merge:
     name: Merge Artifacts
     runs-on: ubuntu-22.04
