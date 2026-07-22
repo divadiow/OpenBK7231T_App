@@ -743,7 +743,7 @@ int main() {{
   const char *end = nullptr;
 
   assert(parseHexStateBytes("F", 4, bytes, sizeof(bytes), &nbytes, &end));
-  assert(nbytes == 1 && bytes[0] == 0x0F && *end == '\0');
+  assert(nbytes == 1 && bytes[0] == 0x0F && *end == '\\0');
 
   std::memset(bytes, 0, sizeof(bytes));
   assert(!parseHexStateBytes("F0", 4, bytes, sizeof(bytes), &nbytes, &end));
