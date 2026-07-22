@@ -517,6 +517,16 @@ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, u
 		else
 			out[byteIndex] |= (uint8_t)v;
 	}
+
+	// State bytes are right-aligned. Reject any supplied high bits that
+	// fall outside the requested width rather than silently discarding them.
+	const uint8_t unusedHighBits = (uint8_t)(nbytes * 8 - bits);
+	if (unusedHighBits) {
+		const uint8_t unusedMask =
+			(uint8_t)(0xFFU << (8 - unusedHighBits));
+		if (out[0] & unusedMask) return false;
+	}
+
 	*outBytes = nbytes;
 	if (endPtr) *endPtr = hex + nibbleCount;
 	return true;
