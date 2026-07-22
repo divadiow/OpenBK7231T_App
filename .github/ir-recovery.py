@@ -10,6 +10,13 @@ RECEIVER = Path("src/libraries/IRremoteESP8266/src/IRrecv.cpp")
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     count = text.count(old)
+    if count != 1 and label in ("repeat abort cleanup", "repeat reset cleanup"):
+        signature = ("\tvoid abortSendTransaction()" if label == "repeat abort cleanup"
+                     else "\tvoid resetsendqueue()")
+        start, _, end = function_span(text, signature)
+        block = text[start:end]
+        if block.count(old) == 1:
+            return text[:start] + block.replace(old, new, 1) + text[end:]
     if count != 1:
         raise RuntimeError(f"{label}: expected one match, found {count}")
     return text.replace(old, new, 1)
