@@ -88,35 +88,28 @@ jobs:
           test_start = source.index(
               "def check_transaction_contracts(driver: str) -> None:")
           test_end = source.index("\ndef check_validation_contracts", test_start)
-          test_block = source[test_start:test_end]
-          if '"if (isBusy())"' not in test_block:
-              loop_start = source.index("    for token in (", test_start, test_end)
-              loop_end = source.index(
-                  '\n\n    require("gIRUseVirtualMicros = false"',
-                  loop_start,
-                  test_end,
-              )
-              new_loop = '''    for token in (
-              "if (isBusy())",
-              "transactionRepeatCount = 0",
-              "transactionFrequencyHz = pwmfrequency",
-              "transactionDuty = (uint8_t)pwmduty",
-              "gIRUseVirtualMicros = true",
-          ):
-              require(token in begin, f"begin transaction contract missing: {token}")
-          require(
-              "return transactionBuilding || transactionReady || currentsendtime;"
-              in driver,
-              "busy state does not cover building, queued, and active sends",
-          )'''
-              source = source[:loop_start] + new_loop + source[loop_end:]
-          else:
-              required = (
-                  "return transactionBuilding || transactionReady || currentsendtime;"
-              )
-              if required not in test_block:
-                  raise RuntimeError("busy-state assertion is incomplete")
-
+          loop_start = source.index("    for token in (", test_start, test_end)
+          require_start = source.index(
+              '    require("gIRUseVirtualMicros = false"',
+              loop_start,
+              test_end,
+          )
+          new_loop = (
+              "    for token in (\n"
+              "        \"if (isBusy())\",\n"
+              "        \"transactionRepeatCount = 0\",\n"
+              "        \"transactionFrequencyHz = pwmfrequency\",\n"
+              "        \"transactionDuty = (uint8_t)pwmduty\",\n"
+              "        \"gIRUseVirtualMicros = true\",\n"
+              "    ):\n"
+              "        require(token in begin, f\"begin transaction contract missing: {token}\")\n"
+              "    require(\n"
+              "        \"return transactionBuilding || transactionReady || currentsendtime;\"\n"
+              "        in driver,\n"
+              "        \"busy state does not cover building, queued, and active sends\",\n"
+              "    )\n\n"
+          )
+          source = source[:loop_start] + new_loop + source[require_start:]
           path.write_text(source)
           PY
 
