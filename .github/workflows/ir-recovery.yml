@@ -79,9 +79,11 @@ jobs:
 
           old_null = r"*end == '\0');"
           new_null = r"*end == '\\0');"
-          if source.count(old_null) != 1:
-              raise RuntimeError(f'null-literal recipe match count: {source.count(old_null)}')
-          source = source.replace(old_null, new_null, 1)
+          if source.count(old_null) == 1:
+              source = source.replace(old_null, new_null, 1)
+          elif source.count(new_null) != 1:
+              raise RuntimeError(
+                  f'null-literal recipe state: old={source.count(old_null)} new={source.count(new_null)}')
 
           old_busy = '''    for token in (
               "transactionBuilding",
@@ -108,9 +110,12 @@ jobs:
                   "busy state does not cover building, queued, and active sends",
               )
           '''
-          if source.count(old_busy) != 1:
-              raise RuntimeError(f'busy-contract recipe match count: {source.count(old_busy)}')
-          source = source.replace(old_busy, new_busy, 1)
+          if source.count(old_busy) == 1:
+              source = source.replace(old_busy, new_busy, 1)
+          elif source.count(new_busy) != 1:
+              raise RuntimeError(
+                  f'busy-contract recipe state: old={source.count(old_busy)} new={source.count(new_busy)}')
+
           path.write_text(source)
           PY
 
