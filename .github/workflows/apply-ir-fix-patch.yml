@@ -7,6 +7,12 @@ on:
     paths:
       - .github/ir-fix.patch
       - .github/workflows/apply-ir-fix-patch.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/ir-fix.patch
+      - .github/workflows/apply-ir-fix-patch.yml
 
 permissions:
   contents: write
@@ -52,4 +58,4 @@ jobs:
           git -C "$GITHUB_WORKSPACE/target" commit -m "$commit_message"
           git -C "$GITHUB_WORKSPACE/target" push origin HEAD:irremotesp8266_290
 
-# recovery trigger: strict parsing
+# recovery trigger: strict parsing via helper PR
