@@ -239,6 +239,10 @@ public:
 		return transactionBuilding || transactionReady || currentsendtime;
 	}
 
+	uint16_t getStagedItemCount() const {
+		return transactionCount;
+	}
+
 	void delay(long int ms) {
 		// add a pure delay to our queue
 		space(ms * 1000);
@@ -446,6 +450,45 @@ static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
 	return true;
 }
 
+static bool isValidStatePayloadLength(const decode_type_t protocol,
+	const uint16_t bits, const uint16_t nbytes) {
+	if (!nbytes || nbytes != (bits + 7) / 8) return false;
+
+	// Carrier AC84 carries four data bits in its first byte, followed by ten
+	// complete bytes. It is the only supported state protocol that is not byte
+	// aligned.
+	if (protocol == decode_type_t::CARRIER_AC84)
+		return bits == kCarrierAc84Bits;
+	if (bits & 7) return false;
+
+	// Protocols with more than one valid state frame size.
+	if (protocol == decode_type_t::ARGO)
+		return bits == 32 || bits == 96;
+	if (protocol == decode_type_t::CORONA_AC)
+		return bits == 56 || bits == 168;
+	if (protocol == decode_type_t::DAIKIN)
+		return bits == 216 || bits == 280;
+	if (protocol == decode_type_t::FUJITSU_AC)
+		return bits == 48 || bits == 56 || bits == 120 || bits == 128;
+	if (protocol == decode_type_t::HITACHI_AC3)
+		return bits == 120 || bits == 136 || bits == 168 ||
+			bits == 184 || bits == 216;
+	if (protocol == decode_type_t::PANASONIC_AC)
+		return bits == 128 || bits == 216;
+	if (protocol == decode_type_t::SAMSUNG_AC)
+		return bits == 112 || bits == 168;
+	if (protocol == decode_type_t::TOSHIBA_AC)
+		return bits >= 56 && bits <= 80;
+
+	// MWM is intentionally variable length. The per-frame staging check below
+	// still rejects lengths for which the upstream sender emits nothing.
+	if (protocol == decode_type_t::MWM) return true;
+
+	const uint16_t expectedBits = IRsend::defaultBits(protocol);
+	return expectedBits && bits == expectedBits;
+}
+
+
 static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
 	if (!hexIn || !out || !outBytes) return false;
 	const char *hex = hexIn;
@@ -542,15 +585,22 @@ extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, cons
 						}
 						repeats = (int)repeatValue;
 					}
+					const bool statePayload = bits > 64 || hasACState(protocol);
+					if (statePayload && !isValidStatePayloadLength(protocol, bits, nbytes)) {
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid state length for %s: bits %d bytes %d", args, (int)bits, (int)nbytes);
+						return CMD_RES_BAD_ARGUMENT;
+					}
 					if (!pIRsend->beginSendTransaction()) {
 						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
 						return CMD_RES_ERROR;
 					}
-					if (bits > 64 || hasACState(protocol))
+					if (statePayload)
 					{
 						bool sent = true;
 						for (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
-							if (!pIRsend->send(protocol,state,nbytes)) {
+							const uint16_t stagedBefore = pIRsend->getStagedItemCount();
+							if (!pIRsend->send(protocol,state,nbytes) ||
+								pIRsend->getStagedItemCount() == stagedBefore) {
 								sent = false;
 								break;
 							}
