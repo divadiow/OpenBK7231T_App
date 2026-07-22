@@ -2127,21 +2127,38 @@ uint16_t IRrecv::matchManchesterData(atomic_const_uint16_t *data_ptr,
 #define INPUT_MARK   0
 #endif
 
-static float        ir_now = 0;
+static uint32_t ir_sample_count = 0;
+static uint32_t ir_edge_sample = 0;
 static uint_fast8_t ir_old = 0;
-static float        ir_start = 0;
+static uint32_t ir_period_us_q16 = 0;
+static uint32_t ir_timeout_samples = 1;
+
+static uint32_t IR_PeriodToQ16(float period_us) {
+  if (period_us < 1.0f) period_us = 1.0f;
+  return (uint32_t)(period_us * 65536.0f + 0.5f);
+}
+
+void IR_ISR_ResetClock(float period_us) {
+  ir_sample_count = 0;
+  ir_edge_sample = 0;
+  ir_period_us_q16 = IR_PeriodToQ16(period_us);
+  const uint64_t timeout_q16 =
+      (uint64_t)params.timeout * 1000U * 65536U;
+  ir_timeout_samples = (uint32_t)(
+      (timeout_q16 + ir_period_us_q16 - 1) / ir_period_us_q16);
+  if (!ir_timeout_samples) ir_timeout_samples = 1;
+}
 
 void IR_ISR(float period_us) {
-  ir_now += period_us;
+  if (!ir_period_us_q16) IR_ISR_ResetClock(period_us);
+  ir_sample_count++;
   if (params.rcvstate == kStopState) return;
-  uint_fast8_t tIRInputLevel = (uint_fast8_t)digitalReadFast(params.recvpin);
-  uint32_t time_since_last_change;
-  if (ir_now < ir_start)
-    time_since_last_change = (UINT32_MAX - ir_start + ir_now);
-  else
-    time_since_last_change = (ir_now - ir_start);
 
-  if ((time_since_last_change / 1000) >= params.timeout && params.rawlen) {
+  const uint_fast8_t tIRInputLevel =
+      (uint_fast8_t)digitalReadFast(params.recvpin);
+  const uint32_t elapsed_samples = ir_sample_count - ir_edge_sample;
+
+  if (elapsed_samples >= ir_timeout_samples && params.rawlen) {
     params.rcvstate = kStopState;
     return;
   }
@@ -2149,7 +2166,7 @@ void IR_ISR(float period_us) {
   if (tIRInputLevel == ir_old) return;
 
   ir_old = tIRInputLevel;
-  uint16_t rawlen = params.rawlen;
+  const uint16_t rawlen = params.rawlen;
   if (rawlen >= params.bufsize) {
     params.overflow = true;
     params.rcvstate = kStopState;
@@ -2160,10 +2177,16 @@ void IR_ISR(float period_us) {
     params.rcvstate = kMarkState;
     params.rawbuf[rawlen] = 1;
   } else {
-    params.rawbuf[rawlen] = time_since_last_change / kRawTick;
+    const uint64_t elapsed_q16 =
+        (uint64_t)elapsed_samples * ir_period_us_q16;
+    uint32_t raw_ticks = (uint32_t)(
+        elapsed_q16 / ((uint64_t)kRawTick * 65536U));
+    if (!raw_ticks) raw_ticks = 1;
+    if (raw_ticks > UINT16_MAX) raw_ticks = UINT16_MAX;
+    params.rawbuf[rawlen] = (uint16_t)raw_ticks;
   }
   params.rawlen++;
-  ir_start = ir_now;
+  ir_edge_sample = ir_sample_count;
 }
 
 

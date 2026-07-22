@@ -134,6 +134,7 @@ Print Serial;
 // THIS function is defined in src/libraries/IRremoteESP8266/src/IRrecv.cpp
 extern "C" void DRV_IR_ISR(void* arg);
 extern void IR_ISR(float period_us);
+extern void IR_ISR_ResetClock(float period_us);
 
 static int8_t ir_chan = -1;
 static float ir_periodus = 50;
@@ -146,6 +147,7 @@ void _timerConfigForReceive() {
 	ir_counter = 0;
 
 	ir_chan = HAL_RequestHWTimer(ir_periodus, &ir_periodus, DRV_IR_ISR, NULL);
+	IR_ISR_ResetClock(ir_periodus);
 	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer %u, %.2f us period", ir_chan, ir_periodus);
 }
 
