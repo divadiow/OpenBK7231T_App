@@ -422,6 +422,30 @@ static int hexNibbleValue(char c) {
 	return -1;
 }
 
+static const uint16_t kIRSendMaxStateBytes = 64;
+static const uint16_t kIRSendMaxBits = kIRSendMaxStateBytes * 8;
+static const uint8_t kIRSendMaxRepeats = 10;
+
+static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
+	const uint32_t maxValue, uint32_t *result) {
+	if (!text || !text[0] || !result || minValue > maxValue) return false;
+
+	uint32_t value = 0;
+	for (const char *cursor = text; *cursor; cursor++) {
+		if (*cursor < '0' || *cursor > '9') return false;
+		const uint32_t digit = (uint32_t)(*cursor - '0');
+		if (value > maxValue / 10 ||
+			(value == maxValue / 10 && digit > maxValue % 10)) {
+			return false;
+		}
+		value = value * 10 + digit;
+	}
+	if (value < minValue) return false;
+
+	*result = value;
+	return true;
+}
+
 static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
 	if (!hexIn || !out || !outBytes) return false;
 	const char *hex = hexIn;
@@ -492,21 +516,32 @@ extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, cons
 			if(*p==',')
 			{
 				*p='\0';
-				uint16_t bits = (uint16_t)strtol(_bits,NULL,10);
+				uint32_t bitsValue = 0;
+				if (!parseBoundedDecimal(_bits, 1, kIRSendMaxBits, &bitsValue)) {
+					ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid bit count '%s' (expected 1-%u)", _bits, (unsigned int)kIRSendMaxBits);
+					return CMD_RES_BAD_ARGUMENT;
+				}
+				const uint16_t bits = (uint16_t)bitsValue;
 				p++;
 				if(protocol!=decode_type_t::UNKNOWN && pIRsend)
 				{
 					int repeats=0;
 					char *_data=p;
-					uint8_t state[64];
+					uint8_t state[kIRSendMaxStateBytes];
 					uint16_t nbytes = 0;
 					const char *payloadEnd = NULL;
 					if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
 						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
 						return CMD_RES_BAD_ARGUMENT;
 					}
-					if(payloadEnd && *payloadEnd==',')
-						repeats=strtol(payloadEnd+1,NULL,10);
+					if(payloadEnd && *payloadEnd==',') {
+						uint32_t repeatValue = 0;
+						if (!parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats, &repeatValue)) {
+							ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid repeat count '%s' (expected 0-%u)", payloadEnd + 1, (unsigned int)kIRSendMaxRepeats);
+							return CMD_RES_BAD_ARGUMENT;
+						}
+						repeats = (int)repeatValue;
+					}
 					if (!pIRsend->beginSendTransaction()) {
 						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
 						return CMD_RES_ERROR;
