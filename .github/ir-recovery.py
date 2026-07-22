@@ -812,15 +812,18 @@ def check_transaction_contracts(driver: str) -> None:
     repeat_setter = function_block(driver, "bool setTransactionRepeats")
 
     for token in (
-        "transactionBuilding",
-        "transactionReady",
-        "currentsendtime",
-        "transactionRepeatCount = 0",
-        "transactionFrequencyHz = pwmfrequency",
-        "transactionDuty = (uint8_t)pwmduty",
-        "gIRUseVirtualMicros = true",
-    ):
-        require(token in begin, f"begin transaction contract missing: {token}")
+    "if (isBusy())",
+    "transactionRepeatCount = 0",
+    "transactionFrequencyHz = pwmfrequency",
+    "transactionDuty = (uint8_t)pwmduty",
+    "gIRUseVirtualMicros = true",
+):
+    require(token in begin, f"begin transaction contract missing: {token}")
+require(
+    "return transactionBuilding || transactionReady || currentsendtime;"
+    in driver,
+    "busy state does not cover building, queued, and active sends",
+)
 
     require("gIRUseVirtualMicros = false" in commit, "commit leaves virtual time enabled")
     require("gIRUseVirtualMicros = false" in abort, "abort leaves virtual time enabled")
