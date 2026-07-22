@@ -1,35 +1,8 @@
 status=1
-workflow_run=29896922515
+workflow_run=29897003052
 target_base=c7dbf61ed8ae2680ce311e20189a22d034697896
 
 Switched to a new branch 'agent/irremote-recovery-staging'
-[agent/irremote-recovery-staging 392ee0cb] ir: reject payload bits outside requested width
- 1 file changed, 10 insertions(+)
-[agent/irremote-recovery-staging d6c39271] ir: use queued time for frame duration
- 1 file changed, 21 insertions(+)
-[agent/irremote-recovery-staging 06217d1d] ir: use integer ticks for receive timing
- 2 files changed, 38 insertions(+), 13 deletions(-)
-[agent/irremote-recovery-staging 98388bab] ir: stage carrier settings with send transaction
- 1 file changed, 28 insertions(+), 8 deletions(-)
-[agent/irremote-recovery-staging b9c95e50] ir: replay state transactions and honor classic repeats
- 1 file changed, 87 insertions(+), 33 deletions(-)
-[agent/irremote-recovery-staging 905e6ca7] test: cover IR adapter parsing and transaction contracts
- 2 files changed, 290 insertions(+)
- create mode 100644 .github/workflows/ir-adapter-regression.yml
- create mode 100644 tests/ir_adapter_regression.py
 Traceback (most recent call last):
-  File "/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/target/tests/ir_adapter_regression.py", line 266, in <module>
-    main()
-  File "/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/target/tests/ir_adapter_regression.py", line 259, in main
-    check_transaction_contracts(driver)
-  File "/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/target/tests/ir_adapter_regression.py", line 156, in check_transaction_contracts
-    require(token in begin, f"begin transaction contract missing: {token}")
-  File "/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/target/tests/ir_adapter_regression.py", line 19, in require
-    raise AssertionError(message)
-AssertionError: begin transaction contract missing: transactionReady
-Traceback (most recent call last):
-  File "/home/runner/work/_temp/ir-recovery.py", line 968, in <module>
-    subprocess.run(["python3", str(test_path)], check=True)
-  File "/usr/lib/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['python3', 'tests/ir_adapter_regression.py']' returned non-zero exit status 1.
+  File "<stdin>", line 10, in <module>
+RuntimeError: null-literal recipe match count: 0
