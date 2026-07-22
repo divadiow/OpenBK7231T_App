@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - agent/github-actions-node24
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
 
 permissions:
   actions: write
@@ -13,12 +18,14 @@ jobs:
   migrate:
     name: Update production workflow actions
     runs-on: ubuntu-22.04
+    env:
+      TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
 
     steps:
       - name: Checkout migration branch
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
 
       - name: Cancel superseded Build App runs
@@ -31,7 +38,7 @@ jobs:
               gh api --method POST "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
             fi
           done < <(
-            gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs?branch=${GITHUB_REF_NAME}&per_page=100" \
+            gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs?branch=${TARGET_BRANCH}&per_page=100" \
               --jq '.workflow_runs[] | select(.name == "Build App" and .status != "completed") | .id'
           )
 
@@ -67,4 +74,4 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/workflows/workflow.yaml .github/workflows/node24-smoke.yaml .github/workflows/apply-node24-migration.yaml
           git commit -m 'Migrate GitHub Actions to Node.js 24'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "HEAD:${TARGET_BRANCH}"
