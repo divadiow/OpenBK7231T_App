@@ -1,0 +1,93 @@
+name: TXW81x packaging research
+
+on:
+  push:
+    branches:
+      - txw81x-python-packaging-research
+    paths:
+      - tools/txw81x_pack/**
+      - docs/TXW81X_NATIVE_PACKAGING_RESEARCH.md
+      - .github/workflows/txw81x-packaging-research.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native-ubuntu-reference-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run standalone unit tests
+        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
+
+      - name: Download public known-good OpenBeken artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p reference
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            /repos/openshwprojects/OpenBK7231T_App/actions/artifacts/8263481010/zip \
+            > reference.zip
+          unzip -j reference.zip \
+            'OpenTXW81X_main_4b43623c0cc3.bin' \
+            'OpenTXW81X_main_4b43623c0cc3_ota.img' \
+            -d reference
+
+      - name: Fetch current public loader and INI inputs only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            /repos/NonPIayerCharacter/OpenTXW81X/contents/sdk/chip/txw81x/loader_compress.bin?ref=main \
+            --jq .content | tr -d '\n' | base64 -d > reference/loader_compress.bin
+          gh api \
+            /repos/NonPIayerCharacter/OpenTXW81X/contents/project/makecode.ini?ref=main \
+            --jq .content | tr -d '\n' | base64 -d > reference/makecode.ini
+
+      - name: Run known-good Taixin integration tests
+        env:
+          TXW81X_REFERENCE_DIR: ${{ github.workspace }}/reference
+          TXW81X_LOADER: ${{ github.workspace }}/reference/loader_compress.bin
+        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
+
+      - name: Demonstrate complete native packaging conversion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          app = Path('reference/OpenTXW81X_main_4b43623c0cc3.bin').read_bytes()
+          Path('reference/txw81x_fpv.bin').write_bytes(app[0xC00:])
+          parameter = app[0x200:0xA00]
+          cfg = bytearray(0x210 + len(parameter))
+          cfg[0x210:] = parameter
+          Path('reference/parameter.bincfg').write_bytes(cfg)
+          PY
+
+          python3 tools/txw81x_pack/txw81x_pack.py pack-app \
+            --input reference/txw81x_fpv.bin \
+            --parameter-cfg reference/parameter.bincfg \
+            --makecode-ini reference/makecode.ini \
+            --sdk-version 02050307 \
+            --svn-version 8EB5 \
+            --app-version 0 \
+            --date 2026-07-12 \
+            --output reference/APP.bin > reference/app-inspect.json
+
+          python3 tools/txw81x_pack/txw81x_pack.py pack-ota \
+            --app reference/APP.bin \
+            --loader reference/loader_compress.bin \
+            --output reference/APP_compress.bin > reference/ota-inspect.json
+
+          cmp reference/APP.bin reference/OpenTXW81X_main_4b43623c0cc3.bin
+          cmp reference/APP_compress.bin reference/OpenTXW81X_main_4b43623c0cc3_ota.img
+          sha256sum reference/APP.bin reference/APP_compress.bin
