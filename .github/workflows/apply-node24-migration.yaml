@@ -28,18 +28,18 @@ jobs:
           ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
 
-      - name: Cancel superseded Build App runs
+      - name: Cancel superseded investigation runs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           while IFS= read -r run_id; do
             if [ -n "$run_id" ]; then
-              echo "Cancelling superseded Build App run $run_id"
+              echo "Cancelling superseded investigation run $run_id"
               gh api --method POST "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
             fi
           done < <(
             gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs?branch=${TARGET_BRANCH}&per_page=100" \
-              --jq '.workflow_runs[] | select(.name == "Build App" and .status != "completed") | .id'
+              --jq '.workflow_runs[] | select((.name == "Build App" or .name == "Node.js 24 Actions Smoke Test") and .status != "completed") | .id'
           )
 
       - name: Update official actions to Node.js 24 majors
@@ -72,6 +72,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/workflow.yaml .github/workflows/node24-smoke.yaml .github/workflows/apply-node24-migration.yaml
+          git add -A .github/workflows
+          git status --short
           git commit -m 'Migrate GitHub Actions to Node.js 24'
           git push origin "HEAD:${TARGET_BRANCH}"
