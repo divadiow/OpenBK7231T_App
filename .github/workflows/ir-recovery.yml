@@ -11,6 +11,10 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: irremote-push-recovery
+  cancel-in-progress: true
+
 jobs:
   recover:
     runs-on: ubuntu-latest
@@ -34,6 +38,12 @@ jobs:
             done
           done
 
+      - name: Check out recovery definition
+        uses: actions/checkout@v4
+        with:
+          ref: agent/irremote-recovery-runner
+          path: runner
+
       - name: Check out exact validated PR head
         uses: actions/checkout@v4
         with:
@@ -41,30 +51,84 @@ jobs:
           fetch-depth: 0
           path: target
 
-      - name: Apply direct source commits and run focused tests
+      - name: Apply source commits and focused tests
+        id: recovery
         working-directory: target
         shell: bash
         env:
           EXPECTED_BASE: c7dbf61ed8ae2680ce311e20189a22d034697896
           STAGING_BRANCH: agent/irremote-recovery-staging
-          RECOVERY_B64: "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"
+        run: |
+          set +e
+          {
+            set -euo pipefail
+            test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
+            test "$(git ls-remote origin refs/heads/irremotesp8266_290 | awk '{print $1}')" = "$EXPECTED_BASE"
+
+            git switch -C "$STAGING_BRANCH"
+            git config user.name "OpenAI-agent"
+            git config user.email "openai-agent@users.noreply.github.com"
+
+            cp "$GITHUB_WORKSPACE/runner/.github/ir-recovery.py" "$RUNNER_TEMP/ir-recovery.py"
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path(__import__('os').environ['RUNNER_TEMP']) / 'ir-recovery.py'
+          source = path.read_text()
+          old = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+          '''
+          new = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1 and label in ("repeat abort cleanup", "repeat reset cleanup"):
+                  signature = ("\\tvoid abortSendTransaction()" if label == "repeat abort cleanup"
+                               else "\\tvoid resetsendqueue()")
+                  start, _, end = function_span(text, signature)
+                  block = text[start:end]
+                  if block.count(old) == 1:
+                      return text[:start] + block.replace(old, new, 1) + text[end:]
+              if count != 1:
+                  raise RuntimeError(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+          '''
+          if source.count(old) != 1:
+              raise RuntimeError(f'replace_once recipe match count: {source.count(old)}')
+          path.write_text(source.replace(old, new, 1))
+          PY
+
+            python3 "$RUNNER_TEMP/ir-recovery.py"
+            python3 tests/ir_adapter_regression.py
+            git diff --check
+            git push --force origin "HEAD:refs/heads/${STAGING_BRANCH}"
+          } 2>&1 | tee "$RUNNER_TEMP/ir-recovery.log"
+          status=${PIPESTATUS[0]}
+          printf '%s\n' "$status" > "$RUNNER_TEMP/ir-recovery.status"
+          tail -n 300 "$RUNNER_TEMP/ir-recovery.log" > "$RUNNER_TEMP/ir-recovery.tail"
+          exit "$status"
+
+      - name: Publish focused recovery status
+        if: always()
+        shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
-          test "$(git ls-remote origin refs/heads/irremotesp8266_290 | awk '{print $1}')" = "$EXPECTED_BASE"
-
-          git switch -c "$STAGING_BRANCH"
-          git config user.name "OpenAI-agent"
-          git config user.email "openai-agent@users.noreply.github.com"
-
-          python3 - <<'PY'
-          import base64, os, zlib
-          from pathlib import Path
-          Path(os.environ['RUNNER_TEMP'], 'ir-recovery.py').write_bytes(
-              zlib.decompress(base64.b64decode(os.environ['RECOVERY_B64'])))
-          PY
-          python3 "$RUNNER_TEMP/ir-recovery.py"
-          python3 tests/ir_adapter_regression.py
-          git diff --check
-
-          git push --force origin "HEAD:refs/heads/${STAGING_BRANCH}"
+          status="unknown"
+          [ -f "$RUNNER_TEMP/ir-recovery.status" ] && status="$(cat "$RUNNER_TEMP/ir-recovery.status")"
+          {
+            printf 'status=%s\n' "$status"
+            printf 'workflow_run=%s\n' "$GITHUB_RUN_ID"
+            printf 'target_base=c7dbf61ed8ae2680ce311e20189a22d034697896\n'
+            if [ "$status" = "0" ]; then
+              printf 'staging_head=%s\n' "$(git -C "$GITHUB_WORKSPACE/target" rev-parse HEAD)"
+            fi
+            printf '\n'
+            [ -f "$RUNNER_TEMP/ir-recovery.tail" ] && cat "$RUNNER_TEMP/ir-recovery.tail"
+          } > "$GITHUB_WORKSPACE/runner/.github/ir-recovery-status.txt"
+          [ -f "$RUNNER_TEMP/ir-recovery.py" ] && cp "$RUNNER_TEMP/ir-recovery.py" "$GITHUB_WORKSPACE/runner/.github/ir-recovery.py"
+          git -C "$GITHUB_WORKSPACE/runner" config user.name "OpenAI-agent"
+          git -C "$GITHUB_WORKSPACE/runner" config user.email "openai-agent@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE/runner" add .github/ir-recovery-status.txt .github/ir-recovery.py
+          git -C "$GITHUB_WORKSPACE/runner" commit -m "runner: record focused IR recovery status" || true
+          git -C "$GITHUB_WORKSPACE/runner" push origin HEAD:agent/irremote-recovery-runner
