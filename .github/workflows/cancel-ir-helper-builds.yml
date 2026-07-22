@@ -32,3 +32,5 @@ jobs:
                 gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
               done
           done
+
+# clear helper queue after fix 3 trigger
