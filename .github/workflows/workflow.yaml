@@ -1,3 +1,4 @@
+# Official GitHub actions below use Node.js 24-native major versions.
 name: Build App
 on:
   push:
