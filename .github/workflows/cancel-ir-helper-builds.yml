@@ -1,0 +1,33 @@
+name: Cancel IR helper Build App runs
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/cancel-ir-helper-builds.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel helper-branch Build App runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_WORKFLOW_ID: "148636797"
+          HELPER_BRANCH: "agent/irremote-fix-runner"
+        shell: bash
+        run: |
+          set -euo pipefail
+          for status in queued in_progress; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${BUILD_WORKFLOW_ID}/runs" \
+              -f branch="${HELPER_BRANCH}" -f status="${status}" -f per_page=100 \
+              --jq '.workflow_runs[].id' | while read -r run_id; do
+                [ -n "$run_id" ] || continue
+                gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
+              done
+          done
