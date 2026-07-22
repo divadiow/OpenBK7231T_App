@@ -76,11 +76,42 @@ jobs:
 
           path = Path(os.environ['RUNNER_TEMP']) / 'ir-recovery.py'
           source = path.read_text()
-          old = r"*end == '\0');"
-          new = r"*end == '\\0');"
-          if source.count(old) != 1:
-              raise RuntimeError(f'null-literal recipe match count: {source.count(old)}')
-          path.write_text(source.replace(old, new, 1))
+
+          old_null = r"*end == '\0');"
+          new_null = r"*end == '\\0');"
+          if source.count(old_null) != 1:
+              raise RuntimeError(f'null-literal recipe match count: {source.count(old_null)}')
+          source = source.replace(old_null, new_null, 1)
+
+          old_busy = '''    for token in (
+              "transactionBuilding",
+              "transactionReady",
+              "currentsendtime",
+              "transactionRepeatCount = 0",
+              "transactionFrequencyHz = pwmfrequency",
+              "transactionDuty = (uint8_t)pwmduty",
+              "gIRUseVirtualMicros = true",
+          ):
+              require(token in begin, f"begin transaction contract missing: {token}")
+          '''
+          new_busy = '''    for token in (
+              "if (isBusy())",
+              "transactionRepeatCount = 0",
+              "transactionFrequencyHz = pwmfrequency",
+              "transactionDuty = (uint8_t)pwmduty",
+              "gIRUseVirtualMicros = true",
+          ):
+              require(token in begin, f"begin transaction contract missing: {token}")
+              require(
+                  "return transactionBuilding || transactionReady || currentsendtime;"
+                  in driver,
+                  "busy state does not cover building, queued, and active sends",
+              )
+          '''
+          if source.count(old_busy) != 1:
+              raise RuntimeError(f'busy-contract recipe match count: {source.count(old_busy)}')
+          source = source.replace(old_busy, new_busy, 1)
+          path.write_text(source)
           PY
 
             python3 "$RUNNER_TEMP/ir-recovery.py"
