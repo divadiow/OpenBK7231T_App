@@ -1,0 +1,16 @@
+Switched to a new branch 'agent/irremote-recovery-staging'
+[agent/irremote-recovery-staging 7833e6b4] ir: reject payload bits outside requested width
+ 1 file changed, 10 insertions(+)
+[agent/irremote-recovery-staging a97c912b] ir: use queued time for frame duration
+ 1 file changed, 21 insertions(+)
+[agent/irremote-recovery-staging 6928ddda] ir: use integer ticks for receive timing
+ 2 files changed, 38 insertions(+), 13 deletions(-)
+[agent/irremote-recovery-staging 3c56f08e] ir: stage carrier settings with send transaction
+ 1 file changed, 28 insertions(+), 8 deletions(-)
+Traceback (most recent call last):
+  File "/home/runner/work/_temp/ir-recovery.py", line 511, in <module>
+    driver = replace_once(
+             ^^^^^^^^^^^^^
+  File "/home/runner/work/_temp/ir-recovery.py", line 14, in replace_once
+    raise RuntimeError(f"{label}: expected one match, found {count}")
+RuntimeError: repeat abort cleanup: expected one match, found 2
