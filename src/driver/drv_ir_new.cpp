@@ -208,6 +208,10 @@ public:
 		sendPin = aSendPin;
 		our_us = 0;
 		our_ms = 0;
+		pwmfrequency = 38000;
+		pwmduty = 50;
+		transactionFrequencyHz = pwmfrequency;
+		transactionDuty = (uint8_t)pwmduty;
 		resetsendqueue();
 	}
 	~myIRsend() { }
@@ -223,6 +227,8 @@ public:
 		}
 		transactionCount = 0;
 		transactionFailed = false;
+		transactionFrequencyHz = pwmfrequency;
+		transactionDuty = (uint8_t)pwmduty;
 		overflows = 0;
 		transactionBuilding = 1;
 		gIRVirtualMicros = 0;
@@ -243,6 +249,9 @@ public:
 		timein = transactionCount;
 		timecount = transactionCount;
 		timecounttotal = transactionCount;
+		pwmfrequency = transactionFrequencyHz;
+		pwmduty = transactionDuty;
+		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
 		transactionReady = 1;
 		transactionBuilding = 0;
 		return true;
@@ -269,27 +278,35 @@ public:
 	}
 
 	uint16_t mark(uint16_t aMarkMicros) {
+		if (!aMarkMicros) return 0;
 		IR_AdvanceVirtualMicros(aMarkMicros);
 		// store mark bits in highest +ve bit of count
 		return appendDuration(aMarkMicros | 0x10000000) ? 1 : 0;
 	}
 
 	void space(uint32_t aMarkMicros) {
+		if (!aMarkMicros) return;
 		IR_AdvanceVirtualMicros(aMarkMicros);
 		appendDuration(aMarkMicros);
 	}
 
 	void enableIROut(uint32_t freq, uint8_t duty=50) {
-		//uint_fast8_t aFrequencyKHz
-		if (freq < 1000)  // Were we given kHz? Supports the old call usage.
+		if (freq < 1000)  // Were we given kHz? Supports old call usage.
 			freq *= 1000;
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"enableIROut %d freq %d duty",(int)freq, (int)duty);
-		if(duty<1)
-			duty=1;
-		pwmduty = duty;
+		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"enableIROut %d freq %d duty",
+			(int)freq, (int)duty);
+		if (duty < 1) duty = 1;
+		if (duty > 100) duty = 100;
 
-		HAL_PIN_PWM_Start(sendPin, freq);
-		//HAL_PIN_PWM_Update(sendPin, duty);
+		if (transactionBuilding) {
+			transactionFrequencyHz = freq;
+			transactionDuty = duty;
+			return;
+		}
+
+		pwmfrequency = freq;
+		pwmduty = duty;
+		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
 	}
 
 	void resetsendqueue() {
@@ -336,6 +353,9 @@ public:
 
 	uint8_t sendPin;
 	uint32_t pwmduty;
+	uint32_t pwmfrequency;
+	uint32_t transactionFrequencyHz;
+	uint8_t transactionDuty;
 
 	uint32_t our_ms;
 	float our_us;
