@@ -1,0 +1,84 @@
+name: Bootstrap native TXW81x integration
+
+on:
+  push:
+    branches:
+      - agent/txw81x-native-linux
+    paths:
+      - .txw81x-native-bootstrap-trigger
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  integrate-and-validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply integration
+        run: python3 tools/txw81x_pack/bootstrap_integrate.py
+
+      - name: Run standalone packer tests
+        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
+
+      - name: Download known-good reference outputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p reference
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            /repos/openshwprojects/OpenBK7231T_App/actions/artifacts/8263481010/zip \
+            > reference.zip
+          unzip -j reference.zip \
+            'OpenTXW81X_main_4b43623c0cc3.bin' \
+            'OpenTXW81X_main_4b43623c0cc3_ota.img' \
+            -d reference
+
+      - name: Build and package TXW81x natively
+        env:
+          TXW81X_BUILD_DATE: '2026-07-12'
+        run: |
+          make APP_VERSION=main_4b43623c0cc3 APP_NAME=OpenTXW81X VARIANT=default OpenTXW81X
+          python3 tools/txw81x_pack/txw81x_pack.py inspect \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
+            > native-app-inspect.json
+          python3 tools/txw81x_pack/txw81x_pack.py inspect \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
+            > native-ota-inspect.json
+
+      - name: Compare native outputs with Taixin references
+        run: |
+          cmp output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
+              reference/OpenTXW81X_main_4b43623c0cc3.bin
+          cmp output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
+              reference/OpenTXW81X_main_4b43623c0cc3_ota.img
+          sha256sum \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img
+
+      - name: Commit integrated branch
+        run: |
+          rm -f .txw81x-native-bootstrap-trigger
+          rm -f .github/workflows/txw81x-native-bootstrap.yml
+          rm -f tools/txw81x_pack/bootstrap_integrate.py
+          git update-index --chmod=+x platforms/TXW81X/package_native.sh
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add Makefile .github/workflows/workflow.yaml \
+            platforms/TXW81X/package_native.sh tools/txw81x_pack docs \
+            .github/workflows/txw81x-native-bootstrap.yml \
+            .txw81x-native-bootstrap-trigger
+          git commit -m '[skip ci] replace TXW81x WSL packaging with native Python'
+          git push origin HEAD:agent/txw81x-native-linux
