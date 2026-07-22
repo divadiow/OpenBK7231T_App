@@ -59,26 +59,45 @@ jobs:
           EXPECTED_BASE: c7dbf61ed8ae2680ce311e20189a22d034697896
           STAGING_BRANCH: agent/irremote-recovery-staging
         run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
-          test "$(git ls-remote origin refs/heads/irremotesp8266_290 | awk '{print $1}')" = "$EXPECTED_BASE"
+          set +e
+          {
+            set -euo pipefail
+            test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
+            test "$(git ls-remote origin refs/heads/irremotesp8266_290 | awk '{print $1}')" = "$EXPECTED_BASE"
 
-          RECOVERY_B64="$(sed -n 's/^[[:space:]]*RECOVERY_B64: "\(.*\)"$/\1/p' "$GITHUB_WORKSPACE/runner/.github/workflows/ir-recovery.yml")"
-          test -n "$RECOVERY_B64"
-          export RECOVERY_B64
+            RECOVERY_B64="$(sed -n 's/^[[:space:]]*RECOVERY_B64: "\(.*\)"$/\1/p' "$GITHUB_WORKSPACE/runner/.github/workflows/ir-recovery.yml")"
+            test -n "$RECOVERY_B64"
+            export RECOVERY_B64
 
-          git switch -c "$STAGING_BRANCH"
-          git config user.name "OpenAI-agent"
-          git config user.email "openai-agent@users.noreply.github.com"
+            git switch -c "$STAGING_BRANCH"
+            git config user.name "OpenAI-agent"
+            git config user.email "openai-agent@users.noreply.github.com"
 
-          python3 - <<'PY'
+            python3 - <<'PY'
           import base64, os, zlib
           from pathlib import Path
           Path(os.environ['RUNNER_TEMP'], 'ir-recovery.py').write_bytes(
               zlib.decompress(base64.b64decode(os.environ['RECOVERY_B64'])))
           PY
-          python3 "$RUNNER_TEMP/ir-recovery.py"
-          python3 tests/ir_adapter_regression.py
-          git diff --check
+            python3 "$RUNNER_TEMP/ir-recovery.py"
+            python3 tests/ir_adapter_regression.py
+            git diff --check
 
-          git push --force origin "HEAD:refs/heads/${STAGING_BRANCH}"
+            git push --force origin "HEAD:refs/heads/${STAGING_BRANCH}"
+          } 2>&1 | tee "$RUNNER_TEMP/ir-recovery.log"
+          status=${PIPESTATUS[0]}
+          printf '%s\n' "$status" > "$RUNNER_TEMP/ir-recovery.status"
+          tail -n 250 "$RUNNER_TEMP/ir-recovery.log" > "$RUNNER_TEMP/ir-recovery.tail"
+          exit "$status"
+
+      - name: Preserve focused failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/ir-recovery.tail" "$GITHUB_WORKSPACE/runner/.github/ir-recovery-last.log"
+          git -C "$GITHUB_WORKSPACE/runner" config user.name "OpenAI-agent"
+          git -C "$GITHUB_WORKSPACE/runner" config user.email "openai-agent@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE/runner" add .github/ir-recovery-last.log
+          git -C "$GITHUB_WORKSPACE/runner" commit -m "runner: record focused IR recovery failure" || true
+          git -C "$GITHUB_WORKSPACE/runner" push origin HEAD:agent/irremote-recovery-runner
