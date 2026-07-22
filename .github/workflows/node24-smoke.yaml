@@ -1,0 +1,46 @@
+name: Node.js 24 Actions Smoke Test
+
+on:
+  push:
+    branches:
+      - agent/github-actions-node24
+  workflow_dispatch:
+
+env:
+  # Fail early on any JavaScript action that cannot actually run under Node.js 24.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  node24-actions-smoke:
+    name: Node 24 action compatibility
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          architecture: 'x64'
+          cache: 'pip'
+
+      - name: Exercise actions/cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/openbeken-node24-smoke
+          key: openbeken-node24-smoke-${{ runner.os }}-${{ steps.python.outputs.python-version }}-${{ github.sha }}
+          restore-keys: |
+            openbeken-node24-smoke-${{ runner.os }}-${{ steps.python.outputs.python-version }}-
+
+      - name: Build representative OpenBeken target
+        run: make APP_VERSION=node24_smoke APP_NAME=OpenBK7231T VARIANT=default OpenBK7231T
+
+      - name: Upload representative build output
+        uses: actions/upload-artifact@v6
+        with:
+          name: OpenBK7231T_node24_smoke
+          path: output/node24_smoke/
+          if-no-files-found: error
