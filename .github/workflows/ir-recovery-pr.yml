@@ -1,0 +1,84 @@
+name: Inspectable IR recovery
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ir-recovery.yml
+      - .github/workflows/ir-recovery-pr.yml
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: irremote-recovery-staging
+  cancel-in-progress: true
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel only unnecessary helper-branch Build App runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_WORKFLOW_ID: "148636797"
+          HELPER_BRANCH: "agent/irremote-recovery-runner"
+        shell: bash
+        run: |
+          set -euo pipefail
+          for status in queued in_progress; do
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${BUILD_WORKFLOW_ID}/runs?branch=${HELPER_BRANCH}&status=${status}&per_page=100" \
+              --jq '.workflow_runs[].id' |
+            while read -r run_id; do
+              [ -n "$run_id" ] || continue
+              gh api --method POST \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
+            done
+          done
+
+      - name: Check out recovery definition
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: runner
+
+      - name: Check out exact validated PR head
+        uses: actions/checkout@v4
+        with:
+          ref: c7dbf61ed8ae2680ce311e20189a22d034697896
+          fetch-depth: 0
+          path: target
+
+      - name: Apply direct source commits and run focused tests
+        working-directory: target
+        shell: bash
+        env:
+          EXPECTED_BASE: c7dbf61ed8ae2680ce311e20189a22d034697896
+          STAGING_BRANCH: agent/irremote-recovery-staging
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
+          test "$(git ls-remote origin refs/heads/irremotesp8266_290 | awk '{print $1}')" = "$EXPECTED_BASE"
+
+          RECOVERY_B64="$(sed -n 's/^[[:space:]]*RECOVERY_B64: "\(.*\)"$/\1/p' "$GITHUB_WORKSPACE/runner/.github/workflows/ir-recovery.yml")"
+          test -n "$RECOVERY_B64"
+          export RECOVERY_B64
+
+          git switch -c "$STAGING_BRANCH"
+          git config user.name "OpenAI-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+
+          python3 - <<'PY'
+          import base64, os, zlib
+          from pathlib import Path
+          Path(os.environ['RUNNER_TEMP'], 'ir-recovery.py').write_bytes(
+              zlib.decompress(base64.b64decode(os.environ['RECOVERY_B64'])))
+          PY
+          python3 "$RUNNER_TEMP/ir-recovery.py"
+          python3 tests/ir_adapter_regression.py
+          git diff --check
+
+          git push --force origin "HEAD:refs/heads/${STAGING_BRANCH}"
