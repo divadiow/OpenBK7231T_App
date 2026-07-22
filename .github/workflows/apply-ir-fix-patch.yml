@@ -51,3 +51,5 @@ jobs:
           git -C "$GITHUB_WORKSPACE/target" add --all
           git -C "$GITHUB_WORKSPACE/target" commit -m "$commit_message"
           git -C "$GITHUB_WORKSPACE/target" push origin HEAD:irremotesp8266_290
+
+# recovery trigger: strict parsing
