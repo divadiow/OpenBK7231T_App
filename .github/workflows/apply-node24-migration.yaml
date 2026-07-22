@@ -12,11 +12,11 @@ on:
 
 permissions:
   actions: write
-  contents: write
+  contents: read
 
 jobs:
   migrate:
-    name: Update production workflow actions
+    name: Export updated production workflow
     runs-on: ubuntu-22.04
     env:
       TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -63,16 +63,9 @@ jobs:
           grep -nE 'uses: actions/(checkout|setup-python|cache|upload-artifact|download-artifact)' "$workflow"
           git diff --check
 
-      - name: Remove temporary investigation workflows
-        run: |
-          rm -f .github/workflows/node24-smoke.yaml
-          rm -f .github/workflows/apply-node24-migration.yaml
-
-      - name: Commit migration
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A .github/workflows
-          git status --short
-          git commit -m 'Migrate GitHub Actions to Node.js 24'
-          git push origin "HEAD:${TARGET_BRANCH}"
+      - name: Upload validated workflow
+        uses: actions/upload-artifact@v6
+        with:
+          name: node24-migrated-workflow
+          path: .github/workflows/workflow.yaml
+          if-no-files-found: error
