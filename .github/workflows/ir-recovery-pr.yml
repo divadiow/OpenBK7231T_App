@@ -65,20 +65,93 @@ jobs:
             test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
             test "$(git ls-remote origin refs/heads/irremotesp8266_290 | awk '{print $1}')" = "$EXPECTED_BASE"
 
-            RECOVERY_B64="$(sed -n 's/^[[:space:]]*RECOVERY_B64: "\(.*\)"$/\1/p' "$GITHUB_WORKSPACE/runner/.github/workflows/ir-recovery.yml")"
-            test -n "$RECOVERY_B64"
-            export RECOVERY_B64
-
             git switch -c "$STAGING_BRANCH"
             git config user.name "OpenAI-agent"
             git config user.email "openai-agent@users.noreply.github.com"
 
+            cp "$GITHUB_WORKSPACE/runner/.github/ir-recovery.py" "$RUNNER_TEMP/ir-recovery.py"
             python3 - <<'PY'
-          import base64, os, zlib
           from pathlib import Path
-          Path(os.environ['RUNNER_TEMP'], 'ir-recovery.py').write_bytes(
-              zlib.decompress(base64.b64decode(os.environ['RECOVERY_B64'])))
+
+          path = Path("/home/runner/work/_temp/ir-recovery.py")
+          source = path.read_text()
+
+          old_abort = '''    driver = replace_once(
+                  driver,
+                  """\t\ttransactionBuilding = 0;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          """,
+                  """\t\ttransactionBuilding = 0;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttransactionRepeatCount = 0;
+          \t\ttransactionRepeatsRemaining = 0;
+          """,
+                  "repeat abort cleanup",
+              )
+          '''
+          new_abort = '''    start, _, end = function_span(driver, "\\tvoid abortSendTransaction()")
+              block = driver[start:end]
+              block = replace_once(
+                  block,
+                  """\t\ttransactionBuilding = 0;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          """,
+                  """\t\ttransactionBuilding = 0;
+          \t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttransactionRepeatCount = 0;
+          \t\ttransactionRepeatsRemaining = 0;
+          """,
+                  "repeat abort cleanup",
+              )
+              driver = driver[:start] + block + driver[end:]
+          '''
+          if source.count(old_abort) != 1:
+              raise RuntimeError(f"abort recipe match count: {source.count(old_abort)}")
+          source = source.replace(old_abort, new_abort, 1)
+
+          old_reset = '''    driver = replace_once(
+                  driver,
+                  """\t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttimein = timeout = 0;
+          """,
+                  """\t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttransactionRepeatCount = 0;
+          \t\ttransactionRepeatsRemaining = 0;
+          \t\ttimein = timeout = 0;
+          """,
+                  "repeat reset cleanup",
+              )
+          '''
+          new_reset = '''    start, _, end = function_span(driver, "\\tvoid resetsendqueue()")
+              block = driver[start:end]
+              block = replace_once(
+                  block,
+                  """\t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttimein = timeout = 0;
+          """,
+                  """\t\ttransactionFailed = false;
+          \t\ttransactionCount = 0;
+          \t\ttransactionRepeatCount = 0;
+          \t\ttransactionRepeatsRemaining = 0;
+          \t\ttimein = timeout = 0;
+          """,
+                  "repeat reset cleanup",
+              )
+              driver = driver[:start] + block + driver[end:]
+          '''
+          if source.count(old_reset) != 1:
+              raise RuntimeError(f"reset recipe match count: {source.count(old_reset)}")
+          source = source.replace(old_reset, new_reset, 1)
+          path.write_text(source)
           PY
+
             python3 "$RUNNER_TEMP/ir-recovery.py"
             python3 tests/ir_adapter_regression.py
             git diff --check
