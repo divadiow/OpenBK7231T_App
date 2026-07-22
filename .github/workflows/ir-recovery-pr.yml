@@ -96,8 +96,9 @@ jobs:
         run: |
           set -euo pipefail
           cp "$RUNNER_TEMP/ir-recovery.tail" "$GITHUB_WORKSPACE/runner/.github/ir-recovery-last.log"
+          cp "$RUNNER_TEMP/ir-recovery.py" "$GITHUB_WORKSPACE/runner/.github/ir-recovery.py"
           git -C "$GITHUB_WORKSPACE/runner" config user.name "OpenAI-agent"
           git -C "$GITHUB_WORKSPACE/runner" config user.email "openai-agent@users.noreply.github.com"
-          git -C "$GITHUB_WORKSPACE/runner" add .github/ir-recovery-last.log
+          git -C "$GITHUB_WORKSPACE/runner" add .github/ir-recovery-last.log .github/ir-recovery.py
           git -C "$GITHUB_WORKSPACE/runner" commit -m "runner: record focused IR recovery failure" || true
           git -C "$GITHUB_WORKSPACE/runner" push origin HEAD:agent/irremote-recovery-runner
