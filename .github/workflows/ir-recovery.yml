@@ -71,31 +71,15 @@ jobs:
 
             cp "$GITHUB_WORKSPACE/runner/.github/ir-recovery.py" "$RUNNER_TEMP/ir-recovery.py"
             python3 - <<'PY'
+          import os
           from pathlib import Path
 
-          path = Path(__import__('os').environ['RUNNER_TEMP']) / 'ir-recovery.py'
+          path = Path(os.environ['RUNNER_TEMP']) / 'ir-recovery.py'
           source = path.read_text()
-          old = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f"{label}: expected one match, found {count}")
-              return text.replace(old, new, 1)
-          '''
-          new = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1 and label in ("repeat abort cleanup", "repeat reset cleanup"):
-                  signature = ("\\tvoid abortSendTransaction()" if label == "repeat abort cleanup"
-                               else "\\tvoid resetsendqueue()")
-                  start, _, end = function_span(text, signature)
-                  block = text[start:end]
-                  if block.count(old) == 1:
-                      return text[:start] + block.replace(old, new, 1) + text[end:]
-              if count != 1:
-                  raise RuntimeError(f"{label}: expected one match, found {count}")
-              return text.replace(old, new, 1)
-          '''
+          old = r"*end == '\0');"
+          new = r"*end == '\\0');"
           if source.count(old) != 1:
-              raise RuntimeError(f'replace_once recipe match count: {source.count(old)}')
+              raise RuntimeError(f'null-literal recipe match count: {source.count(old)}')
           path.write_text(source.replace(old, new, 1))
           PY
 
