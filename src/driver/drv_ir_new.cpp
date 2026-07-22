@@ -59,6 +59,16 @@ typedef unsigned short uint16_t;
 
 #define __FlashStringHelper char
 
+// IRremoteESP8266 normally measures time spent in blocking mark()/space()
+// calls. OpenBeken queues them, so expose queued duration while building a
+// transaction.
+static bool gIRUseVirtualMicros = false;
+static uint32_t gIRVirtualMicros = 0;
+
+static void IR_AdvanceVirtualMicros(const uint32_t usec) {
+	if (gIRUseVirtualMicros) gIRVirtualMicros += usec;
+}
+
 // dummy functions
 #if PLATFORM_BEKEN
 void noInterrupts() { }
@@ -67,10 +77,12 @@ void delay(int n) { }
 void delayMicroseconds(int n) { }
 unsigned long millis()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros / 1000;
 	return 0;
 }
 unsigned long micros()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros;
 	return 0;
 }
 #else
@@ -80,10 +92,12 @@ void delay(int n) { delay_ms(n); }
 void delayMicroseconds(int n) { HAL_Delay_us(n); }
 unsigned long millis()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros / 1000;
 	return g_timeMs;
 }
 unsigned long micros()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros;
 	return g_timeMs * 1000;
 }
 #endif
@@ -209,10 +223,13 @@ public:
 		transactionFailed = false;
 		overflows = 0;
 		transactionBuilding = 1;
+		gIRVirtualMicros = 0;
+		gIRUseVirtualMicros = true;
 		return true;
 	}
 
 	bool commitSendTransaction() {
+		gIRUseVirtualMicros = false;
 		if (!transactionBuilding || transactionFailed || transactionCount == 0) {
 			abortSendTransaction();
 			return false;
@@ -230,6 +247,7 @@ public:
 	}
 
 	void abortSendTransaction() {
+		gIRUseVirtualMicros = false;
 		transactionBuilding = 0;
 		transactionFailed = false;
 		transactionCount = 0;
@@ -249,11 +267,13 @@ public:
 	}
 
 	uint16_t mark(uint16_t aMarkMicros) {
+		IR_AdvanceVirtualMicros(aMarkMicros);
 		// store mark bits in highest +ve bit of count
 		return appendDuration(aMarkMicros | 0x10000000) ? 1 : 0;
 	}
 
 	void space(uint32_t aMarkMicros) {
+		IR_AdvanceVirtualMicros(aMarkMicros);
 		appendDuration(aMarkMicros);
 	}
 
@@ -271,6 +291,7 @@ public:
 	}
 
 	void resetsendqueue() {
+		gIRUseVirtualMicros = false;
 		// Hide the queue from the ISR before resetting shared metadata.
 		transactionReady = 0;
 		transactionBuilding = 0;
