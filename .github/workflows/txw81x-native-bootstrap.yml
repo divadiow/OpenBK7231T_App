@@ -64,6 +64,49 @@ jobs:
           python3 tools/txw81x_pack/txw81x_pack.py inspect \
             output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
             > native-ota-inspect.json
+          python3 tools/txw81x_pack/txw81x_pack.py inspect \
+            reference/OpenTXW81X_main_4b43623c0cc3.bin \
+            > reference-app-inspect.json
+          python3 tools/txw81x_pack/txw81x_pack.py inspect \
+            reference/OpenTXW81X_main_4b43623c0cc3_ota.img \
+            > reference-ota-inspect.json
+
+      - name: Diagnose native/reference differences
+        run: |
+          set +e
+          sha256sum \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
+            reference/OpenTXW81X_main_4b43623c0cc3.bin \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
+            reference/OpenTXW81X_main_4b43623c0cc3_ota.img
+          echo '--- APP parsed-field diff ---'
+          diff -u reference-app-inspect.json native-app-inspect.json || true
+          echo '--- OTA parsed-field diff ---'
+          diff -u reference-ota-inspect.json native-ota-inspect.json || true
+          echo '--- first APP byte differences ---'
+          cmp -l \
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
+            reference/OpenTXW81X_main_4b43623c0cc3.bin | head -40 || true
+          echo '--- code-region comparison ---'
+          cmp -s \
+            <(tail -c +3073 output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin) \
+            <(tail -c +3073 reference/OpenTXW81X_main_4b43623c0cc3.bin)
+          echo "code_region_cmp=$?"
+
+      - name: Upload native comparison diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: txw81x-native-comparison-${{ github.run_id }}
+          path: |
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin
+            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img
+            reference/OpenTXW81X_main_4b43623c0cc3.bin
+            reference/OpenTXW81X_main_4b43623c0cc3_ota.img
+            native-app-inspect.json
+            native-ota-inspect.json
+            reference-app-inspect.json
+            reference-ota-inspect.json
 
       - name: Compare native outputs with Taixin references
         run: |
@@ -71,9 +114,6 @@ jobs:
               reference/OpenTXW81X_main_4b43623c0cc3.bin
           cmp output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
               reference/OpenTXW81X_main_4b43623c0cc3_ota.img
-          sha256sum \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img
 
       - name: Commit integrated branch
         run: |
