@@ -226,6 +226,7 @@ public:
 			return false;
 		}
 		transactionCount = 0;
+		transactionRepeatCount = 0;
 		transactionFailed = false;
 		transactionFrequencyHz = pwmfrequency;
 		transactionDuty = (uint8_t)pwmduty;
@@ -247,13 +248,17 @@ public:
 		// all queue metadata first, then flip that single-byte flag last.
 		timeout = 0;
 		timein = transactionCount;
-		timecount = transactionCount;
-		timecounttotal = transactionCount;
+		transactionRepeatsRemaining = transactionRepeatCount;
+		const uint32_t totalItems =
+			(uint32_t)transactionCount * (transactionRepeatCount + 1U);
+		timecount = (uint16_t)totalItems;
+		timecounttotal = totalItems;
 		pwmfrequency = transactionFrequencyHz;
 		pwmduty = transactionDuty;
 		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
 		transactionReady = 1;
 		transactionBuilding = 0;
+		transactionRepeatCount = 0;
 		return true;
 	}
 
@@ -262,6 +267,8 @@ public:
 		transactionBuilding = 0;
 		transactionFailed = false;
 		transactionCount = 0;
+		transactionRepeatCount = 0;
+		transactionRepeatsRemaining = 0;
 	}
 
 	bool isBusy() const {
@@ -270,6 +277,12 @@ public:
 
 	uint16_t getStagedItemCount() const {
 		return transactionCount;
+	}
+
+	bool setTransactionRepeats(const uint16_t repeats) {
+		if (!transactionBuilding || transactionFailed) return false;
+		transactionRepeatCount = repeats;
+		return true;
 	}
 
 	void delay(long int ms) {
@@ -316,6 +329,8 @@ public:
 		transactionBuilding = 0;
 		transactionFailed = false;
 		transactionCount = 0;
+		transactionRepeatCount = 0;
+		transactionRepeatsRemaining = 0;
 		timein = timeout = 0;
 		timecount = 0;
 		overflows = 0;
@@ -325,20 +340,22 @@ public:
 	}
 
 	bool getsendqueue(int32_t *value) {
-		if (!value || !transactionReady) {
-			return false;
-		}
+		if (!value || !transactionReady) return false;
+
 		if (timeout >= timein) {
-			transactionReady = 0;
-			timein = timeout = 0;
-			timecount = 0;
-			return false;
+			if (transactionRepeatsRemaining) {
+				transactionRepeatsRemaining--;
+				timeout = 0;
+			} else {
+				transactionReady = 0;
+				timein = timeout = 0;
+				timecount = 0;
+				return false;
+			}
 		}
 
 		*value = times[timeout++];
-		if (timecount) {
-			timecount--;
-		}
+		if (timecount) timecount--;
 		return true;
 	}
 
@@ -379,6 +396,8 @@ private:
 	volatile uint8_t transactionBuilding;
 	bool transactionFailed;
 	uint16_t transactionCount;
+	uint16_t transactionRepeatCount;
+	volatile uint16_t transactionRepeatsRemaining;
 };
 
 
@@ -492,6 +511,35 @@ static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
 	*result = value;
 	return true;
 }
+
+static bool parseBoundedHex(const char *text, const uint32_t minValue,
+	const uint32_t maxValue, uint32_t *result) {
+	if (!text || !text[0] || !result || minValue > maxValue) return false;
+
+	uint32_t value = 0;
+	for (const char *cursor = text; *cursor; cursor++) {
+		uint32_t digit;
+		if (*cursor >= '0' && *cursor <= '9')
+			digit = (uint32_t)(*cursor - '0');
+		else if (*cursor >= 'a' && *cursor <= 'f')
+			digit = 10U + (uint32_t)(*cursor - 'a');
+		else if (*cursor >= 'A' && *cursor <= 'F')
+			digit = 10U + (uint32_t)(*cursor - 'A');
+		else
+			return false;
+
+		if (value > maxValue / 16 ||
+			(value == maxValue / 16 && digit > maxValue % 16)) {
+			return false;
+		}
+		value = value * 16 + digit;
+	}
+	if (value < minValue) return false;
+
+	*result = value;
+	return true;
+}
+
 
 static bool isValidStatePayloadLength(const decode_type_t protocol,
 	const uint16_t bits, const uint16_t nbytes) {
@@ -649,20 +697,14 @@ extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, cons
 					}
 					if (statePayload)
 					{
-						bool sent = true;
-						for (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
-							const uint16_t stagedBefore = pIRsend->getStagedItemCount();
-							if (!pIRsend->send(protocol,state,nbytes) ||
-								pIRsend->getStagedItemCount() == stagedBefore) {
-								sent = false;
-								break;
-							}
-							if (repeatIndex < repeats) {
-								pIRsend->delay(100);
-							}
-						}
+						const uint16_t stagedBefore =
+							pIRsend->getStagedItemCount();
+						bool sent = pIRsend->send(protocol, state, nbytes) &&
+							pIRsend->getStagedItemCount() > stagedBefore;
 						if (sent) {
 							pIRsend->delay(100);
+							sent = pIRsend->setTransactionRepeats(
+								(uint16_t)repeats);
 						}
 						if (sent && pIRsend->commitSendTransaction())
 						{
@@ -717,9 +759,21 @@ extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, cons
 
 	int repeats = 0;
 
-	if ((*p == '-') || (*p == ' ')) {
+	if (*p) {
+		if ((*p != '-') && (*p != ' ')) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IRSend invalid classic repeat syntax in %s", args);
+			return CMD_RES_BAD_ARGUMENT;
+		}
 		p++;
-		repeats = strtol(p, &p, 16);
+		uint32_t repeatValue = 0;
+		if (!parseBoundedHex(p, 0, kIRSendMaxRepeats, &repeatValue)) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IRSend invalid repeat count '%s' (expected 0-%X)",
+				p, (unsigned int)kIRSendMaxRepeats);
+			return CMD_RES_BAD_ARGUMENT;
+		}
+		repeats = (int)repeatValue;
 	}
 
 	if (pIRsend) {
@@ -731,19 +785,19 @@ extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, cons
 		// BK7238 is built for Thumb-1 without the libgcc switch-table helper.
 		// Keep this dispatch as comparisons so GCC cannot emit __gnu_thumb1_case_si.
 		if (protocol == decode_type_t::RC5) {
-			pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command));
+			pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command), kRC5XBits, repeats);
 		} else if (protocol == decode_type_t::RC6) {
-			pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command));
+			pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command), kRC6Mode0Bits, repeats);
 		} else if (protocol == decode_type_t::NEC) {
-			pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command));
+			pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command), kNECBits, repeats);
 		} else if (protocol == decode_type_t::PANASONIC) {
-			pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command);
+			pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command, kPanasonicBits, repeats);
 		} else if (protocol == decode_type_t::JVC) {
-			pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command));
+			pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command), kJvcBits, repeats);
 		} else if (protocol == decode_type_t::SAMSUNG) {
-			pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command));
+			pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command), kSamsungBits, repeats);
 		} else if (protocol == decode_type_t::LG) {
-			pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command));
+			pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command), kLgBits, repeats);
 		} else {
 			pIRsend->abortSendTransaction();
 			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
