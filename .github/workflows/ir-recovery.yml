@@ -85,18 +85,18 @@ jobs:
               raise RuntimeError(
                   f'null-literal recipe state: old={source.count(old_null)} new={source.count(new_null)}')
 
-          old_busy = '''    for token in (
-              "transactionBuilding",
-              "transactionReady",
-              "currentsendtime",
-              "transactionRepeatCount = 0",
-              "transactionFrequencyHz = pwmfrequency",
-              "transactionDuty = (uint8_t)pwmduty",
-              "gIRUseVirtualMicros = true",
-          ):
-              require(token in begin, f"begin transaction contract missing: {token}")
-          '''
-          new_busy = '''    for token in (
+          test_start = source.index(
+              "def check_transaction_contracts(driver: str) -> None:")
+          test_end = source.index("\ndef check_validation_contracts", test_start)
+          test_block = source[test_start:test_end]
+          if '"if (isBusy())"' not in test_block:
+              loop_start = source.index("    for token in (", test_start, test_end)
+              loop_end = source.index(
+                  '\n\n    require("gIRUseVirtualMicros = false"',
+                  loop_start,
+                  test_end,
+              )
+              new_loop = '''    for token in (
               "if (isBusy())",
               "transactionRepeatCount = 0",
               "transactionFrequencyHz = pwmfrequency",
@@ -104,17 +104,18 @@ jobs:
               "gIRUseVirtualMicros = true",
           ):
               require(token in begin, f"begin transaction contract missing: {token}")
-              require(
+          require(
+              "return transactionBuilding || transactionReady || currentsendtime;"
+              in driver,
+              "busy state does not cover building, queued, and active sends",
+          )'''
+              source = source[:loop_start] + new_loop + source[loop_end:]
+          else:
+              required = (
                   "return transactionBuilding || transactionReady || currentsendtime;"
-                  in driver,
-                  "busy state does not cover building, queued, and active sends",
               )
-          '''
-          if source.count(old_busy) == 1:
-              source = source.replace(old_busy, new_busy, 1)
-          elif source.count(new_busy) != 1:
-              raise RuntimeError(
-                  f'busy-contract recipe state: old={source.count(old_busy)} new={source.count(new_busy)}')
+              if required not in test_block:
+                  raise RuntimeError("busy-state assertion is incomplete")
 
           path.write_text(source)
           PY
