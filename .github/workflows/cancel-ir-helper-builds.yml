@@ -24,10 +24,11 @@ jobs:
         run: |
           set -euo pipefail
           for status in queued in_progress; do
-            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${BUILD_WORKFLOW_ID}/runs" \
+            gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/${BUILD_WORKFLOW_ID}/runs" \
               -f branch="${HELPER_BRANCH}" -f status="${status}" -f per_page=100 \
               --jq '.workflow_runs[].id' | while read -r run_id; do
                 [ -n "$run_id" ] || continue
+                echo "Cancelling helper Build App run ${run_id}"
                 gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
               done
           done
