@@ -1,16 +1,11 @@
-name: Bootstrap native TXW81x integration
+name: Finalize native TXW81x integration
 
 on:
-  push:
-    branches:
-      - agent/txw81x-native-linux
-    paths:
-      - .txw81x-native-bootstrap-trigger
   pull_request:
     branches:
       - agent/txw81x-native-linux
     paths:
-      - .txw81x-native-bootstrap-trigger
+      - .txw81x-native-final-trigger
 
 permissions:
   contents: write
@@ -18,7 +13,7 @@ permissions:
 
 jobs:
   integrate-and-validate:
-    if: github.event_name == 'push' || github.head_ref == 'agent/txw81x-native-linux-trigger'
+    if: github.head_ref == 'agent/txw81x-native-linux-trigger'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -28,104 +23,141 @@ jobs:
           ref: agent/txw81x-native-linux
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Apply integration
-        run: python3 tools/txw81x_pack/bootstrap_integrate.py
-
-      - name: Run standalone packer tests
-        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
-
-      - name: Download known-good reference outputs
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Apply and commit final integration
         run: |
-          mkdir -p reference
-          gh api \
-            -H 'Accept: application/vnd.github+json' \
-            /repos/openshwprojects/OpenBK7231T_App/actions/artifacts/8263481010/zip \
-            > reference.zip
-          unzip -j reference.zip \
-            'OpenTXW81X_main_4b43623c0cc3.bin' \
-            'OpenTXW81X_main_4b43623c0cc3_ota.img' \
-            -d reference
-
-      - name: Build and package TXW81x natively
-        env:
-          TXW81X_BUILD_DATE: '2026-07-12'
-        run: |
-          make APP_VERSION=main_4b43623c0cc3 APP_NAME=OpenTXW81X VARIANT=default OpenTXW81X
-          python3 tools/txw81x_pack/txw81x_pack.py inspect \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
-            > native-app-inspect.json
-          python3 tools/txw81x_pack/txw81x_pack.py inspect \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
-            > native-ota-inspect.json
-          python3 tools/txw81x_pack/txw81x_pack.py inspect \
-            reference/OpenTXW81X_main_4b43623c0cc3.bin \
-            > reference-app-inspect.json
-          python3 tools/txw81x_pack/txw81x_pack.py inspect \
-            reference/OpenTXW81X_main_4b43623c0cc3_ota.img \
-            > reference-ota-inspect.json
-
-      - name: Diagnose native/reference differences
-        run: |
-          set +e
-          sha256sum \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
-            reference/OpenTXW81X_main_4b43623c0cc3.bin \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
-            reference/OpenTXW81X_main_4b43623c0cc3_ota.img
-          echo '--- APP parsed-field diff ---'
-          diff -u reference-app-inspect.json native-app-inspect.json || true
-          echo '--- OTA parsed-field diff ---'
-          diff -u reference-ota-inspect.json native-ota-inspect.json || true
-          echo '--- first APP byte differences ---'
-          cmp -l \
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
-            reference/OpenTXW81X_main_4b43623c0cc3.bin | head -40 || true
-          echo '--- code-region comparison ---'
-          cmp -s \
-            <(tail -c +3073 output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin) \
-            <(tail -c +3073 reference/OpenTXW81X_main_4b43623c0cc3.bin)
-          echo "code_region_cmp=$?"
-
-      - name: Upload native comparison diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: txw81x-native-comparison-${{ github.run_id }}
-          path: |
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin
-            output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img
-            reference/OpenTXW81X_main_4b43623c0cc3.bin
-            reference/OpenTXW81X_main_4b43623c0cc3_ota.img
-            native-app-inspect.json
-            native-ota-inspect.json
-            reference-app-inspect.json
-            reference-ota-inspect.json
-
-      - name: Compare native outputs with Taixin references
-        run: |
-          cmp output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3.bin \
-              reference/OpenTXW81X_main_4b43623c0cc3.bin
-          cmp output/main_4b43623c0cc3/OpenTXW81X_main_4b43623c0cc3_ota.img \
-              reference/OpenTXW81X_main_4b43623c0cc3_ota.img
-
-      - name: Commit integrated branch
-        run: |
-          rm -f .txw81x-native-bootstrap-trigger
+          set -eu
+          OLD_HEAD=$(git rev-parse HEAD)
+          python3 tools/txw81x_pack/bootstrap_integrate.py
+          rm -f .txw81x-native-bootstrap-trigger .txw81x-native-final-trigger
           rm -f .github/workflows/txw81x-native-bootstrap.yml
           rm -f tools/txw81x_pack/bootstrap_integrate.py
           git update-index --chmod=+x platforms/TXW81X/package_native.sh
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add Makefile .github/workflows/workflow.yaml \
-            platforms/TXW81X/package_native.sh tools/txw81x_pack docs \
-            .github/workflows/txw81x-native-bootstrap.yml \
-            .txw81x-native-bootstrap-trigger
+          git add -A
+          git reset --soft 4b43623c0cc3619b6be3aa7cfc0f4b5fbb6275e7
           git commit -m '[skip ci] replace TXW81x WSL packaging with native Python'
-          git push origin HEAD:agent/txw81x-native-linux
+          git push --force-with-lease=refs/heads/agent/txw81x-native-linux:$OLD_HEAD \
+            origin HEAD:refs/heads/agent/txw81x-native-linux
+          echo "TESTED_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Run standalone tests
+        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
+
+      - name: Initialize OpenTXW81X packaging inputs
+        run: git submodule update --init --recursive --depth=1 sdk/OpenTXW81X
+
+      - name: Download Taixin reference outputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          mkdir -p reference-old reference-current
+          gh api -H 'Accept: application/vnd.github+json' \
+            /repos/openshwprojects/OpenBK7231T_App/actions/artifacts/8263481010/zip \
+            > reference-old.zip
+          unzip -j reference-old.zip \
+            'OpenTXW81X_main_4b43623c0cc3.bin' \
+            'OpenTXW81X_main_4b43623c0cc3_ota.img' \
+            -d reference-old
+          gh api -H 'Accept: application/vnd.github+json' \
+            /repos/divadiow/OpenBK7231T_App/actions/artifacts/8545071356/zip \
+            > reference-current.zip
+          unzip -j reference-current.zip '*.bin' '*.img' -d reference-current
+
+      - name: Verify recorded known-good images
+        env:
+          TXW81X_REFERENCE_DIR: reference-old
+          TXW81X_LOADER: sdk/OpenTXW81X/sdk/chip/txw81x/loader_compress.bin
+        run: python3 -m unittest discover -s tools/txw81x_pack/tests -v
+
+      - name: Verify production wrapper against identical Taixin input
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import datetime as dt
+          import importlib.util
+          import struct
+          from pathlib import Path
+
+          module_path = Path('tools/txw81x_pack/txw81x_pack.py')
+          spec = importlib.util.spec_from_file_location('txw81x_pack', module_path)
+          module = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          import sys
+          sys.modules[spec.name] = module
+          spec.loader.exec_module(module)
+
+          app_path = next(Path('reference-current').glob('*.bin'))
+          app = app_path.read_bytes()
+          info = module.parse_app_image(app)
+          code = app[info['boot']['code_offset']:]
+          base = info['boot']['load_address']
+
+          def record(address: int, kind: int, data: bytes) -> str:
+              payload = bytes((len(data), (address >> 8) & 0xff, address & 0xff, kind)) + data
+              checksum = (-sum(payload)) & 0xff
+              return ':' + (payload + bytes((checksum,))).hex().upper()
+
+          lines = []
+          upper = None
+          for offset in range(0, len(code), 32):
+              absolute = base + offset
+              new_upper = absolute >> 16
+              if new_upper != upper:
+                  lines.append(record(0, 4, struct.pack('>H', new_upper)))
+                  upper = new_upper
+              lines.append(record(absolute & 0xffff, 0, code[offset:offset + 32]))
+          lines.append(record(0, 1, b''))
+          Path('sdk/OpenTXW81X/project/project.hex').write_text('\n'.join(lines) + '\n')
+
+          encoded_date = info['firmware']['date']
+          date = dt.date(encoded_date >> 16, (encoded_date >> 8) & 0xff, encoded_date & 0xff)
+          Path('reference-date.txt').write_text(date.isoformat())
+          PY
+          TXW81X_BUILD_DATE=$(cat reference-date.txt) \
+            sh platforms/TXW81X/package_native.sh
+          cmp sdk/OpenTXW81X/project/APP.bin \
+              "$(find reference-current -maxdepth 1 -name '*.bin' -print -quit)"
+          cmp sdk/OpenTXW81X/project/APP_compress.bin \
+              "$(find reference-current -maxdepth 1 -name '*.img' -print -quit)"
+          rm -f sdk/OpenTXW81X/project/project.hex \
+                sdk/OpenTXW81X/project/APP.bin \
+                sdk/OpenTXW81X/project/APP_compress.bin
+
+      - name: Build OpenTXW81X natively on Ubuntu
+        run: |
+          set -eu
+          make APP_VERSION=native_final APP_NAME=OpenTXW81X VARIANT=default OpenTXW81X
+          python3 tools/txw81x_pack/txw81x_pack.py inspect \
+            output/native_final/OpenTXW81X_native_final.bin > native-app.json
+          python3 tools/txw81x_pack/txw81x_pack.py inspect \
+            output/native_final/OpenTXW81X_native_final_ota.img > native-ota.json
+          python3 - <<'PY'
+          import json
+          for path in ('native-app.json', 'native-ota.json'):
+              data = json.load(open(path))
+              failed = [name for name, passed in data['checks'].items() if not passed]
+              if failed:
+                  raise SystemExit(f'{path}: failed checks: {failed}')
+          PY
+
+      - name: Confirm final commit and integration state
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$TESTED_COMMIT"
+          ! grep -A30 '^  build_txw81x:' .github/workflows/workflow.yaml | \
+            grep -E 'windows-latest|wsl-bash|Vampire/setup-wsl'
+          ! sed -n '/^\.PHONY: OpenTXW81X/,/^\.PHONY: OpenRDA5981/p' Makefile | \
+            grep -E 'BinScript\.exe|makecode\.exe|compress\.exe'
+          git status --short
+
+      - name: Upload final TXW81x images
+        uses: actions/upload-artifact@v4
+        with:
+          name: txw81x-native-final-${{ env.TESTED_COMMIT }}
+          path: |
+            output/native_final/OpenTXW81X_native_final.bin
+            output/native_final/OpenTXW81X_native_final_ota.img
+            native-app.json
+            native-ota.json
