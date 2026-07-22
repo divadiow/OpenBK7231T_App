@@ -1,0 +1,106 @@
+name: Recover strict IR command parsing
+
+on:
+  push:
+    branches:
+      - agent/irremote-fix-runner
+    paths:
+      - .github/workflows/recover-ir-fix2.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/recover-ir-fix2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: irremotesp8266_290
+          fetch-depth: 0
+
+      - name: Apply strict numeric parsing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/driver/drv_ir_new.cpp')
+          source = path.read_text()
+          assert 'parseBoundedDecimal' not in source
+          assert 'static bool parseHexStateBytes' in source
+
+          helper = '''static const uint16_t kIRSendMaxStateBytes = 64;
+          static const uint16_t kIRSendMaxBits = kIRSendMaxStateBytes * 8;
+          static const uint8_t kIRSendMaxRepeats = 10;
+
+          static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
+          \tconst uint32_t maxValue, uint32_t *result) {
+          \tif (!text || !text[0] || !result || minValue > maxValue) return false;
+
+          \tuint32_t value = 0;
+          \tfor (const char *cursor = text; *cursor; cursor++) {
+          \t\tif (*cursor < '0' || *cursor > '9') return false;
+          \t\tconst uint32_t digit = (uint32_t)(*cursor - '0');
+          \t\tif (value > maxValue / 10 ||
+          \t\t\t(value == maxValue / 10 && digit > maxValue % 10)) {
+          \t\t\treturn false;
+          \t\t}
+          \t\tvalue = value * 10 + digit;
+          \t}
+          \tif (value < minValue) return false;
+
+          \t*result = value;
+          \treturn true;
+          }
+
+          '''
+          source = source.replace('static bool parseHexStateBytes', helper + 'static bool parseHexStateBytes', 1)
+
+          old = '''\t\t\t\tuint16_t bits = (uint16_t)strtol(_bits,NULL,10);
+          \t\t\t\tp++;
+          '''
+          new = '''\t\t\t\tuint32_t bitsValue = 0;
+          \t\t\t\tif (!parseBoundedDecimal(_bits, 1, kIRSendMaxBits, &bitsValue)) {
+          \t\t\t\t\tADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid bit count '%s' (expected 1-%u)", _bits, (unsigned int)kIRSendMaxBits);
+          \t\t\t\t\treturn CMD_RES_BAD_ARGUMENT;
+          \t\t\t\t}
+          \t\t\t\tconst uint16_t bits = (uint16_t)bitsValue;
+          \t\t\t\tp++;
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new, 1)
+
+          assert source.count('\t\t\t\t\tuint8_t state[64];') == 1
+          source = source.replace('\t\t\t\t\tuint8_t state[64];', '\t\t\t\t\tuint8_t state[kIRSendMaxStateBytes];', 1)
+
+          old = '''\t\t\t\t\tif(payloadEnd && *payloadEnd==',')
+          \t\t\t\t\t\trepeats=strtol(payloadEnd+1,NULL,10);
+          '''
+          new = '''\t\t\t\t\tif(payloadEnd && *payloadEnd==',') {
+          \t\t\t\t\t\tuint32_t repeatValue = 0;
+          \t\t\t\t\t\tif (!parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats, &repeatValue)) {
+          \t\t\t\t\t\t\tADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid repeat count '%s' (expected 0-%u)", payloadEnd + 1, (unsigned int)kIRSendMaxRepeats);
+          \t\t\t\t\t\t\treturn CMD_RES_BAD_ARGUMENT;
+          \t\t\t\t\t\t}
+          \t\t\t\t\t\trepeats = (int)repeatValue;
+          \t\t\t\t\t}
+          '''
+          assert source.count(old) == 1
+          source = source.replace(old, new, 1)
+          path.write_text(source)
+          PY
+
+          git diff --check
+          git config user.name "openai-agent"
+          git config user.email "openai-agent@users.noreply.github.com"
+          git add src/driver/drv_ir_new.cpp
+          git commit -m "ir: validate command bit and repeat counts"
+          git push origin HEAD:irremotesp8266_290
