@@ -37,6 +37,7 @@ jobs:
             jq -r '"run_id=\(.id) status=\(.status) conclusion=\(.conclusion // "") head_sha=\(.head_sha)"' "$run_json"
             jq -r 'group_by(.status)[] | "status_\(.[0].status)=\(length)"' < <(jq -c '.jobs | sort_by(.status)' "$jobs_json")
             jq -r 'group_by(.conclusion // "none")[] | "conclusion_\(.[0].conclusion // "none")=\(length)"' < <(jq -c '.jobs | sort_by(.conclusion // "none")' "$jobs_json")
+            jq -r '.jobs[] | select(.status != "completed") | "PENDING\t\(.id)\t\(.status)\t\(.name)"' "$jobs_json"
             jq -r '.jobs[] | select(.conclusion == "failure") | "FAIL\t\(.id)\t\(.name)"' "$jobs_json"
           } > "$out"
           git config user.name "openai-agent"
@@ -47,4 +48,4 @@ jobs:
             git push origin HEAD:agent/irremote-fix-runner
           fi
 
-# refresh 9
+# identify final pending job
