@@ -26,6 +26,7 @@ extern int fhost_init();
 #endif
 #else
 #include <hal_sys.h>
+#include <bl_efuse.h>
 #include <bl_wifi.h>
 #include <bl60x_fw_api.h>
 #include <aos/kernel.h>
@@ -44,6 +45,96 @@ static void (*g_wifiStatusCallback)(int code);
 extern bool g_powersave;
 __attribute__((aligned(32))) static obkFastConnectData_t fcdata = { 0 };
 extern uint16_t phy_channel_to_freq(uint8_t band, int channel);
+
+#if PLATFORM_BL602 && !PLATFORM_BL_NEW
+static bool g_bl602RfDiagnosticsLogged = false;
+
+static void BL602_LogRfDiagnostics(void)
+{
+	uint8_t activeCapcode;
+	uint8_t firmwareCapIn = 0;
+	uint8_t firmwareCapOut = 0;
+	uint8_t manufacturingCapcode = 0;
+	int8_t manufacturingPowerOffset[14] = { 0 };
+	int8_t powerRateTable[38] = { 0 };
+	int capcodeResult;
+	int powerOffsetResult;
+
+	if(g_bl602RfDiagnosticsLogged)
+	{
+		return;
+	}
+	g_bl602RfDiagnosticsLogged = true;
+
+	activeCapcode = hal_sys_capcode_get();
+	bl60x_fw_xtal_capcode_get(&firmwareCapIn, &firmwareCapOut);
+	capcodeResult = bl_efuse_read_capcode(&manufacturingCapcode);
+	powerOffsetResult = bl_efuse_read_pwroft(manufacturingPowerOffset);
+	bl_tpc_power_table_get(powerRateTable);
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: active XTAL capcode %u, firmware cap-in/out %u/%u",
+		(unsigned int)activeCapcode,
+		(unsigned int)firmwareCapIn,
+		(unsigned int)firmwareCapOut);
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: manufacturing-media capcode read result %d value %u",
+		capcodeResult,
+		(unsigned int)manufacturingCapcode);
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: manufacturing power-offset result %d values "
+		"%d %d %d %d %d %d %d %d %d %d %d %d %d %d",
+		powerOffsetResult,
+		(int)manufacturingPowerOffset[0],
+		(int)manufacturingPowerOffset[1],
+		(int)manufacturingPowerOffset[2],
+		(int)manufacturingPowerOffset[3],
+		(int)manufacturingPowerOffset[4],
+		(int)manufacturingPowerOffset[5],
+		(int)manufacturingPowerOffset[6],
+		(int)manufacturingPowerOffset[7],
+		(int)manufacturingPowerOffset[8],
+		(int)manufacturingPowerOffset[9],
+		(int)manufacturingPowerOffset[10],
+		(int)manufacturingPowerOffset[11],
+		(int)manufacturingPowerOffset[12],
+		(int)manufacturingPowerOffset[13]);
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: TPC 11b 1/2/5.5/11 Mbps: %d %d %d %d",
+		(int)powerRateTable[0],
+		(int)powerRateTable[1],
+		(int)powerRateTable[2],
+		(int)powerRateTable[3]);
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: TPC 11g 6/9/12/18/24/36/48/54 Mbps: "
+		"%d %d %d %d %d %d %d %d",
+		(int)powerRateTable[8],
+		(int)powerRateTable[9],
+		(int)powerRateTable[10],
+		(int)powerRateTable[11],
+		(int)powerRateTable[12],
+		(int)powerRateTable[13],
+		(int)powerRateTable[14],
+		(int)powerRateTable[15]);
+
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: TPC 11n MCS0-MCS7: %d %d %d %d %d %d %d %d",
+		(int)powerRateTable[16],
+		(int)powerRateTable[17],
+		(int)powerRateTable[18],
+		(int)powerRateTable[19],
+		(int)powerRateTable[20],
+		(int)powerRateTable[21],
+		(int)powerRateTable[22],
+		(int)powerRateTable[23]);
+}
+#else
+#define BL602_LogRfDiagnostics() do { } while(0)
+#endif
 
 #if PLATFORM_BL_NEW
 static bool g_wifi_init = false;
@@ -335,6 +426,7 @@ void HAL_ConnectToWiFi(const char* ssid, const char* psk, obkStaticIP_t* ip)
 	if(g_powersave) wifi_mgmr_sta_ps_exit();
 
 	wifi_interface_t wifi_interface = wifi_mgmr_sta_enable();
+	BL602_LogRfDiagnostics();
 	wifi_mgmr_sta_connect_mid(wifi_interface,
 		(char*)ssid,
 		(char*)psk,
@@ -372,6 +464,7 @@ int HAL_SetupWiFiOpenAccessPoint(const char* ssid)
 
 #if PLATFORM_BL602
 	wifi_interface_t wifi_if = wifi_mgmr_ap_enable();
+	BL602_LogRfDiagnostics();
 	wifi_mgmr_ap_start(wifi_if, (char*)ssid, 0, NULL, 1);
 #else
 	wifi_mgmr_ap_params_t config = { 0 };
@@ -428,6 +521,7 @@ void HAL_FastConnectToWiFi(const char* oob_ssid, const char* connect_key, obkSta
 		if(g_powersave) wifi_mgmr_sta_ps_exit();
 		wifi_interface_t wifi_interface;
 		wifi_interface = wifi_mgmr_sta_enable();
+		BL602_LogRfDiagnostics();
 		wifi_mgmr_sta_connect_ext(wifi_interface, (char*)oob_ssid, (char*)connect_key, &ext_param);
 		g_bAccessPointMode = 0;
 		return;
