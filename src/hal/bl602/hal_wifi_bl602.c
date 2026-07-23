@@ -26,7 +26,6 @@ extern int fhost_init();
 #endif
 #else
 #include <hal_sys.h>
-#include <bl_efuse.h>
 #include <bl_wifi.h>
 #include <bl60x_fw_api.h>
 #include <aos/kernel.h>
@@ -54,11 +53,7 @@ static void BL602_LogRfDiagnostics(void)
 	uint8_t activeCapcode;
 	uint8_t firmwareCapIn = 0;
 	uint8_t firmwareCapOut = 0;
-	uint8_t manufacturingCapcode = 0;
-	int8_t manufacturingPowerOffset[14] = { 0 };
 	int8_t powerRateTable[38] = { 0 };
-	int capcodeResult;
-	int powerOffsetResult;
 
 	if(g_bl602RfDiagnosticsLogged)
 	{
@@ -68,8 +63,6 @@ static void BL602_LogRfDiagnostics(void)
 
 	activeCapcode = hal_sys_capcode_get();
 	bl60x_fw_xtal_capcode_get(&firmwareCapIn, &firmwareCapOut);
-	capcodeResult = bl_efuse_read_capcode(&manufacturingCapcode);
-	powerOffsetResult = bl_efuse_read_pwroft(manufacturingPowerOffset);
 	bl_tpc_power_table_get(powerRateTable);
 
 	ADDLOG_INFO(LOG_FEATURE_GENERAL,
@@ -77,30 +70,6 @@ static void BL602_LogRfDiagnostics(void)
 		(unsigned int)activeCapcode,
 		(unsigned int)firmwareCapIn,
 		(unsigned int)firmwareCapOut);
-
-	ADDLOG_INFO(LOG_FEATURE_GENERAL,
-		"BL602 RF diagnostics: manufacturing-media capcode read result %d value %u",
-		capcodeResult,
-		(unsigned int)manufacturingCapcode);
-
-	ADDLOG_INFO(LOG_FEATURE_GENERAL,
-		"BL602 RF diagnostics: manufacturing power-offset result %d values "
-		"%d %d %d %d %d %d %d %d %d %d %d %d %d %d",
-		powerOffsetResult,
-		(int)manufacturingPowerOffset[0],
-		(int)manufacturingPowerOffset[1],
-		(int)manufacturingPowerOffset[2],
-		(int)manufacturingPowerOffset[3],
-		(int)manufacturingPowerOffset[4],
-		(int)manufacturingPowerOffset[5],
-		(int)manufacturingPowerOffset[6],
-		(int)manufacturingPowerOffset[7],
-		(int)manufacturingPowerOffset[8],
-		(int)manufacturingPowerOffset[9],
-		(int)manufacturingPowerOffset[10],
-		(int)manufacturingPowerOffset[11],
-		(int)manufacturingPowerOffset[12],
-		(int)manufacturingPowerOffset[13]);
 
 	ADDLOG_INFO(LOG_FEATURE_GENERAL,
 		"BL602 RF diagnostics: TPC 11b 1/2/5.5/11 Mbps: %d %d %d %d",
