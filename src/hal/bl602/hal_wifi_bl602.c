@@ -51,9 +51,6 @@ static bool g_bl602RfDiagnosticsLogged = false;
 static void BL602_LogRfDiagnostics(void)
 {
 	uint8_t activeCapcode;
-	uint8_t firmwareCapIn = 0;
-	uint8_t firmwareCapOut = 0;
-	int8_t powerRateTable[38] = { 0 };
 
 	if(g_bl602RfDiagnosticsLogged)
 	{
@@ -62,44 +59,9 @@ static void BL602_LogRfDiagnostics(void)
 	g_bl602RfDiagnosticsLogged = true;
 
 	activeCapcode = hal_sys_capcode_get();
-	bl60x_fw_xtal_capcode_get(&firmwareCapIn, &firmwareCapOut);
-	bl_tpc_power_table_get(powerRateTable);
-
 	ADDLOG_INFO(LOG_FEATURE_GENERAL,
-		"BL602 RF diagnostics: active XTAL capcode %u, firmware cap-in/out %u/%u",
-		(unsigned int)activeCapcode,
-		(unsigned int)firmwareCapIn,
-		(unsigned int)firmwareCapOut);
-
-	ADDLOG_INFO(LOG_FEATURE_GENERAL,
-		"BL602 RF diagnostics: TPC 11b 1/2/5.5/11 Mbps: %d %d %d %d",
-		(int)powerRateTable[0],
-		(int)powerRateTable[1],
-		(int)powerRateTable[2],
-		(int)powerRateTable[3]);
-
-	ADDLOG_INFO(LOG_FEATURE_GENERAL,
-		"BL602 RF diagnostics: TPC 11g 6/9/12/18/24/36/48/54 Mbps: "
-		"%d %d %d %d %d %d %d %d",
-		(int)powerRateTable[8],
-		(int)powerRateTable[9],
-		(int)powerRateTable[10],
-		(int)powerRateTable[11],
-		(int)powerRateTable[12],
-		(int)powerRateTable[13],
-		(int)powerRateTable[14],
-		(int)powerRateTable[15]);
-
-	ADDLOG_INFO(LOG_FEATURE_GENERAL,
-		"BL602 RF diagnostics: TPC 11n MCS0-MCS7: %d %d %d %d %d %d %d %d",
-		(int)powerRateTable[16],
-		(int)powerRateTable[17],
-		(int)powerRateTable[18],
-		(int)powerRateTable[19],
-		(int)powerRateTable[20],
-		(int)powerRateTable[21],
-		(int)powerRateTable[22],
-		(int)powerRateTable[23]);
+		"BL602 RF diagnostics: active XTAL capcode %u",
+		(unsigned int)activeCapcode);
 }
 #else
 #define BL602_LogRfDiagnostics() do { } while(0)
