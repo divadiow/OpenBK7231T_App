@@ -2138,6 +2138,26 @@ static uint32_t IR_PeriodToQ16(float period_us) {
   return (uint32_t)(period_us * 65536.0f + 0.5f);
 }
 
+static uint32_t IR_NextSample(const uint32_t current) {
+  return current + 1U;
+}
+
+static uint32_t IR_ElapsedSamples(const uint32_t now,
+                                  const uint32_t edge) {
+  return now - edge;
+}
+
+static uint16_t IR_SamplesToRawTicks(const uint32_t elapsed_samples,
+                                     const uint32_t period_us_q16) {
+  const uint64_t elapsed_q16 =
+      (uint64_t)elapsed_samples * period_us_q16;
+  uint32_t raw_ticks = (uint32_t)(
+      elapsed_q16 / ((uint64_t)kRawTick * 65536U));
+  if (!raw_ticks) raw_ticks = 1;
+  if (raw_ticks > UINT16_MAX) raw_ticks = UINT16_MAX;
+  return (uint16_t)raw_ticks;
+}
+
 void IR_ISR_ResetClock(float period_us) {
   ir_sample_count = 0;
   ir_edge_sample = 0;
@@ -2151,12 +2171,13 @@ void IR_ISR_ResetClock(float period_us) {
 
 void IR_ISR(float period_us) {
   if (!ir_period_us_q16) IR_ISR_ResetClock(period_us);
-  ir_sample_count++;
+  ir_sample_count = IR_NextSample(ir_sample_count);
   if (params.rcvstate == kStopState) return;
 
   const uint_fast8_t tIRInputLevel =
       (uint_fast8_t)digitalReadFast(params.recvpin);
-  const uint32_t elapsed_samples = ir_sample_count - ir_edge_sample;
+  const uint32_t elapsed_samples =
+      IR_ElapsedSamples(ir_sample_count, ir_edge_sample);
 
   if (elapsed_samples >= ir_timeout_samples && params.rawlen) {
     params.rcvstate = kStopState;
@@ -2177,13 +2198,8 @@ void IR_ISR(float period_us) {
     params.rcvstate = kMarkState;
     params.rawbuf[rawlen] = 1;
   } else {
-    const uint64_t elapsed_q16 =
-        (uint64_t)elapsed_samples * ir_period_us_q16;
-    uint32_t raw_ticks = (uint32_t)(
-        elapsed_q16 / ((uint64_t)kRawTick * 65536U));
-    if (!raw_ticks) raw_ticks = 1;
-    if (raw_ticks > UINT16_MAX) raw_ticks = UINT16_MAX;
-    params.rawbuf[rawlen] = (uint16_t)raw_ticks;
+    params.rawbuf[rawlen] =
+        IR_SamplesToRawTicks(elapsed_samples, ir_period_us_q16);
   }
   params.rawlen++;
   ir_edge_sample = ir_sample_count;

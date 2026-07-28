@@ -16,21 +16,20 @@
 static int8_t g_bl602_pwm_owner[5] = { -1, -1, -1, -1, -1 };
 
 int BL_FindPWMForPin(int index){
-	if (index < 0 || index >= PLATFORM_GPIO_MAX) return -1;
 	return index % 5;
 }
+
 
 void HAL_PIN_SetOutputValue(int index, int iVal) {
     bl_gpio_output_set(index, iVal ? 1 : 0);
 }
 
 const char *HAL_PIN_GetPinNameAlias(int index) {
-	(void)index;
 	return 0;
 }
-// BL602 - any valid application pin can be PWM.
+// BL602 - any pin can be pwm
 int HAL_PIN_CanThisPinBePWM(int index) {
-	return index >= 0 && index < PLATFORM_GPIO_MAX;
+	return 1;
 }
 int HAL_PIN_ReadDigitalInput(int index) {
 	uint8_t iVal;
@@ -72,9 +71,9 @@ void HAL_PIN_PWM_Start(int index, int freq) {
 		return;
 	}
 
-	// Frequency must be between 2000 and 800000.
+	//addLogAdv(LOG_INFO, LOG_FEATURE_MAIN,"HAL_PIN_PWM_Start: pin %i chose pwm %i",index,pwm);
+    //  Frequency must be between 2000 and 800000
 	if(freq < 2000) freq = 2000;
-	if(freq > 800000) freq = 800000;
 	// IR uses hardware software-force mode for exact static space levels. Clear
 	// it before every ordinary/restarted PWM setup so state cannot leak between
 	// owners or between consecutive IR transmissions.

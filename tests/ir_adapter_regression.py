@@ -97,6 +97,56 @@ int main() {{
         subprocess.run([str(exe)], check=True)
 
 
+def receive_clock_tests(recv: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    functions = "\n\n".join(block(recv, signature) for signature in (
+        "static uint32_t IR_PeriodToQ16",
+        "static uint32_t IR_NextSample",
+        "static uint32_t IR_ElapsedSamples",
+        "static uint16_t IR_SamplesToRawTicks",
+    ))
+    harness = f'''#include <cassert>\n#include <cstdint>\n
+static const uint16_t kRawTick = 2;\n
+{functions}\n
+int main() {{
+  const uint32_t period_q16 = IR_PeriodToQ16(50.0f);
+  assert(period_q16 == 50U * 65536U);
+  assert(IR_SamplesToRawTicks(1, period_q16) == 25);
+
+  // Execute 30 minutes of the 20 kHz polling clock. Unlike the former float
+  // accumulator, every sample must continue to advance by exactly one tick.
+  volatile uint32_t now = 0;
+  const uint32_t thirty_minutes = 30U * 60U * 20000U;
+  for (uint32_t tick = 0; tick < thirty_minutes; tick++)
+    now = IR_NextSample(now);
+  assert(now == thirty_minutes);
+  assert(IR_ElapsedSamples(now, now - 123U) == 123U);
+  assert(IR_SamplesToRawTicks(
+      IR_ElapsedSamples(now, now - 123U), period_q16) == 3075U);
+
+  // Unsigned subtraction must remain correct as the sample clock wraps.
+  const uint32_t edge = UINT32_MAX - 2U;
+  now = edge;
+  for (uint32_t tick = 0; tick < 10U; tick++)
+    now = IR_NextSample(now);
+  assert(now == 7U);
+  assert(IR_ElapsedSamples(now, edge) == 10U);
+  assert(IR_SamplesToRawTicks(
+      IR_ElapsedSamples(now, edge), period_q16) == 250U);
+
+  assert(IR_SamplesToRawTicks(0, period_q16) == 1U);
+  assert(IR_SamplesToRawTicks(UINT32_MAX, period_q16) == UINT16_MAX);
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-clock-test-") as directory:
+        src = Path(directory) / "receive_clock.cpp"
+        exe = Path(directory) / "receive_clock"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
 def source_contracts(s: dict[str, str]) -> None:
     d = s["driver"]
     contains(block(d, "bool beginSendTransaction()"),
@@ -162,7 +212,8 @@ def source_contracts(s: dict[str, str]) -> None:
     recv = s["recv"]
     require("static float        ir_now" not in recv, "floating absolute RX clock returned")
     contains(recv, "ir_sample_count", "ir_edge_sample", "ir_period_us_q16",
-             "ir_timeout_samples", "ir_sample_count - ir_edge_sample")
+             "ir_timeout_samples", "IR_NextSample", "IR_ElapsedSamples",
+             "IR_SamplesToRawTicks")
 
     pinmode = flat(block(s["digital"], "void pinModeFast"))
     contains(pinmode, "INPUT_PULLUP: HAL_PIN_Setup_Input_Pullup",
@@ -178,14 +229,16 @@ def source_contracts(s: dict[str, str]) -> None:
     allocator = block(s["realtek"], "static int HAL_RTK_GetFreeChannel")
     contains(allocator, "OBK_REALTEK_PWM_CHANNEL_COUNT", "return -1")
     contains(s["realtek"], "if(pin->gpio == NULL)", "if(pin->pwm == NULL)",
-             "if(rtl_cf->irq == NULL)", "HAL_IR_PWM_Reserve",
-             "Realtek_SharesPWMPeriodTimer", "Realtek_HasOtherPWMOwner",
-             "g_realtek_ir_pwm_pin")
+             "HAL_IR_PWM_Reserve", "Realtek_SharesPWMPeriodTimer",
+             "Realtek_HasOtherPWMOwner", "g_realtek_ir_pwm_pin")
+    require("Realtek IRQ allocation failed" not in s["realtek"],
+            "unrelated Realtek IRQ hardening returned")
 
 
 def main() -> None:
     sources = {name: path.read_text() for name, path in FILES.items()}
     parser_tests(sources["driver"])
+    receive_clock_tests(sources["recv"])
     source_contracts(sources)
     print("IR adapter regression tests passed")
 

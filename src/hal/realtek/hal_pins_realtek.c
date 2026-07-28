@@ -73,23 +73,23 @@ static bool Realtek_HasOtherPWMOwner(const int index)
 
 int PIN_GetPWMIndexForPinIndex(int index)
 {
-	if(index < 0 || index >= g_numPins)
-		return -1;
 	rtlPinMapping_t* pin = g_pins + index;
+	if(index >= g_numPins)
+		return -1;
 	if(pin->pwm != NULL) return pin->pwm->pwm_idx;
 	else return HAL_PIN_CanThisPinBePWM(index);
 }
 
 const char* HAL_PIN_GetPinNameAlias(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return "error";
 	return g_pins[index].name;
 }
 
 void RTL_GPIO_Init(rtlPinMapping_t* pin)
 {
-	if(!pin || pin->gpio != NULL || pin->irq != NULL)
+	if(pin->gpio != NULL || pin->irq != NULL)
 	{
 		return;
 	}
@@ -105,27 +105,23 @@ void RTL_GPIO_Init(rtlPinMapping_t* pin)
 
 void HAL_PIN_SetOutputValue(int index, int iVal)
 {
-	if(index < 0 || index >= g_numPins)
-		return;
 	rtlPinMapping_t* pin = g_pins + index;
-	if(pin->gpio == NULL)
+	if(index >= g_numPins || pin->gpio == NULL)
 		return;
 	gpio_write(pin->gpio, iVal ? 1 : 0);
 }
 
 int HAL_PIN_ReadDigitalInput(int index)
 {
-	if(index < 0 || index >= g_numPins)
-		return 0;
 	rtlPinMapping_t* pin = g_pins + index;
-	if(pin->gpio == NULL)
+	if(index >= g_numPins || pin->gpio == NULL)
 		return 0;
 	return gpio_read(pin->gpio);
 }
 
 void HAL_PIN_Setup_Input_Pullup(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	rtlPinMapping_t* pin = g_pins + index;
 	RTL_GPIO_Init(pin);
@@ -137,7 +133,7 @@ void HAL_PIN_Setup_Input_Pullup(int index)
 
 void HAL_PIN_Setup_Input_Pulldown(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	rtlPinMapping_t* pin = g_pins + index;
 	RTL_GPIO_Init(pin);
@@ -149,7 +145,7 @@ void HAL_PIN_Setup_Input_Pulldown(int index)
 
 void HAL_PIN_Setup_Input(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	rtlPinMapping_t* pin = g_pins + index;
 	RTL_GPIO_Init(pin);
@@ -161,7 +157,7 @@ void HAL_PIN_Setup_Input(int index)
 
 void HAL_PIN_Setup_Output(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	rtlPinMapping_t* pin = g_pins + index;
 	RTL_GPIO_Init(pin);
@@ -173,10 +169,11 @@ void HAL_PIN_Setup_Output(int index)
 
 void HAL_PIN_PWM_Stop(int index)
 {
-	if(index < 0 || index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
+	if(index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
 		return;
 	rtlPinMapping_t* pin = g_pins + index;
 	if(pin->pwm == NULL) return;
+	//pwmout_stop(pin->pwm);
 #if PLATFORM_REALTEK_NEW
 	HAL_RTK_FreeChannel(pin->pwm->pwm_idx);
 #endif
@@ -190,8 +187,7 @@ void HAL_PIN_PWM_Stop(int index)
 
 void HAL_PIN_PWM_Start(int index, int freq)
 {
-	if(index < 0 || index >= g_numPins || freq <= 0 ||
-		!HAL_PIN_CanThisPinBePWM(index))
+	if(index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
 		return;
 #if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
 	if (g_realtek_ir_pwm_pin >= 0 && g_realtek_ir_pwm_pin != index &&
@@ -203,11 +199,9 @@ void HAL_PIN_PWM_Start(int index, int freq)
 	}
 #endif
 	rtlPinMapping_t* pin = g_pins + index;
-	const uint32_t period_us = 1000000U / (uint32_t)freq;
-	if(period_us == 0) return;
 	if(pin->pwm != NULL)
 	{
-		pwmout_period_us(pin->pwm, period_us);
+		pwmout_period_us(pin->pwm, 1000000 / freq);
 		return;
 	}
 	if(pin->gpio != NULL)
@@ -237,7 +231,7 @@ void HAL_PIN_PWM_Start(int index, int freq)
 	pin->pwm->pwm_idx = (uint8_t)channel;
 #endif
 	pwmout_init(pin->pwm, pin->pin);
-	pwmout_period_us(pin->pwm, period_us);
+	pwmout_period_us(pin->pwm, 1000000 / freq);
 #ifndef PLATFORM_RTL8710A
 	pwmout_start(pin->pwm);
 #endif
@@ -245,7 +239,7 @@ void HAL_PIN_PWM_Start(int index, int freq)
 
 void HAL_PIN_PWM_Update(int index, float value)
 {
-	if(index < 0 || index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
+	if(index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
 		return;
 	rtlPinMapping_t* pin = g_pins + index;
 #ifdef PLATFORM_RTL87X0C
@@ -311,14 +305,14 @@ OBKInterruptType g_modes[PLATFORM_GPIO_MAX];
 
 void Realtek_Interrupt(uint32_t obkPinNum, gpio_irq_event event)
 {
-	(void)event;
-	if(obkPinNum < PLATFORM_GPIO_MAX && g_handlers[obkPinNum]) {
+	if (g_handlers[obkPinNum]) {
 		g_handlers[obkPinNum](obkPinNum);
 	}
 }
 
 void HAL_AttachInterrupt(int pinIndex, OBKInterruptType mode, OBKInterruptHandler function) {
-	if(pinIndex < 0 || pinIndex >= g_numPins || function == NULL) return;
+	g_handlers[pinIndex] = function;
+
 	rtlPinMapping_t *rtl_cf = g_pins + pinIndex;
 #if PLATFORM_RTL87X0C
 	if (rtl_cf->gpio != NULL)
@@ -328,20 +322,7 @@ void HAL_AttachInterrupt(int pinIndex, OBKInterruptType mode, OBKInterruptHandle
 		rtl_cf->gpio = NULL;
 	}
 #endif
-	if(rtl_cf->irq != NULL)
-	{
-		gpio_irq_free(rtl_cf->irq);
-		os_free(rtl_cf->irq);
-		rtl_cf->irq = NULL;
-	}
 	rtl_cf->irq = os_malloc(sizeof(gpio_irq_t));
-	if(rtl_cf->irq == NULL)
-	{
-		ADDLOG_ERROR(LOG_FEATURE_DRV,
-			"Realtek IRQ allocation failed on pin %d", pinIndex);
-		g_handlers[pinIndex] = NULL;
-		return;
-	}
 	memset(rtl_cf->irq, 0, sizeof(gpio_irq_t));
 
 	int rtl_mode;
@@ -351,21 +332,19 @@ void HAL_AttachInterrupt(int pinIndex, OBKInterruptType mode, OBKInterruptHandle
 	else {
 		rtl_mode = IRQ_FALL;
 	}
-	g_handlers[pinIndex] = function;
 	gpio_irq_init(rtl_cf->irq, rtl_cf->pin, Realtek_Interrupt, pinIndex);
 	gpio_irq_set(rtl_cf->irq, rtl_mode, 1);
 	gpio_irq_enable(rtl_cf->irq);
+
 }
 void HAL_DetachInterrupt(int pinIndex) {
-	if(pinIndex < 0 || pinIndex >= g_numPins || g_handlers[pinIndex] == 0)
-		return;
-	rtlPinMapping_t *rtl_cf = g_pins + pinIndex;
-	if(rtl_cf->irq != NULL)
-	{
-		gpio_irq_free(rtl_cf->irq);
-		os_free(rtl_cf->irq);
-		rtl_cf->irq = NULL;
+	if (g_handlers[pinIndex] == 0) {
+		return; // already removed;
 	}
+	rtlPinMapping_t *rtl_cf = g_pins + pinIndex;
+	gpio_irq_free(rtl_cf->irq);
+	os_free(rtl_cf->irq);
+	rtl_cf->irq = NULL;
 	g_handlers[pinIndex] = 0;
 }
 

@@ -92,19 +92,17 @@ lnPinMapping_t g_pins[] = {
 int g_numPins = sizeof(g_pins) / sizeof(g_pins[0]);
 
 int PIN_GetPWMIndexForPinIndex(int pin) {
-	(void)pin;
 	return -1;
 }
 
 const char *HAL_PIN_GetPinNameAlias(int index) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return "error";
 	return g_pins[index].name;
 }
 
 int HAL_PIN_CanThisPinBePWM(int index) 
 {
-	if (index < 0 || index >= g_numPins) return 0;
 	// qspi pins
 	if(IS_QSPI_PIN(index)) 
 		return 0;
@@ -121,7 +119,7 @@ unsigned int HAL_GetGPIOPin(int index)
 #include "utils/power_mgmt/ln_pm.h"
 
 void HAL_PIN_SetOutputValue(int index, int iVal) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return;
 	lnPinMapping_t *pin = g_pins + index;
 	if (iVal) {
@@ -132,7 +130,7 @@ void HAL_PIN_SetOutputValue(int index, int iVal) {
 }
 
 int HAL_PIN_ReadDigitalInput(int index) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return 0;
 	lnPinMapping_t *pin = g_pins + index;
 	return hal_gpio_pin_input_read(pin->base,pin->pin);
@@ -148,7 +146,7 @@ void My_LN882_Basic_GPIO_Setup(lnPinMapping_t *pin, int direction) {
 }
 
 void HAL_PIN_Setup_Input_Pullup(int index) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return;
 	lnPinMapping_t *pin = g_pins + index;
 	My_LN882_Basic_GPIO_Setup(pin, GPIO_INPUT);
@@ -156,7 +154,7 @@ void HAL_PIN_Setup_Input_Pullup(int index) {
 }
 
 void HAL_PIN_Setup_Input_Pulldown(int index) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return;
 	lnPinMapping_t *pin = g_pins + index;
 	My_LN882_Basic_GPIO_Setup(pin, GPIO_INPUT);
@@ -164,7 +162,7 @@ void HAL_PIN_Setup_Input_Pulldown(int index) {
 }
 
 void HAL_PIN_Setup_Input(int index) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return;
 	lnPinMapping_t *pin = g_pins + index;
 	My_LN882_Basic_GPIO_Setup(pin, GPIO_INPUT);
@@ -172,7 +170,7 @@ void HAL_PIN_Setup_Input(int index) {
 }
 
 void HAL_PIN_Setup_Output(int index) {
-	if (index < 0 || index >= g_numPins)
+	if (index >= g_numPins)
 		return;
 	if(IS_QSPI_PIN(index)) 
 		return; // this would crash for me
@@ -191,15 +189,13 @@ uint32_t get_adv_timer_base(uint8_t ch)
 	case 3: return ADV_TIMER_3_BASE;
 	case 4: return ADV_TIMER_4_BASE;
 	case 5: return ADV_TIMER_5_BASE;
-	default: return 0;
 	}
 }
 
 void pwm_init(uint32_t freq, uint8_t pwm_channel_num, uint32_t gpio_reg_base, gpio_pin_t gpio_pin)
 {
-	if(pwm_channel_num > 5 || freq == 0) return;
+	if(pwm_channel_num < 0 || pwm_channel_num > 5) return;
 	uint32_t reg_base = get_adv_timer_base(pwm_channel_num);
-	if (!reg_base) return;
 
 	adv_tim_init_t_def adv_tim_init;
 	memset(&adv_tim_init, 0, sizeof(adv_tim_init));
@@ -230,30 +226,28 @@ void pwm_init(uint32_t freq, uint8_t pwm_channel_num, uint32_t gpio_reg_base, gp
 
 void pwm_start(uint8_t pwm_channel_num)
 {
-	if(pwm_channel_num > 5) return;
+	if(pwm_channel_num < 0 || pwm_channel_num > 5) return;
 	uint32_t reg_base = get_adv_timer_base(pwm_channel_num);
-	if (!reg_base) return;
 	hal_adv_tim_a_en(reg_base, HAL_ENABLE);
 }
 
 void pwm_set_duty(float duty, uint8_t pwm_channel_num)
 {
-	if(pwm_channel_num > 5) return;
+	if(pwm_channel_num < 0 || pwm_channel_num > 5) return;
 	uint32_t reg_base = get_adv_timer_base(pwm_channel_num);
-	if (!reg_base) return;
 	hal_adv_tim_set_comp_a(reg_base, (hal_adv_tim_get_load_value(reg_base) + 2) * duty / 100.0f);
 }
 
 void HAL_PIN_PWM_Stop(int index) {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	lnPinMapping_t* pin = g_pins + index;
-	if(pin->pwm_cha < 0 || pin->pwm_cha > 5) return;
-	uint32_t reg_base = get_adv_timer_base((uint8_t)pin->pwm_cha);
-	if (!reg_base) return;
+	if(pin->pwm_cha < 0) return;
+	uint32_t reg_base = get_adv_timer_base(pin->pwm_cha);
 	hal_adv_tim_a_en(reg_base, HAL_DISABLE);
 	hal_gpio_pin_afio_en(pin->base, pin->pin, HAL_DISABLE);
 	BIT_CLEAR(g_active_pwm, pin->pwm_cha);
+	uint8_t chan = pin->pwm_cha;
 	pin->pwm_cha = -1;
 	if(g_active_pwm == 0)
 	{
@@ -263,41 +257,39 @@ void HAL_PIN_PWM_Stop(int index) {
 
 void HAL_PIN_PWM_Start(int index, int freq) 
 {
-	if(index < 0 || index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
+	if(index >= g_numPins)
 		return;
-	if (freq < 1) freq = 1;
 	lnPinMapping_t* pin = g_pins + index;
 	if(pin->pwm_cha >= 0)
 	{
-		if (pin->pwm_cha > 5) return;
-		pwm_init((uint32_t)freq, (uint8_t)pin->pwm_cha, pin->base, pin->pin);
+		pwm_init(freq, pin->pwm_cha, pin->base, pin->pin);
 		return;
 	}
 	uint8_t freecha;
 	for(freecha = 0; freecha < 6; freecha++) if(!BIT_CHECK(g_active_pwm, freecha)) break;
 	printf("PWM_Start: ch_pwm: %u\r\n", freecha);
-	if(freecha >= 6) return;
+	if((g_active_pwm & 0x3F) == 0x3F) return;
 	if(g_active_pwm == 0)
 	{
 		soc_module_clk_gate_enable(CLK_G_ADV_TIMER);
 	}
 	BIT_SET(g_active_pwm, freecha);
 	pin->pwm_cha = freecha;
-	pwm_init((uint32_t)freq, freecha, pin->base, pin->pin);
+	pwm_init(freq, freecha, pin->base, pin->pin);
 	pwm_start(freecha);
 }
 
 void HAL_PIN_PWM_Update(int index, float value) 
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	lnPinMapping_t* pin = g_pins + index;
-	if(pin->pwm_cha < 0 || pin->pwm_cha > 5) return;
+	if(pin->pwm_cha < 0) return;
 	if(value < 0)
 		value = 0;
 	if(value > 100)
 		value = 100;
-	pwm_set_duty(value, (uint8_t)pin->pwm_cha);
+	pwm_set_duty(value, pin->pwm_cha);
 }
 
 uint32_t GetBaseForPin(int pinIndex)
@@ -366,7 +358,7 @@ void HAL_DetachInterrupt(int pinIndex) {
 
 void HAL_PIN_SetOutputValue(int index, int iVal)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	lnPinMapping_t* pin = g_pins + index;
 	HAL_GPIO_WritePin(pin->pin, iVal > 0 ? GPIO_VALUE_HIGH : GPIO_VALUE_LOW);
@@ -374,7 +366,7 @@ void HAL_PIN_SetOutputValue(int index, int iVal)
 
 int HAL_PIN_ReadDigitalInput(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return 0;
 	lnPinMapping_t* pin = g_pins + index;
 	return HAL_GPIO_ReadPin(pin->pin);
@@ -390,7 +382,7 @@ void Basic_GPIO_Setup(lnPinMapping_t* pin, int direction)
 
 void HAL_PIN_Setup_Input_Pullup(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	lnPinMapping_t* pin = g_pins + index;
 	Basic_GPIO_Setup(pin, GPIO_INPUT);
@@ -399,7 +391,7 @@ void HAL_PIN_Setup_Input_Pullup(int index)
 
 void HAL_PIN_Setup_Input_Pulldown(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	lnPinMapping_t* pin = g_pins + index;
 	Basic_GPIO_Setup(pin, GPIO_INPUT);
@@ -408,7 +400,7 @@ void HAL_PIN_Setup_Input_Pulldown(int index)
 
 void HAL_PIN_Setup_Input(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	lnPinMapping_t* pin = g_pins + index;
 	Basic_GPIO_Setup(pin, GPIO_INPUT);
@@ -417,7 +409,7 @@ void HAL_PIN_Setup_Input(int index)
 
 void HAL_PIN_Setup_Output(int index)
 {
-	if(index < 0 || index >= g_numPins)
+	if(index >= g_numPins)
 		return;
 	if(IS_QSPI_PIN(index))
 		return;
@@ -433,9 +425,9 @@ static uint16_t g_pwm_load[PWM_CH_MAX];
 
 void HAL_PIN_PWM_Stop(int index)
 {
-	if(index < 0 || index >= g_numPins) return;
+	if(index >= g_numPins) return;
 	lnPinMapping_t* pin = g_pins + index;
-	if(pin->pwm_cha < 0 || pin->pwm_cha >= PWM_CH_MAX) return;
+	if(pin->pwm_cha < 0) return;
 	const uint8_t channel = (uint8_t)pin->pwm_cha;
 	pin->pwm_cha = -1;
 	HAL_PWM_Stop(channel);
@@ -445,18 +437,18 @@ void HAL_PIN_PWM_Stop(int index)
 
 void HAL_PIN_PWM_Start(int index, int freq)
 {
-	if(index < 0 || index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index)) return;
+	if(index >= g_numPins) return;
 	lnPinMapping_t* pin = g_pins + index;
 
 	if(freq < 1) freq = 1;
 
 	uint32_t div;
-	uint32_t load = 0;
+	uint32_t load;
 
 	for(div = 0; div < 64; div++)
 	{
-		load = APBUS0_CLOCK / ((div + 1U) * (uint32_t)freq);
-		if(load > 0 && load <= 65535U) break;
+		load = APBUS0_CLOCK / ((div + 1) * freq);
+		if(load > 0 && load <= 65535) break;
 	}
 
 	if(div == 64)
@@ -467,11 +459,10 @@ void HAL_PIN_PWM_Start(int index, int freq)
 
 	if(pin->pwm_cha >= 0)
 	{
-		if(pin->pwm_cha >= PWM_CH_MAX) return;
 		LL_PWM_Stop(pin->pwm_cha);
 		LL_PWM_Div_Set(pin->pwm_cha, div);
 		LL_PWM_Load_Set(pin->pwm_cha, load);
-		g_pwm_load[pin->pwm_cha] = (uint16_t)load;
+		g_pwm_load[pin->pwm_cha] = load;
 		LL_PWM_Start(pin->pwm_cha);
 		return;
 	}
@@ -486,14 +477,14 @@ void HAL_PIN_PWM_Start(int index, int freq)
 
 	BIT_SET(g_active_pwm, freecha);
 	pin->pwm_cha = freecha;
-	g_pwm_load[freecha] = (uint16_t)load;
+	g_pwm_load[freecha] = load;
 
 	HAL_SYSCON_FuncIOSet(freecha + GPIO_AF_PWM0, pin->pin, 1);
 
 	LL_PWM_Stop(freecha);
 	LL_PWM_Div_Set(freecha, div);
 	LL_PWM_Load_Set(freecha, load);
-	uint16_t cmp = (load > 1U) ? 1U : 0U;
+	uint16_t cmp = (load > 1) ? 1 : 0;
 	LL_PWM_Compare_Set(freecha, cmp);
 	LL_PWM_CntMode_Set(freecha, 0);
 	LL_PWM_Start(freecha);
@@ -501,9 +492,9 @@ void HAL_PIN_PWM_Start(int index, int freq)
 
 void HAL_PIN_PWM_Update(int index, float value)
 {
-	if(index < 0 || index >= g_numPins) return;
+	if(index >= g_numPins) return;
 	lnPinMapping_t* pin = g_pins + index;
-	if(pin->pwm_cha < 0 || pin->pwm_cha >= PWM_CH_MAX) return;
+	if(pin->pwm_cha < 0) return;
 	if(value < 0) value = 0;
 	if(value > 100) value = 100;
 	value = 100 - value;
