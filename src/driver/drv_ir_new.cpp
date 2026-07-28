@@ -59,6 +59,16 @@ typedef unsigned short uint16_t;
 
 #define __FlashStringHelper char
 
+// IRremoteESP8266 normally measures time spent in blocking mark()/space()
+// calls. OpenBeken queues them, so expose queued duration while building a
+// transaction.
+static bool gIRUseVirtualMicros = false;
+static uint32_t gIRVirtualMicros = 0;
+
+static void IR_AdvanceVirtualMicros(const uint32_t usec) {
+	if (gIRUseVirtualMicros) gIRVirtualMicros += usec;
+}
+
 // dummy functions
 #if PLATFORM_BEKEN
 void noInterrupts() { }
@@ -67,10 +77,12 @@ void delay(int n) { }
 void delayMicroseconds(int n) { }
 unsigned long millis()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros / 1000;
 	return 0;
 }
 unsigned long micros()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros;
 	return 0;
 }
 #else
@@ -80,10 +92,12 @@ void delay(int n) { delay_ms(n); }
 void delayMicroseconds(int n) { HAL_Delay_us(n); }
 unsigned long millis()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros / 1000;
 	return g_timeMs;
 }
 unsigned long micros()
 {
+	if (gIRUseVirtualMicros) return gIRVirtualMicros;
 	return g_timeMs * 1000;
 }
 #endif
@@ -120,6 +134,7 @@ Print Serial;
 // THIS function is defined in src/libraries/IRremoteESP8266/src/IRrecv.cpp
 extern "C" void DRV_IR_ISR(void* arg);
 extern void IR_ISR(float period_us);
+extern void IR_ISR_ResetClock(float period_us);
 
 static int8_t ir_chan = -1;
 static float ir_periodus = 50;
@@ -132,6 +147,7 @@ void _timerConfigForReceive() {
 	ir_counter = 0;
 
 	ir_chan = HAL_RequestHWTimer(ir_periodus, &ir_periodus, DRV_IR_ISR, NULL);
+	IR_ISR_ResetClock(ir_periodus);
 	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer %u, %.2f us period", ir_chan, ir_periodus);
 }
 
@@ -174,16 +190,16 @@ SpoofIrReceiver IrReceiver;
 
 // override aspects of sending for our own interrupt driven sends
 // basically, IRsend calls mark(us) and space(us) to send.
-// we simply note the numbers into a rolling buffer, assume the first is a mark()
-// and then every 50us service the rolling buffer, changing the PWM from 0 duty to 50% duty
-// appropriately.
+// Build a complete waveform in a private transaction first, then expose it to
+// the 50us ISR in one step. This prevents the ISR from transmitting a partial
+// frame when a protocol exceeds the fixed queue capacity.
 // Queue size for the interrupt-driven IR send buffer.
 // Each IR frame is encoded as a sequence of mark/space durations; each
 // duration occupies one slot.  A rough upper bound is 2 * bits + overhead:
-//   - NEC 32-bit:        ~68 slots
+//   - NEC 32-bit:         ~68 slots
 //   - Fujitsu AC 128-bit: ~270 slots
-//   - Daikin 312-bit:    ~640 slots
-// 1024 slots gives comfortable headroom for even the longest known protocols.
+//   - Daikin 312-bit:     ~640 slots
+// 1024 slots gives comfortable headroom for one longest known protocol frame.
 #define SEND_QUEUE_ITEMS 1024
 
 class myIRsend : public IRsend {
@@ -192,6 +208,10 @@ public:
 		sendPin = aSendPin;
 		our_us = 0;
 		our_ms = 0;
+		pwmfrequency = 38000;
+		pwmduty = 50;
+		transactionFrequencyHz = pwmfrequency;
+		transactionDuty = (uint8_t)pwmduty;
 		resetsendqueue();
 	}
 	~myIRsend() { }
@@ -201,56 +221,116 @@ public:
 		return our_ms;
 	}
 
+	bool beginSendTransaction() {
+		if (isBusy()) {
+			return false;
+		}
+		transactionCount = 0;
+		transactionRepeatCount = 0;
+		transactionFailed = false;
+		transactionFrequencyHz = pwmfrequency;
+		transactionDuty = (uint8_t)pwmduty;
+		overflows = 0;
+		transactionBuilding = 1;
+		gIRVirtualMicros = 0;
+		gIRUseVirtualMicros = true;
+		return true;
+	}
+
+	bool commitSendTransaction() {
+		gIRUseVirtualMicros = false;
+		if (!transactionBuilding || transactionFailed || transactionCount == 0) {
+			abortSendTransaction();
+			return false;
+		}
+
+		// The ISR only looks at the queue after transactionReady is set. Publish
+		// all queue metadata first, then flip that single-byte flag last.
+		timeout = 0;
+		timein = transactionCount;
+		transactionRepeatsRemaining = transactionRepeatCount;
+		const uint32_t totalItems =
+			(uint32_t)transactionCount * (transactionRepeatCount + 1U);
+		timecount = (uint16_t)totalItems;
+		timecounttotal = totalItems;
+		pwmfrequency = transactionFrequencyHz;
+		pwmduty = transactionDuty;
+		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
+		transactionReady = 1;
+		transactionBuilding = 0;
+		transactionRepeatCount = 0;
+		return true;
+	}
+
+	void abortSendTransaction() {
+		gIRUseVirtualMicros = false;
+		transactionBuilding = 0;
+		transactionFailed = false;
+		transactionCount = 0;
+		transactionRepeatCount = 0;
+		transactionRepeatsRemaining = 0;
+	}
+
+	bool isBusy() const {
+		return transactionBuilding || transactionReady || currentsendtime;
+	}
+
+	uint16_t getStagedItemCount() const {
+		return transactionCount;
+	}
+
+	bool setTransactionRepeats(const uint16_t repeats) {
+		if (!transactionBuilding || transactionFailed) return false;
+		transactionRepeatCount = repeats;
+		return true;
+	}
+
 	void delay(long int ms) {
 		// add a pure delay to our queue
 		space(ms * 1000);
 	}
 
 	uint16_t mark(uint16_t aMarkMicros) {
-		// sends a high for aMarkMicros
-		uint32_t newtimein = (timein + 1) % SEND_QUEUE_ITEMS;
-		if (newtimein != timeout) {
-			// store mark bits in highest +ve bit of count
-			times[timein] = aMarkMicros | 0x10000000;
-			timein = newtimein;
-			timecount++;
-			timecounttotal++;
-		}
-		else {
-			overflows++;
-		}
-		return 1;
+		if (!aMarkMicros) return 0;
+		IR_AdvanceVirtualMicros(aMarkMicros);
+		// store mark bits in highest +ve bit of count
+		return appendDuration(aMarkMicros | 0x10000000) ? 1 : 0;
 	}
 
 	void space(uint32_t aMarkMicros) {
-		// sends a low for aMarkMicros
-		uint32_t newtimein = (timein + 1) % SEND_QUEUE_ITEMS;
-		if (newtimein != timeout) {
-			times[timein] = aMarkMicros;
-			timein = newtimein;
-			timecount++;
-			timecounttotal++;
-		}
-		else {
-			overflows++;
-		}
+		if (!aMarkMicros) return;
+		IR_AdvanceVirtualMicros(aMarkMicros);
+		appendDuration(aMarkMicros);
 	}
 
 	void enableIROut(uint32_t freq, uint8_t duty=50) {
-		//uint_fast8_t aFrequencyKHz
-		if (freq < 1000)  // Were we given kHz? Supports the old call usage.
+		if (freq < 1000)  // Were we given kHz? Supports old call usage.
 			freq *= 1000;
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"enableIROut %d freq %d duty",(int)freq, (int)duty);
-		if(duty<1)
-			duty=1;
-		pwmduty = duty;
+		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"enableIROut %d freq %d duty",
+			(int)freq, (int)duty);
+		if (duty < 1) duty = 1;
+		if (duty > 100) duty = 100;
 
-		HAL_PIN_PWM_Start(sendPin, freq);
-		//HAL_PIN_PWM_Update(sendPin, duty);
+		if (transactionBuilding) {
+			transactionFrequencyHz = freq;
+			transactionDuty = duty;
+			return;
+		}
+
+		pwmfrequency = freq;
+		pwmduty = duty;
+		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
 	}
 
 	void resetsendqueue() {
-		// sends a low for aMarkMicros
+		gIRUseVirtualMicros = false;
+		// Hide the queue from the ISR before resetting shared metadata.
+		transactionReady = 0;
+		transactionBuilding = 0;
+		transactionFailed = false;
+		transactionCount = 0;
+		transactionRepeatCount = 0;
+		transactionRepeatsRemaining = 0;
 		timein = timeout = 0;
 		timecount = 0;
 		overflows = 0;
@@ -258,30 +338,66 @@ public:
 		currentbitval = 0;
 		timecounttotal = 0;
 	}
-	int32_t times[SEND_QUEUE_ITEMS]; // mark/space duration queue; see SEND_QUEUE_ITEMS above
-	unsigned short timein;
-	unsigned short timeout;
-	unsigned short timecount;
+
+	bool getsendqueue(int32_t *value) {
+		if (!value || !transactionReady) return false;
+
+		if (timeout >= timein) {
+			if (transactionRepeatsRemaining) {
+				transactionRepeatsRemaining--;
+				timeout = 0;
+			} else {
+				transactionReady = 0;
+				timein = timeout = 0;
+				timecount = 0;
+				return false;
+			}
+		}
+
+		*value = times[timeout++];
+		if (timecount) timecount--;
+		return true;
+	}
+
+	int32_t times[SEND_QUEUE_ITEMS]; // committed mark/space transaction
+	volatile unsigned short timein;
+	volatile unsigned short timeout;
+	volatile unsigned short timecount;
 	unsigned short overflows;
 	uint32_t timecounttotal;
-
-	int32_t getsendqueue() {
-		int32_t val = 0;
-		if (timein != timeout) {
-			val = times[timeout];
-			timeout = (timeout + 1) % SEND_QUEUE_ITEMS;
-			timecount--;
-		}
-		return val;
-	}
-	int currentsendtime;
-	int currentbitval;
+	volatile int currentsendtime;
+	volatile int currentbitval;
 
 	uint8_t sendPin;
 	uint32_t pwmduty;
+	uint32_t pwmfrequency;
+	uint32_t transactionFrequencyHz;
+	uint8_t transactionDuty;
 
 	uint32_t our_ms;
 	float our_us;
+
+private:
+	bool appendDuration(const uint32_t duration) {
+		if (!transactionBuilding || transactionFailed) {
+			return false;
+		}
+		if (transactionCount >= SEND_QUEUE_ITEMS) {
+			transactionFailed = true;
+			overflows++;
+			return false;
+		}
+
+		times[transactionCount++] = duration;
+		return true;
+	}
+
+	volatile uint8_t transactionReady;
+	volatile uint8_t transactionBuilding;
+	bool transactionFailed;
+	uint16_t transactionCount;
+	uint16_t transactionRepeatCount;
+	volatile uint16_t transactionRepeatsRemaining;
 };
 
 
@@ -307,8 +423,8 @@ extern "C" void DRV_IR_ISR(void* arg)
 			pIRsend->currentsendtime -= ir_periodus;
 			if (pIRsend->currentsendtime <= 0) {
 				int32_t remains = pIRsend->currentsendtime;
-				int32_t newtime = pIRsend->getsendqueue();
-				if (0 == newtime) {
+				int32_t newtime = 0;
+				if (!pIRsend->getsendqueue(&newtime)) {
 					// if it was the last one
 					pIRsend->currentsendtime = 0;
 					pIRsend->currentbitval = 0;
@@ -326,8 +442,8 @@ extern "C" void DRV_IR_ISR(void* arg)
 			}
 		}
 		else {
-			int32_t newtime = pIRsend->getsendqueue();
-			if (!newtime) {
+			int32_t newtime = 0;
+			if (!pIRsend->getsendqueue(&newtime)) {
 				pIRsend->currentsendtime = 0;
 				pIRsend->currentbitval = 0;
 			}
@@ -372,6 +488,98 @@ static int hexNibbleValue(char c) {
 	return -1;
 }
 
+static const uint16_t kIRSendMaxStateBytes = 64;
+static const uint16_t kIRSendMaxBits = kIRSendMaxStateBytes * 8;
+static const uint8_t kIRSendMaxRepeats = 10;
+
+static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
+	const uint32_t maxValue, uint32_t *result) {
+	if (!text || !text[0] || !result || minValue > maxValue) return false;
+
+	uint32_t value = 0;
+	for (const char *cursor = text; *cursor; cursor++) {
+		if (*cursor < '0' || *cursor > '9') return false;
+		const uint32_t digit = (uint32_t)(*cursor - '0');
+		if (value > maxValue / 10 ||
+			(value == maxValue / 10 && digit > maxValue % 10)) {
+			return false;
+		}
+		value = value * 10 + digit;
+	}
+	if (value < minValue) return false;
+
+	*result = value;
+	return true;
+}
+
+static bool parseBoundedHex(const char *text, const uint32_t minValue,
+	const uint32_t maxValue, uint32_t *result) {
+	if (!text || !text[0] || !result || minValue > maxValue) return false;
+
+	uint32_t value = 0;
+	for (const char *cursor = text; *cursor; cursor++) {
+		uint32_t digit;
+		if (*cursor >= '0' && *cursor <= '9')
+			digit = (uint32_t)(*cursor - '0');
+		else if (*cursor >= 'a' && *cursor <= 'f')
+			digit = 10U + (uint32_t)(*cursor - 'a');
+		else if (*cursor >= 'A' && *cursor <= 'F')
+			digit = 10U + (uint32_t)(*cursor - 'A');
+		else
+			return false;
+
+		if (value > maxValue / 16 ||
+			(value == maxValue / 16 && digit > maxValue % 16)) {
+			return false;
+		}
+		value = value * 16 + digit;
+	}
+	if (value < minValue) return false;
+
+	*result = value;
+	return true;
+}
+
+
+static bool isValidStatePayloadLength(const decode_type_t protocol,
+	const uint16_t bits, const uint16_t nbytes) {
+	if (!nbytes || nbytes != (bits + 7) / 8) return false;
+
+	// Carrier AC84 carries four data bits in its first byte, followed by ten
+	// complete bytes. It is the only supported state protocol that is not byte
+	// aligned.
+	if (protocol == decode_type_t::CARRIER_AC84)
+		return bits == kCarrierAc84Bits;
+	if (bits & 7) return false;
+
+	// Protocols with more than one valid state frame size.
+	if (protocol == decode_type_t::ARGO)
+		return bits == 32 || bits == 96;
+	if (protocol == decode_type_t::CORONA_AC)
+		return bits == 56 || bits == 168;
+	if (protocol == decode_type_t::DAIKIN)
+		return bits == 216 || bits == 280;
+	if (protocol == decode_type_t::FUJITSU_AC)
+		return bits == 48 || bits == 56 || bits == 120 || bits == 128;
+	if (protocol == decode_type_t::HITACHI_AC3)
+		return bits == 120 || bits == 136 || bits == 168 ||
+			bits == 184 || bits == 216;
+	if (protocol == decode_type_t::PANASONIC_AC)
+		return bits == 128 || bits == 216;
+	if (protocol == decode_type_t::SAMSUNG_AC)
+		return bits == 112 || bits == 168;
+	if (protocol == decode_type_t::TOSHIBA_AC)
+		return bits >= 56 && bits <= 80;
+
+	// MWM is intentionally variable length. The per-frame staging check below
+	// still rejects lengths for which the upstream sender emits nothing.
+	if (protocol == decode_type_t::MWM) return true;
+
+	const uint16_t expectedBits = IRsend::defaultBits(protocol);
+	return expectedBits && bits == expectedBits;
+}
+
+
 static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
 	if (!hexIn || !out || !outBytes) return false;
 	const char *hex = hexIn;
@@ -400,12 +608,28 @@ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, u
 		else
 			out[byteIndex] |= (uint8_t)v;
 	}
+
+	// State bytes are right-aligned. Reject any supplied high bits that
+	// fall outside the requested width rather than silently discarding them.
+	const uint8_t unusedHighBits = (uint8_t)(nbytes * 8 - bits);
+	if (unusedHighBits) {
+		const uint8_t unusedMask =
+			(uint8_t)(0xFFU << (8 - unusedHighBits));
+		if (out[0] & unusedMask) return false;
+	}
+
 	*outBytes = nbytes;
 	if (endPtr) *endPtr = hex + nibbleCount;
 	return true;
 }
 
-extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
+#if PLATFORM_BEKEN && defined(__GNUC__)
+#define IR_SEND_CMD_OPT __attribute__((optimize("no-jump-tables")))
+#else
+#define IR_SEND_CMD_OPT
+#endif
+
+extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
 	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	char args[384];
 	strncpy(args, args_in, sizeof(args) - 1);
@@ -436,40 +660,59 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 			if(*p==',')
 			{
 				*p='\0';
-				uint16_t bits = (uint16_t)strtol(_bits,NULL,10);
+				uint32_t bitsValue = 0;
+				if (!parseBoundedDecimal(_bits, 1, kIRSendMaxBits, &bitsValue)) {
+					ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid bit count '%s' (expected 1-%u)", _bits, (unsigned int)kIRSendMaxBits);
+					return CMD_RES_BAD_ARGUMENT;
+				}
+				const uint16_t bits = (uint16_t)bitsValue;
 				p++;
 				if(protocol!=decode_type_t::UNKNOWN && pIRsend)
 				{
 					int repeats=0;
 					char *_data=p;
-					uint8_t state[64];
+					uint8_t state[kIRSendMaxStateBytes];
 					uint16_t nbytes = 0;
 					const char *payloadEnd = NULL;
 					if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
 						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
 						return CMD_RES_BAD_ARGUMENT;
 					}
-					if(payloadEnd && *payloadEnd==',')
-						repeats=strtol(payloadEnd+1,NULL,10);
-					if (bits > 64 || hasACState(protocol))
-					{
-						bool sent = true;
-						for (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
-							if (!pIRsend->send(protocol,state,nbytes)) {
-								sent = false;
-								break;
-							}
-							if (repeatIndex < repeats) {
-								pIRsend->delay(100);
-							}
+					if(payloadEnd && *payloadEnd==',') {
+						uint32_t repeatValue = 0;
+						if (!parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats, &repeatValue)) {
+							ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid repeat count '%s' (expected 0-%u)", payloadEnd + 1, (unsigned int)kIRSendMaxRepeats);
+							return CMD_RES_BAD_ARGUMENT;
 						}
-						if( sent )
-						{
+						repeats = (int)repeatValue;
+					}
+					const bool statePayload = bits > 64 || hasACState(protocol);
+					if (statePayload && !isValidStatePayloadLength(protocol, bits, nbytes)) {
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid state length for %s: bits %d bytes %d", args, (int)bits, (int)nbytes);
+						return CMD_RES_BAD_ARGUMENT;
+					}
+					if (!pIRsend->beginSendTransaction()) {
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
+						return CMD_RES_ERROR;
+					}
+					if (statePayload)
+					{
+						const uint16_t stagedBefore =
+							pIRsend->getStagedItemCount();
+						bool sent = pIRsend->send(protocol, state, nbytes) &&
+							pIRsend->getStagedItemCount() > stagedBefore;
+						if (sent) {
 							pIRsend->delay(100);
+							sent = pIRsend->setTransactionRepeats(
+								(uint16_t)repeats);
+						}
+						if (sent && pIRsend->commitSendTransaction())
+						{
 							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
 							return CMD_RES_OK;
 						}
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
+						pIRsend->abortSendTransaction();
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
 						return CMD_RES_BAD_ARGUMENT;
 					}
 					else
@@ -478,13 +721,17 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 						for (uint16_t bi = 0; bi < nbytes; bi++) {
 							data = (data << 8) | state[bi];
 						}
-						if( pIRsend->send(protocol,data,bits,repeats) )
-						{
+						bool sent = pIRsend->send(protocol,data,bits,repeats);
+						if (sent) {
 							pIRsend->delay(100);
+						}
+						if (sent && pIRsend->commitSendTransaction())
+						{
 							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
 							return CMD_RES_OK;
 						}
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
+						pIRsend->abortSendTransaction();
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
 						return CMD_RES_BAD_ARGUMENT;
 					}
 				}
@@ -512,46 +759,59 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 
 	int repeats = 0;
 
-	if ((*p == '-') || (*p == ' ')) {
+	if (*p) {
+		if ((*p != '-') && (*p != ' ')) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IRSend invalid classic repeat syntax in %s", args);
+			return CMD_RES_BAD_ARGUMENT;
+		}
 		p++;
-		repeats = strtol(p, &p, 16);
+		uint32_t repeatValue = 0;
+		if (!parseBoundedHex(p, 0, kIRSendMaxRepeats, &repeatValue)) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IRSend invalid repeat count '%s' (expected 0-%X)",
+				p, (unsigned int)kIRSendMaxRepeats);
+			return CMD_RES_BAD_ARGUMENT;
+		}
+		repeats = (int)repeatValue;
 	}
 
 	if (pIRsend) {
-		bool success = true;  // Assume success.
+		if (!pIRsend->beginSendTransaction()) {
+			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
+			return CMD_RES_ERROR;
+		}
 
-		switch(protocol)
-		{
-			case decode_type_t::RC5:
-				pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command));
-				break;
-			case decode_type_t::RC6:
-				pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command));
-				break;
-			case decode_type_t::NEC:
-				pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command));
-				break;
-			case decode_type_t::PANASONIC:
-				pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command);
-				break;
-			case decode_type_t::JVC:
-				pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command));
-				break;
-			case decode_type_t::SAMSUNG:
-				pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command));
-				break;
-			case decode_type_t::LG:
-				pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command));
-				break;
-			default:
-				ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
-				return CMD_RES_ERROR;
-				break;
-		};
+		// BK7238 is built for Thumb-1 without the libgcc switch-table helper.
+		// Keep this dispatch as comparisons so GCC cannot emit __gnu_thumb1_case_si.
+		if (protocol == decode_type_t::RC5) {
+			pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command), kRC5XBits, repeats);
+		} else if (protocol == decode_type_t::RC6) {
+			pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command), kRC6Mode0Bits, repeats);
+		} else if (protocol == decode_type_t::NEC) {
+			pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command), kNECBits, repeats);
+		} else if (protocol == decode_type_t::PANASONIC) {
+			pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command, kPanasonicBits, repeats);
+		} else if (protocol == decode_type_t::JVC) {
+			pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command), kJvcBits, repeats);
+		} else if (protocol == decode_type_t::SAMSUNG) {
+			pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command), kSamsungBits, repeats);
+		} else if (protocol == decode_type_t::LG) {
+			pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command), kLgBits, repeats);
+		} else {
+			pIRsend->abortSendTransaction();
+			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
+			return CMD_RES_ERROR;
+		}
 
 		// add a 100ms delay after command
 		// NOTE: this is NOT a delay here.  it adds 100ms 'space' in the TX queue
 		pIRsend->delay(100);
+		if (!pIRsend->commitSendTransaction()) {
+			pIRsend->abortSendTransaction();
+			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s", args);
+			return CMD_RES_ERROR;
+		}
 
 		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s protocol %d addr 0x%X cmd 0x%X repeats %d", args, (int)protocol, (int)addr, (int)command, (int)repeats);
 		return CMD_RES_OK;
