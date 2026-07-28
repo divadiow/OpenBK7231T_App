@@ -1560,9 +1560,6 @@ extern "C" {
 #define DPRINTLN(x)
 #endif
 #endif  // DEBUG
-#if PLATFORM_REALTEK
-#define strcasecmp strcmp
-#endif
 
 #ifdef UNIT_TEST
 #ifndef F

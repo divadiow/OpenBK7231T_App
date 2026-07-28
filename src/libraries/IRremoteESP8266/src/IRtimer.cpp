@@ -1,6 +1,9 @@
 // Copyright 2017 David Conran
 
 #include "IRtimer.h"
+
+extern unsigned long micros(void);
+extern unsigned long millis(void);
 #ifndef UNIT_TEST
 #include "String.h"
 #endif

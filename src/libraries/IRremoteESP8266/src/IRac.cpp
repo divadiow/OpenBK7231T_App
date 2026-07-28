@@ -13,7 +13,20 @@
 //#include <string>
 #endif
 #include <cmath>
+// Some older/newlib-based embedded toolchains used by OpenBeken do not expose
+// a global ::isblank declaration even though <cctype> expects one.
+extern "C" int isblank(int c);
+// Realtek SDK headers can macro-remap snprintf/vsnprintf to rtl_* names, which
+// breaks libstdc++ headers when they try to reference std::snprintf/std::vsnprintf.
+#ifdef snprintf
+#undef snprintf
+#endif
+#ifdef vsnprintf
+#undef vsnprintf
+#endif
+#ifdef UNIT_TEST
 #include <memory>
+#endif
 #if __cplusplus >= 201103L && defined(_GLIBCXX_USE_C99_MATH_TR1)
     using std::roundf;
 #else
@@ -65,8 +78,22 @@
 // functions to handle the strings stored in the flash address space.
 #ifndef STRCASECMP
 #if defined(ESP8266)
-#define STRCASECMP(LHS, RHS) \
-    strcasecmp_P(LHS, reinterpret_cast<const char*>(RHS))
+#define STRCASECMP(LHS, RHS)     strcasecmp_P(LHS, reinterpret_cast<const char*>(RHS))
+#elif PLATFORM_REALTEK
+static inline int obk_ir_strcasecmp_local(const char *lhs, const char *rhs) {
+  while (*lhs && *rhs) {
+    unsigned char ca = static_cast<unsigned char>(*lhs);
+    unsigned char cb = static_cast<unsigned char>(*rhs);
+    if (ca >= 'A' && ca <= 'Z') ca = static_cast<unsigned char>(ca - 'A' + 'a');
+    if (cb >= 'A' && cb <= 'Z') cb = static_cast<unsigned char>(cb - 'A' + 'a');
+    if (ca != cb) return static_cast<int>(ca) - static_cast<int>(cb);
+    ++lhs;
+    ++rhs;
+  }
+  return static_cast<int>(static_cast<unsigned char>(*lhs)) -
+         static_cast<int>(static_cast<unsigned char>(*rhs));
+}
+#define STRCASECMP(LHS, RHS) obk_ir_strcasecmp_local(LHS, RHS)
 #else  // ESP8266
 #define STRCASECMP(LHS, RHS) strcasecmp(LHS, RHS)
 #endif  // ESP8266
@@ -3991,7 +4018,7 @@ int16_t IRac::strToModel(const char *str, const int16_t def) {
   } else if (!STRCASECMP(str, kArgoWrem3Str)) {
     return argo_ac_remote_model_t::SAC_WREM3;
   } else {
-    int16_t number = atoi(str);
+    int16_t number = static_cast<int16_t>(strtol(str, nullptr, 10));
     if (number > 0)
       return number;
     else

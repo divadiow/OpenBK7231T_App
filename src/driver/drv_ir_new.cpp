@@ -177,7 +177,14 @@ SpoofIrReceiver IrReceiver;
 // we simply note the numbers into a rolling buffer, assume the first is a mark()
 // and then every 50us service the rolling buffer, changing the PWM from 0 duty to 50% duty
 // appropriately.
-#define SEND_MAXBITS 128
+// Queue size for the interrupt-driven IR send buffer.
+// Each IR frame is encoded as a sequence of mark/space durations; each
+// duration occupies one slot.  A rough upper bound is 2 * bits + overhead:
+//   - NEC 32-bit:        ~68 slots
+//   - Fujitsu AC 128-bit: ~270 slots
+//   - Daikin 312-bit:    ~640 slots
+// 1024 slots gives comfortable headroom for even the longest known protocols.
+#define SEND_QUEUE_ITEMS 1024
 
 class myIRsend : public IRsend {
 public:
@@ -201,7 +208,7 @@ public:
 
 	uint16_t mark(uint16_t aMarkMicros) {
 		// sends a high for aMarkMicros
-		uint32_t newtimein = (timein + 1) % (SEND_MAXBITS * 2);
+		uint32_t newtimein = (timein + 1) % SEND_QUEUE_ITEMS;
 		if (newtimein != timeout) {
 			// store mark bits in highest +ve bit of count
 			times[timein] = aMarkMicros | 0x10000000;
@@ -217,7 +224,7 @@ public:
 
 	void space(uint32_t aMarkMicros) {
 		// sends a low for aMarkMicros
-		uint32_t newtimein = (timein + 1) % (SEND_MAXBITS * 2);
+		uint32_t newtimein = (timein + 1) % SEND_QUEUE_ITEMS;
 		if (newtimein != timeout) {
 			times[timein] = aMarkMicros;
 			timein = newtimein;
@@ -251,7 +258,7 @@ public:
 		currentbitval = 0;
 		timecounttotal = 0;
 	}
-	int32_t times[SEND_MAXBITS * 2]; // enough for 128 bits
+	int32_t times[SEND_QUEUE_ITEMS]; // mark/space duration queue; see SEND_QUEUE_ITEMS above
 	unsigned short timein;
 	unsigned short timeout;
 	unsigned short timecount;
@@ -262,7 +269,7 @@ public:
 		int32_t val = 0;
 		if (timein != timeout) {
 			val = times[timeout];
-			timeout = (timeout + 1) % (SEND_MAXBITS * 2);
+			timeout = (timeout + 1) % SEND_QUEUE_ITEMS;
 			timecount--;
 		}
 		return val;
@@ -357,9 +364,50 @@ extern "C" void DRV_IR_ISR(void* arg)
 }
 
 
+
+static int hexNibbleValue(char c) {
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+	if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+	return -1;
+}
+
+static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
+	if (!hexIn || !out || !outBytes) return false;
+	const char *hex = hexIn;
+	if (hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) hex += 2;
+	uint16_t nbytes = (bits + 7) / 8;
+	if (!nbytes || nbytes > outSize) return false;
+	for (uint16_t i = 0; i < nbytes; i++) out[i] = 0;
+	uint16_t nibbleCount = 0;
+	while (hex[nibbleCount] && hex[nibbleCount] != ',') {
+		if (hexNibbleValue(hex[nibbleCount]) < 0) return false;
+		nibbleCount++;
+	}
+	if (!nibbleCount) return false;
+	uint16_t maxNibbles = nbytes * 2;
+	// Allow extra leading zeros beyond the requested bit-length.
+	// This keeps older command strings working (e.g. bits=56 but payload has 16 nibbles with leading 00).
+	while (nibbleCount > maxNibbles && hex[0] == '0') { hex++; nibbleCount--; }
+	if (nibbleCount > maxNibbles) return false;
+	uint16_t nibbleOffset = maxNibbles - nibbleCount;
+	for (uint16_t i = 0; i < nibbleCount; i++) {
+		int v = hexNibbleValue(hex[i]);
+		uint16_t pos = nibbleOffset + i;
+		uint16_t byteIndex = pos / 2;
+		if ((pos & 1) == 0)
+			out[byteIndex] |= (uint8_t)(v << 4);
+		else
+			out[byteIndex] |= (uint8_t)v;
+	}
+	*outBytes = nbytes;
+	if (endPtr) *endPtr = hex + nibbleCount;
+	return true;
+}
+
 extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
 	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
-	char args[128];
+	char args[384];
 	strncpy(args, args_in, sizeof(args) - 1);
 	args[sizeof(args) - 1] = 0;
 
@@ -371,7 +419,7 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 
 	if ((*p != '-') && (*p != ' ')) {
 		// try to decode "new" format, separated by comma
-		// the format is bits,0xDATA[,repeat]
+		// the format is PROT,bits,0xDATA[,repeat]
 		char *p = args;
 		while (*p && (*p != ',')) {
 			p++;
@@ -390,30 +438,55 @@ extern "C" commandResult_t IR_Send_Cmd(const void *context, const char *cmd, con
 				*p='\0';
 				uint16_t bits = (uint16_t)strtol(_bits,NULL,10);
 				p++;
-				if(bits<=64)
+				if(protocol!=decode_type_t::UNKNOWN && pIRsend)
 				{
+					int repeats=0;
 					char *_data=p;
-					uint64_t data =  strtoll(_data,&p,16);
-					if(protocol!=decode_type_t::UNKNOWN)
+					uint8_t state[64];
+					uint16_t nbytes = 0;
+					const char *payloadEnd = NULL;
+					if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
+						return CMD_RES_BAD_ARGUMENT;
+					}
+					if(payloadEnd && *payloadEnd==',')
+						repeats=strtol(payloadEnd+1,NULL,10);
+					if (bits > 64 || hasACState(protocol))
 					{
-						int repeats=1;
-						if(*p==',')
-							repeats=strtol(p+1,NULL,10);
-						
+						bool sent = true;
+						for (int repeatIndex = 0; repeatIndex <= repeats; repeatIndex++) {
+							if (!pIRsend->send(protocol,state,nbytes)) {
+								sent = false;
+								break;
+							}
+							if (repeatIndex < repeats) {
+								pIRsend->delay(100);
+							}
+						}
+						if( sent )
+						{
+							pIRsend->delay(100);
+							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
+							return CMD_RES_OK;
+						}
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
+						return CMD_RES_BAD_ARGUMENT;
+					}
+					else
+					{
+						uint64_t data = 0;
+						for (uint16_t bi = 0; bi < nbytes; bi++) {
+							data = (data << 8) | state[bi];
+						}
 						if( pIRsend->send(protocol,data,bits,repeats) )
 						{
 							pIRsend->delay(100);
 							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
 							return CMD_RES_OK;
-						} else {
-							ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits data 0x%llX repeats %d", args, (int)protocol, (long long int)data, (int)repeats);
-							return CMD_RES_BAD_ARGUMENT;
 						}
+						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
+						return CMD_RES_BAD_ARGUMENT;
 					}
-				} else {
-					// TODO: implement longer protocols
-					ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend currently only protocol with up to 64bits are supported", args);
-					return CMD_RES_BAD_ARGUMENT;
 				}
 			} 
 		}
@@ -495,7 +568,7 @@ extern "C" commandResult_t IR_Enable(const void *context, const char *cmd, const
 		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
 	}
 
-	char args[128];
+	char args[384];
 	strncpy(args, args_in, sizeof(args)-1);
 	args[sizeof(args)-1] = 0;
 	char *p = args;
@@ -702,8 +775,8 @@ extern "C" void DRV_IR_Init() {
 
 			pIRsend = pIRsendTemp;
 
-			//cmddetail:{"name":"IRSend","args":"[PROT-ADDR-CMD-REP]",
-			//cmddetail:"descr":"Sends IR commands in the form PROT-ADDR-CMD-REP, e.g. NEC-1-1A-0",
+			//cmddetail:{"name":"IRSend","args":"[PROT-ADDR-CMD-REP] or [PROT,bits,0xDATA[,repeat]]",
+			//cmddetail:"descr":"Sends IR commands either in the classic form PROT-ADDR-CMD-REP, e.g. NEC-1-1A-0, or in the raw-data form PROT,bits,0xDATA[,repeat] for long payloads such as A/C state frames",
 			//cmddetail:"fn":"IR_Send_Cmd","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
 			//cmddetail:"examples":""}
 			CMD_RegisterCommand("IRSend", IR_Send_Cmd, NULL);

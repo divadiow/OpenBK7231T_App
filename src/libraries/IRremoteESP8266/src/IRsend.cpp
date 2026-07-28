@@ -244,6 +244,8 @@ int8_t IRsend::calibrate(uint16_t hz) {
   // Store the difference between the actual time per period vs. calculated.
   periodOffset = (int8_t)((double_t)calcPeriod - actualPeriod);
   return periodOffset;
+  #endif
+  return 0;
 }
 
 /// Generic method for sending data that is common to most protocols.
