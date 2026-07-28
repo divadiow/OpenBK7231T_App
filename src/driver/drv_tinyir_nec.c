@@ -15,6 +15,7 @@
 #include "../hal/hal_hwtimer.h"
 #include "../hal/hal_pins.h"
 #include "../mqtt/new_mqtt.h"
+#include "drv_ir.h"
 
 #if PLATFORM_BEKEN
 #include "include.h"
@@ -66,6 +67,7 @@ static inline bool within(uint32_t measured, uint32_t target)
 
 static int8_t recvpin = -1;
 static int8_t ir_chan = -1;
+static bool gTinyIRDeferredStart = false;
 
 static inline unsigned char digitalReadFast(unsigned char P)
 {
@@ -82,6 +84,7 @@ static bool last_level = true;
 
 static void DRV_IR_ISR(void* arg)
 {
+	(void)arg;
 	bool cur_level = (bool)digitalReadFast(recvpin);
 	if(cur_level == last_level)
 	{
@@ -174,32 +177,81 @@ static void DRV_IR_ISR(void* arg)
 	last_level = cur_level;
 }
 
+int TinyIR_NEC_IsReady(void)
+{
+	return recvpin >= 0 && ir_chan >= 0;
+}
+
 void TinyIR_NEC_Init()
 {
-	recvpin = PIN_FindPinIndexForRole(IOR_IRRecv, recvpin);
+#if ENABLE_DRIVER_IRREMOTEESP
+	if(DRV_IR_IsReady())
+	{
+		gTinyIRDeferredStart = true;
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			"TinyIR_NEC deferred while IRremoteESP8266 is running");
+		return;
+	}
+#endif
+	if(TinyIR_NEC_IsReady()) return;
+	gTinyIRDeferredStart = false;
+
+	recvpin = PIN_FindPinIndexForRole(IOR_IRRecv, -1);
 	if(recvpin == -1)
 	{
-		recvpin = PIN_FindPinIndexForRole(IOR_IRRecv_nPup, recvpin);
+		recvpin = PIN_FindPinIndexForRole(IOR_IRRecv_nPup, -1);
 		if(recvpin >= 0) HAL_PIN_Setup_Input(recvpin);
 	}
 	else HAL_PIN_Setup_Input_Pullup(recvpin);
 
 	if(recvpin < 0) return;
 
+	ir_periodus = 50;
+	timer_cnt = 0;
+	duration_ticks = 0;
+	bitCount = 0;
+	repeatCount = 0;
+	possiblyHeld = false;
+	recvState = 0;
+	irDataAvailable = false;
 	last_level = digitalReadFast(recvpin);
 	ir_chan = HAL_RequestHWTimer(ir_periodus, &ir_periodus, DRV_IR_ISR, NULL);
+	if(ir_chan < 0)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_DRV, "TinyIR_NEC hardware timer allocation failed");
+		recvpin = -1;
+		return;
+	}
 	HAL_HWTimerStart(ir_chan);
-	ADDLOG_INFO(LOG_FEATURE_DRV, "NEC %u %.2f", ir_chan, ir_periodus);
+	ADDLOG_INFO(LOG_FEATURE_DRV, "NEC %d %.2f", (int)ir_chan, ir_periodus);
 }
 
 void TinyIR_NEC_Deinit()
 {
-	HAL_HWTimerStop(ir_chan);
-	HAL_HWTimerDeinit(ir_chan);
+	if(ir_chan >= 0)
+	{
+		HAL_HWTimerStop(ir_chan);
+		HAL_HWTimerDeinit(ir_chan);
+	}
+	ir_chan = -1;
+	recvpin = -1;
+	timer_cnt = 0;
+	recvState = 0;
+	irDataAvailable = false;
+	possiblyHeld = false;
+	gTinyIRDeferredStart = false;
 }
 
 void TinyIR_NEC_RunFrame()
 {
+#if ENABLE_DRIVER_IRREMOTEESP
+	if(gTinyIRDeferredStart && !DRV_IR_IsReady())
+	{
+		gTinyIRDeferredStart = false;
+		TinyIR_NEC_Init();
+	}
+#endif
+	if(!TinyIR_NEC_IsReady()) return;
 	if(irDataAvailable)
 	{
 		ADDLOG_INFO(LOG_FEATURE_IR, "IR NEC 0x%X 0x%X %d", (unsigned int)_irData.addr, (unsigned int)_irData.cmd, _irData.keyHeld);
