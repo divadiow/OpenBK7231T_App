@@ -1,6 +1,7 @@
 #ifdef PLATFORM_RTL8720E
 
 #include "../hal_pinmap_realtek.h"
+#include "pwmout_ex_api.h"
 
 rtlPinMapping_t g_pins[] = {
 	{ "PA0",			PA_0,	NULL, NULL },
@@ -59,11 +60,23 @@ rtlPinMapping_t g_pins[] = {
 
 int g_numPins = sizeof(g_pins) / sizeof(g_pins[0]);
 
+static uint32_t RTL8720E_PWMClassToChannelMask(const uint32_t pwmClass)
+{
+	if (pwmClass == 0U) return 0xFFU;
+	if (pwmClass == 1U) return 0x0FU;
+	if (pwmClass == 2U) return 0xF0U;
+	return 0U;
+}
+
+uint32_t RTL8720E_GetPWMChannelMask(int index)
+{
+	if (index < 0 || index >= g_numPins) return 0U;
+	return RTL8720E_PWMClassToChannelMask(pwmout_pin2chan(g_pins[index].pin));
+}
+
 int HAL_PIN_CanThisPinBePWM(int index)
 {
-	if(index >= g_numPins)
-		return 0;
-	return 1;
+	return RTL8720E_GetPWMChannelMask(index) != 0U;
 }
 
 #endif // PLATFORM_RTL8720E
