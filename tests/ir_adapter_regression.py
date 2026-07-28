@@ -144,7 +144,7 @@ def source_contracts(s: dict[str, str]) -> None:
 
     init = block(d, 'extern "C" void DRV_IR_Init')
     contains(init, "IR_RegisterCommands()", "transmitPin >= 0",
-             "new (std::nothrow) IRrecv", "new (std::nothrow) myIRsend",
+             "new IRrecv", "new myIRsend",
              "IR_ReceiverStorageReady()", "IR_SyncReceiverInput(false)",
              "gIRDriverReady = true")
     deinit = block(d, 'extern "C" void DRV_IR_Deinit')

@@ -47,7 +47,6 @@ extern "C" {
 
 
 #include "drv_ir.h"
-#include <new>
 
 //#define USE_IRREMOTE_HPP_AS_PLAIN_INCLUDE 1
 #undef read
@@ -1331,7 +1330,7 @@ extern "C" void DRV_IR_Init(void) {
 	}
 
 	if (receivePin >= 0) {
-		IRrecv *receiver = new (std::nothrow) IRrecv((uint16_t)receivePin);
+		IRrecv *receiver = new IRrecv((uint16_t)receivePin);
 		if (!receiver || !IR_ReceiverStorageReady()) {
 			delete receiver;
 			IR_ClearReceiverStorageState();
@@ -1348,7 +1347,7 @@ extern "C" void DRV_IR_Init(void) {
 			ADDLOG_ERROR(LOG_FEATURE_IR,
 				(char *)"IR transmit pin %d is not PWM-capable", transmitPin);
 		} else {
-			myIRsend *sender = new (std::nothrow) myIRsend((uint_fast8_t)transmitPin);
+			myIRsend *sender = new myIRsend((uint_fast8_t)transmitPin);
 			if (!sender) {
 				ADDLOG_ERROR(LOG_FEATURE_IR,
 					(char *)"IR transmitter allocation failed on pin %d", transmitPin);
