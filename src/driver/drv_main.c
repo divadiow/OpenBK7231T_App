@@ -1721,6 +1721,15 @@ void DRV_StartDriver(const char* name) {
 				if (g_drivers[i].initFunc) {
 					g_drivers[i].initFunc();
 				}
+#if ENABLE_DRIVER_IRREMOTEESP
+				if (!stricmp(g_drivers[i].name, "IR") &&
+					!DRV_IR_IsReady() && !DRV_IR_IsDeferred()) {
+					addLogAdv(LOG_ERROR, LOG_FEATURE_MAIN,
+						"Drv IR failed to start.");
+					bStarted = 1;
+					break;
+				}
+#endif
 				g_drivers[i].bLoaded = true;
 				addLogAdv(LOG_INFO, LOG_FEATURE_MAIN, "Started %s.", name);
 				bStarted = 1;

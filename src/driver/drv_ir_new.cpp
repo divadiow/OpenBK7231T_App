@@ -35,11 +35,14 @@ extern "C" {
 	unsigned long ir_counter = 0;
 	uint8_t gEnableIRSendWhilstReceive = 0;
 	uint32_t gIRProtocolEnable = 0xFFFFFFFF;
-	// 0 == active low.  1 = active hi
+	// 0 = normal PWM polarity, 1 = inverted PWM polarity.
 	uint8_t gIRPinPolarity = 0;
 
 	extern int my_strnicmp(const char* a, const char* b, int len);
 	extern unsigned int g_timeMs;
+#if ENABLE_DRIVER_TINYIR_NEC
+	int TinyIR_NEC_IsReady(void);
+#endif
 }
 
 
@@ -68,6 +71,12 @@ static uint32_t gIRVirtualMicros = 0;
 static void IR_AdvanceVirtualMicros(const uint32_t usec) {
 	if (gIRUseVirtualMicros) gIRVirtualMicros += usec;
 }
+
+#if defined(__GNUC__)
+#define IR_COMPILER_BARRIER() __asm__ __volatile__("" ::: "memory")
+#else
+#define IR_COMPILER_BARRIER() do { } while (0)
+#endif
 
 // dummy functions
 #if PLATFORM_BEKEN
@@ -137,18 +146,35 @@ extern void IR_ISR(float period_us);
 extern void IR_ISR_ResetClock(float period_us);
 
 static int8_t ir_chan = -1;
-static float ir_periodus = 50;
+static float ir_periodus = 50.0f;
+static uint32_t ir_periodus_rounded = 50U;
+static bool gIRDriverReady = false;
+static bool gIRDeferredStart = false;
 
 void timerConfigForReceive() {
-	// nothing here`
+	// OpenBeken owns the external timer.
 }
 
-void _timerConfigForReceive() {
+static bool _timerConfigForReceive() {
 	ir_counter = 0;
+	ir_periodus = 50.0f;
+	ir_periodus_rounded = 50U;
 
 	ir_chan = HAL_RequestHWTimer(ir_periodus, &ir_periodus, DRV_IR_ISR, NULL);
+	if (ir_chan < 0) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR hardware timer allocation failed");
+		return false;
+	}
+
+	// Some timer HALs start the channel during allocation. Stop it until all
+	// sender/receiver state has been initialised and published.
+	HAL_HWTimerStop(ir_chan);
+	ir_periodus_rounded = (uint32_t)(ir_periodus + 0.5f);
+	if (!ir_periodus_rounded) ir_periodus_rounded = 1U;
 	IR_ISR_ResetClock(ir_periodus);
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer %u, %.2f us period", ir_chan, ir_periodus);
+	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer %d, %.2f us period",
+		(int)ir_chan, ir_periodus);
+	return true;
 }
 
 static void timer_enable() {
@@ -156,12 +182,14 @@ static void timer_enable() {
 static void timer_disable() {
 }
 static void _timer_enable() {
+	if (ir_chan < 0) return;
 	HAL_HWTimerStart(ir_chan);
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer enabled %u", ir_chan);
+	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer enabled %d", (int)ir_chan);
 }
 static void _timer_disable() {
+	if (ir_chan < 0) return;
 	HAL_HWTimerStop(ir_chan);
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer disabled %u", ir_chan);
+	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"ir timer disabled %d", (int)ir_chan);
 }
 
 #define TIMER_ENABLE_RECEIVE_INTR timer_enable();
@@ -187,6 +215,55 @@ SpoofIrReceiver IrReceiver;
 #endif
 #include "../libraries/IRremoteESP8266/src/IRproto.h"
 #include "../libraries/IRremoteESP8266/src/digitalWriteFast.h"
+#if SEND_ARGO
+#include "../libraries/IRremoteESP8266/src/ir_Argo.h"
+#endif
+
+// OpenBeken's receiver adaptation keeps its capture state in IRrecv.cpp.
+// Access it here so driver lifecycle and allocation failures can be handled
+// without changing generic timer or GPIO behaviour.
+namespace _IRrecv {
+extern atomic_irparams_t params;
+extern irparams_t *params_save;
+}
+
+// Declared here because lifecycle helpers precede the owning definition below.
+extern IRrecv *ourReceiver;
+
+static bool IR_ReceiverStorageReady(void) {
+	return _IRrecv::params.rawbuf != NULL && _IRrecv::params.bufsize != 0;
+}
+
+static void IR_ClearReceiverStorageState(void) {
+	_IRrecv::params.rcvstate = kStopState;
+	_IRrecv::params.rawlen = 0;
+	_IRrecv::params.overflow = false;
+	_IRrecv::params.bufsize = 0;
+	_IRrecv::params.rawbuf = NULL;
+	_IRrecv::params_save = NULL;
+}
+
+// Synchronize the polling receiver with the actual idle pin level. The single
+// direct IR_ISR() call updates the private previous-level state in IRrecv.cpp;
+// the synthetic capture entry, if any, is then discarded. Only the IR-owned
+// timer is stopped/restarted.
+static bool IR_SyncReceiverInput(const bool restartTimer) {
+	if (!ourReceiver || !IR_ReceiverStorageReady() || ir_chan < 0) return false;
+	HAL_HWTimerStop(ir_chan);
+	IR_ISR_ResetClock(ir_periodus);
+	_IRrecv::params.rcvstate = kIdleState;
+	_IRrecv::params.rawlen = 0;
+	_IRrecv::params.overflow = false;
+	IR_ISR(ir_periodus);
+	_IRrecv::params.rcvstate = kIdleState;
+	_IRrecv::params.rawlen = 0;
+	_IRrecv::params.overflow = false;
+	// Keep the newly sampled pin level, but restart duration accounting from
+	// this synchronized baseline rather than from the synthetic sample above.
+	IR_ISR_ResetClock(ir_periodus);
+	if (restartTimer) HAL_HWTimerStart(ir_chan);
+	return true;
+}
 
 // override aspects of sending for our own interrupt driven sends
 // basically, IRsend calls mark(us) and space(us) to send.
@@ -202,34 +279,79 @@ SpoofIrReceiver IrReceiver;
 // 1024 slots gives comfortable headroom for one longest known protocol frame.
 #define SEND_QUEUE_ITEMS 1024
 
+#if PLATFORM_BL602 || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_REALTEK
+extern "C" bool HAL_IR_PWM_IsActive(int index);
+extern "C" void HAL_IR_PWM_Update(int index, float value);
+#endif
+#if PLATFORM_BL602 || PLATFORM_REALTEK
+extern "C" bool HAL_IR_PWM_Reserve(int index);
+extern "C" void HAL_IR_PWM_Release(int index);
+#endif
+
+static bool IR_PlatformPWMReserve(const int index) {
+#if PLATFORM_BL602 || PLATFORM_REALTEK
+	return HAL_IR_PWM_Reserve(index);
+#else
+	return index >= 0;
+#endif
+}
+
+static void IR_PlatformPWMRelease(const int index) {
+#if PLATFORM_BL602 || PLATFORM_REALTEK
+	HAL_IR_PWM_Release(index);
+#else
+	(void)index;
+#endif
+}
+
+static bool IR_PlatformPWMIsActive(const int index) {
+#if PLATFORM_BL602 || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_REALTEK
+	return HAL_IR_PWM_IsActive(index);
+#else
+	return index >= 0 && HAL_PIN_CanThisPinBePWM(index);
+#endif
+}
+
+static void IR_PlatformPWMUpdate(const int index, const float duty) {
+#if PLATFORM_BL602 || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_REALTEK
+	HAL_IR_PWM_Update(index, duty);
+#else
+	HAL_PIN_PWM_Update(index, duty);
+#endif
+}
+
 class myIRsend : public IRsend {
 public:
-	myIRsend(uint_fast8_t aSendPin) :IRsend(aSendPin) {
+	myIRsend(uint_fast8_t aSendPin) : IRsend(aSendPin) {
 		sendPin = aSendPin;
 		our_us = 0;
 		our_ms = 0;
 		pwmfrequency = 38000;
 		pwmduty = 50;
+		pwmInverted = gIRPinPolarity ? 1U : 0U;
 		transactionFrequencyHz = pwmfrequency;
 		transactionDuty = (uint8_t)pwmduty;
+		transactionInverted = pwmInverted;
+		carrierStarted = 0;
+		carrierReleasePending = 0;
+		lastCarrierMark = -1;
+		lastCarrierDuty = -1;
 		resetsendqueue();
 	}
 	~myIRsend() { }
-
 
 	uint32_t millis() {
 		return our_ms;
 	}
 
 	bool beginSendTransaction() {
-		if (isBusy()) {
-			return false;
-		}
+		if (isBusy()) return false;
 		transactionCount = 0;
 		transactionRepeatCount = 0;
 		transactionFailed = false;
 		transactionFrequencyHz = pwmfrequency;
 		transactionDuty = (uint8_t)pwmduty;
+		transactionInverted = pwmInverted;
 		overflows = 0;
 		transactionBuilding = 1;
 		gIRVirtualMicros = 0;
@@ -244,8 +366,9 @@ public:
 			return false;
 		}
 
-		// The ISR only looks at the queue after transactionReady is set. Publish
-		// all queue metadata first, then flip that single-byte flag last.
+		// Publish all queue metadata and carrier settings before exposing the
+		// transaction to the timer ISR. The caller stops the IR-owned timer while
+		// this method runs.
 		timeout = 0;
 		timein = transactionCount;
 		transactionRepeatsRemaining = transactionRepeatCount;
@@ -255,7 +378,26 @@ public:
 		timecounttotal = totalItems;
 		pwmfrequency = transactionFrequencyHz;
 		pwmduty = transactionDuty;
-		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
+		pwmInverted = transactionInverted;
+
+		if (!IR_PlatformPWMReserve(sendPin)) {
+			abortSendTransaction();
+			return false;
+		}
+		HAL_PIN_PWM_Start(sendPin, (int)pwmfrequency);
+		if (!IR_PlatformPWMIsActive(sendPin)) {
+			HAL_PIN_PWM_Stop(sendPin);
+			IR_PlatformPWMRelease(sendPin);
+			abortSendTransaction();
+			return false;
+		}
+		carrierStarted = 1;
+		carrierReleasePending = 0;
+		lastCarrierMark = -1;
+		lastCarrierDuty = -1;
+		applyCarrierState(false, true);
+
+		IR_COMPILER_BARRIER();
 		transactionReady = 1;
 		transactionBuilding = 0;
 		transactionRepeatCount = 0;
@@ -264,15 +406,24 @@ public:
 
 	void abortSendTransaction() {
 		gIRUseVirtualMicros = false;
+		transactionReady = 0;
+		IR_COMPILER_BARRIER();
 		transactionBuilding = 0;
 		transactionFailed = false;
 		transactionCount = 0;
 		transactionRepeatCount = 0;
 		transactionRepeatsRemaining = 0;
+		timein = timeout = 0;
+		timecount = 0;
+		currentsendtime = 0;
+		currentbitval = 0;
+		timecounttotal = 0;
+		overflows = 0;
 	}
 
 	bool isBusy() const {
-		return transactionBuilding || transactionReady || currentsendtime;
+		return transactionBuilding || transactionReady || currentsendtime ||
+			carrierReleasePending;
 	}
 
 	uint16_t getStagedItemCount() const {
@@ -285,47 +436,57 @@ public:
 		return true;
 	}
 
-	void delay(long int ms) {
-		// add a pure delay to our queue
-		space(ms * 1000);
+	bool setInverted(const bool inverted) {
+		if (isBusy()) return false;
+		pwmInverted = inverted ? 1U : 0U;
+		transactionInverted = pwmInverted;
+		lastCarrierMark = -1;
+		lastCarrierDuty = -1;
+		HAL_PIN_Setup_Output(sendPin);
+		HAL_PIN_SetOutputValue(sendPin, pwmInverted ? 1 : 0);
+		return true;
 	}
 
-	uint16_t mark(uint16_t aMarkMicros) {
-		if (!aMarkMicros) return 0;
-		IR_AdvanceVirtualMicros(aMarkMicros);
-		// store mark bits in highest +ve bit of count
-		return appendDuration(aMarkMicros | 0x10000000) ? 1 : 0;
-	}
-
-	void space(uint32_t aMarkMicros) {
-		if (!aMarkMicros) return;
-		IR_AdvanceVirtualMicros(aMarkMicros);
-		appendDuration(aMarkMicros);
-	}
-
-	void enableIROut(uint32_t freq, uint8_t duty=50) {
-		if (freq < 1000)  // Were we given kHz? Supports old call usage.
-			freq *= 1000;
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"enableIROut %d freq %d duty",
-			(int)freq, (int)duty);
-		if (duty < 1) duty = 1;
-		if (duty > 100) duty = 100;
-
-		if (transactionBuilding) {
-			transactionFrequencyHz = freq;
-			transactionDuty = duty;
-			return;
+	void applyCarrierState(const bool mark, const bool force = false) {
+		if (!carrierStarted) return;
+		int duty;
+		if (mark) {
+			duty = pwmInverted ? 100 - (int)pwmduty : (int)pwmduty;
+		} else {
+			duty = pwmInverted ? 100 : 0;
 		}
-
-		pwmfrequency = freq;
-		pwmduty = duty;
-		HAL_PIN_PWM_Start(sendPin, pwmfrequency);
+		if (duty < 0) duty = 0;
+		if (duty > 100) duty = 100;
+		if (!force && lastCarrierMark == (mark ? 1 : 0) &&
+			lastCarrierDuty == duty) return;
+		IR_PlatformPWMUpdate(sendPin, (float)duty);
+		lastCarrierMark = mark ? 1 : 0;
+		lastCarrierDuty = (int16_t)duty;
 	}
 
-	void resetsendqueue() {
+	bool hasCarrierServicePending() const {
+		return carrierReleasePending != 0;
+	}
+
+	void serviceCarrier() {
+		if (!carrierReleasePending || transactionReady || currentsendtime) return;
+		carrierReleasePending = 0;
+		if (carrierStarted) {
+			applyCarrierState(false, true);
+			HAL_PIN_PWM_Stop(sendPin);
+			IR_PlatformPWMRelease(sendPin);
+			carrierStarted = 0;
+		}
+		HAL_PIN_Setup_Output(sendPin);
+		HAL_PIN_SetOutputValue(sendPin, pwmInverted ? 1 : 0);
+		lastCarrierMark = -1;
+		lastCarrierDuty = -1;
+	}
+
+	void cancelActiveSend() {
 		gIRUseVirtualMicros = false;
-		// Hide the queue from the ISR before resetting shared metadata.
 		transactionReady = 0;
+		IR_COMPILER_BARRIER();
 		transactionBuilding = 0;
 		transactionFailed = false;
 		transactionCount = 0;
@@ -337,29 +498,92 @@ public:
 		currentsendtime = 0;
 		currentbitval = 0;
 		timecounttotal = 0;
+		carrierReleasePending = 0;
+		if (carrierStarted) {
+			applyCarrierState(false, true);
+			HAL_PIN_PWM_Stop(sendPin);
+			IR_PlatformPWMRelease(sendPin);
+			carrierStarted = 0;
+		}
+		HAL_PIN_Setup_Output(sendPin);
+		HAL_PIN_SetOutputValue(sendPin, pwmInverted ? 1 : 0);
+		lastCarrierMark = -1;
+		lastCarrierDuty = -1;
+	}
+
+	void stopAndReleaseResources() {
+		cancelActiveSend();
+	}
+
+	void delay(long int ms) {
+		space((uint32_t)ms * 1000U);
+	}
+
+	uint16_t mark(uint16_t aMarkMicros) {
+		if (!aMarkMicros) return 0;
+		IR_AdvanceVirtualMicros(aMarkMicros);
+		return appendDuration((uint32_t)aMarkMicros | 0x10000000U) ? 1 : 0;
+	}
+
+	void space(uint32_t aMarkMicros) {
+		if (!aMarkMicros) return;
+		IR_AdvanceVirtualMicros(aMarkMicros);
+		appendDuration(aMarkMicros);
+	}
+
+	void enableIROut(uint32_t freq, uint8_t duty = 50) {
+		if (freq < 1000U) freq *= 1000U;
+		if (duty < 1U) duty = 1U;
+		if (duty > 100U) duty = 100U;
+
+		if (transactionBuilding) {
+			transactionFrequencyHz = freq;
+			transactionDuty = duty;
+			return;
+		}
+		pwmfrequency = freq;
+		pwmduty = duty;
+	}
+
+	void resetsendqueue() {
+		gIRUseVirtualMicros = false;
+		transactionReady = 0;
+		IR_COMPILER_BARRIER();
+		transactionBuilding = 0;
+		transactionFailed = false;
+		transactionCount = 0;
+		transactionRepeatCount = 0;
+		transactionRepeatsRemaining = 0;
+		timein = timeout = 0;
+		timecount = 0;
+		overflows = 0;
+		currentsendtime = 0;
+		currentbitval = 0;
+		timecounttotal = 0;
+		carrierReleasePending = 0;
 	}
 
 	bool getsendqueue(int32_t *value) {
 		if (!value || !transactionReady) return false;
-
 		if (timeout >= timein) {
 			if (transactionRepeatsRemaining) {
 				transactionRepeatsRemaining--;
 				timeout = 0;
 			} else {
 				transactionReady = 0;
+				IR_COMPILER_BARRIER();
 				timein = timeout = 0;
 				timecount = 0;
+				carrierReleasePending = 1;
 				return false;
 			}
 		}
-
 		*value = times[timeout++];
 		if (timecount) timecount--;
 		return true;
 	}
 
-	int32_t times[SEND_QUEUE_ITEMS]; // committed mark/space transaction
+	int32_t times[SEND_QUEUE_ITEMS];
 	volatile unsigned short timein;
 	volatile unsigned short timeout;
 	volatile unsigned short timecount;
@@ -373,21 +597,24 @@ public:
 	uint32_t pwmfrequency;
 	uint32_t transactionFrequencyHz;
 	uint8_t transactionDuty;
+	uint8_t pwmInverted;
+	uint8_t transactionInverted;
+	volatile uint8_t carrierStarted;
+	volatile uint8_t carrierReleasePending;
+	volatile int8_t lastCarrierMark;
+	volatile int16_t lastCarrierDuty;
 
 	uint32_t our_ms;
-	float our_us;
+	uint32_t our_us;
 
 private:
 	bool appendDuration(const uint32_t duration) {
-		if (!transactionBuilding || transactionFailed) {
-			return false;
-		}
+		if (!transactionBuilding || transactionFailed) return false;
 		if (transactionCount >= SEND_QUEUE_ITEMS) {
 			transactionFailed = true;
 			overflows++;
 			return false;
 		}
-
 		times[transactionCount++] = duration;
 		return true;
 	}
@@ -400,7 +627,6 @@ private:
 	volatile uint16_t transactionRepeatsRemaining;
 };
 
-
 // our send/receive instances
 myIRsend *pIRsend = NULL;
 IRrecv *ourReceiver = NULL;
@@ -409,76 +635,50 @@ IRrecv *ourReceiver = NULL;
 // it is called every 50us, so we need to work on making it as efficient as possible.
 extern "C" void DRV_IR_ISR(void* arg)
 {
+	(void)arg;
 	int sending = 0;
 	if (pIRsend) {
-		pIRsend->our_us += ir_periodus;
-		if (pIRsend->our_us > 1000) {
-			pIRsend->our_ms++;
-			pIRsend->our_us -= 1000;
+		pIRsend->our_us += ir_periodus_rounded;
+		if (pIRsend->our_us >= 1000U) {
+			pIRsend->our_ms += pIRsend->our_us / 1000U;
+			pIRsend->our_us %= 1000U;
 		}
 
-		int pinval = 0;
 		if (pIRsend->currentsendtime) {
 			sending = 1;
-			pIRsend->currentsendtime -= ir_periodus;
+			pIRsend->currentsendtime -= (int)ir_periodus_rounded;
 			if (pIRsend->currentsendtime <= 0) {
-				int32_t remains = pIRsend->currentsendtime;
+				const int32_t remains = pIRsend->currentsendtime;
 				int32_t newtime = 0;
 				if (!pIRsend->getsendqueue(&newtime)) {
-					// if it was the last one
 					pIRsend->currentsendtime = 0;
 					pIRsend->currentbitval = 0;
-				}
-				else {
-					// we got a new time
-					// store mark bits in highest +ve bit of count
-					pIRsend->currentbitval = (newtime & 0x10000000) ? 1 : 0;
-					pIRsend->currentsendtime = (newtime & 0xfffffff);
-					// adjust the us value to keep the running accuracy
-					// and avoid a running error?
-					// note remains is -ve
+				} else {
+					pIRsend->currentbitval =
+						(newtime & 0x10000000U) ? 1 : 0;
+					pIRsend->currentsendtime = newtime & 0x0FFFFFFF;
 					pIRsend->currentsendtime += remains;
 				}
 			}
-		}
-		else {
+		} else {
 			int32_t newtime = 0;
 			if (!pIRsend->getsendqueue(&newtime)) {
 				pIRsend->currentsendtime = 0;
 				pIRsend->currentbitval = 0;
-			}
-			else {
+			} else {
 				sending = 1;
-				pIRsend->currentsendtime = (newtime & 0xfffffff);
-				pIRsend->currentbitval = (newtime & 0x10000000) ? 1 : 0;
+				pIRsend->currentsendtime = newtime & 0x0FFFFFFF;
+				pIRsend->currentbitval =
+					(newtime & 0x10000000U) ? 1 : 0;
 			}
 		}
-		pinval = pIRsend->currentbitval;
-
-		uint32_t duty = pIRsend->pwmduty;
-		if (!pinval) {
-			if (gIRPinPolarity) {
-				duty = 50;
-			}
-			else {
-				duty = 0;
-			}
-		}
-		HAL_PIN_PWM_Update(pIRsend->sendPin, duty);
+		pIRsend->applyCarrierState(pIRsend->currentbitval != 0);
 	}
 
-	// is someone really wants rx and TX at the same time, then allow it.
-	if (gEnableIRSendWhilstReceive) {
-		sending = 0;
-	}
-
-	// don't receive if we are currently sending
-	if (ourReceiver && !sending){
-		IR_ISR(ir_periodus);
-	}
+	if (gEnableIRSendWhilstReceive) sending = 0;
+	if (ourReceiver && IR_ReceiverStorageReady() && !sending) IR_ISR(ir_periodus);
 	ir_counter++;
 }
-
 
 
 static int hexNibbleValue(char c) {
@@ -495,19 +695,15 @@ static const uint8_t kIRSendMaxRepeats = 10;
 static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
 	const uint32_t maxValue, uint32_t *result) {
 	if (!text || !text[0] || !result || minValue > maxValue) return false;
-
 	uint32_t value = 0;
 	for (const char *cursor = text; *cursor; cursor++) {
 		if (*cursor < '0' || *cursor > '9') return false;
 		const uint32_t digit = (uint32_t)(*cursor - '0');
-		if (value > maxValue / 10 ||
-			(value == maxValue / 10 && digit > maxValue % 10)) {
-			return false;
-		}
-		value = value * 10 + digit;
+		if (value > maxValue / 10U ||
+			(value == maxValue / 10U && digit > maxValue % 10U)) return false;
+		value = value * 10U + digit;
 	}
 	if (value < minValue) return false;
-
 	*result = value;
 	return true;
 }
@@ -515,112 +711,449 @@ static bool parseBoundedDecimal(const char *text, const uint32_t minValue,
 static bool parseBoundedHex(const char *text, const uint32_t minValue,
 	const uint32_t maxValue, uint32_t *result) {
 	if (!text || !text[0] || !result || minValue > maxValue) return false;
-
+	if (text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) text += 2;
+	if (!text[0]) return false;
 	uint32_t value = 0;
 	for (const char *cursor = text; *cursor; cursor++) {
-		uint32_t digit;
-		if (*cursor >= '0' && *cursor <= '9')
-			digit = (uint32_t)(*cursor - '0');
-		else if (*cursor >= 'a' && *cursor <= 'f')
-			digit = 10U + (uint32_t)(*cursor - 'a');
-		else if (*cursor >= 'A' && *cursor <= 'F')
-			digit = 10U + (uint32_t)(*cursor - 'A');
-		else
-			return false;
-
-		if (value > maxValue / 16 ||
-			(value == maxValue / 16 && digit > maxValue % 16)) {
-			return false;
-		}
-		value = value * 16 + digit;
+		const int nibble = hexNibbleValue(*cursor);
+		if (nibble < 0) return false;
+		const uint32_t digit = (uint32_t)nibble;
+		if (value > maxValue / 16U ||
+			(value == maxValue / 16U && digit > maxValue % 16U)) return false;
+		value = value * 16U + digit;
 	}
 	if (value < minValue) return false;
-
 	*result = value;
 	return true;
 }
 
+static uint8_t IR_SplitWords(char *text, char **words, const uint8_t maxWords) {
+	if (!text || !words || !maxWords) return 0;
+	uint8_t count = 0;
+	char *cursor = text;
+	while (*cursor) {
+		while (*cursor == ' ' || *cursor == '\t') cursor++;
+		if (!*cursor) break;
+		if (count >= maxWords) return (uint8_t)(maxWords + 1U);
+		words[count++] = cursor;
+		while (*cursor && *cursor != ' ' && *cursor != '\t') cursor++;
+		if (*cursor) *cursor++ = '\0';
+	}
+	return count;
+}
+
+static uint8_t IR_SplitClassicFields(char *text, char **fields,
+	const uint8_t maxFields) {
+	if (!text || !fields || !maxFields) return 0;
+	if (!strchr(text, '-')) return IR_SplitWords(text, fields, maxFields);
+
+	uint8_t count = 0;
+	char *fieldStart = text;
+	for (char *cursor = text; ; cursor++) {
+		if (*cursor == ' ' || *cursor == '\t')
+			return (uint8_t)(maxFields + 1U);
+		if (*cursor == '-' || *cursor == '\0') {
+			if (cursor == fieldStart || count >= maxFields)
+				return (uint8_t)(maxFields + 1U);
+			fields[count++] = fieldStart;
+			if (*cursor == '\0') break;
+			*cursor = '\0';
+			fieldStart = cursor + 1;
+		}
+	}
+	return count;
+}
+
+static bool IR_EqualsIgnoreCase(const char *left, const char *right) {
+	if (!left || !right) return false;
+	const size_t leftLength = strlen(left);
+	const size_t rightLength = strlen(right);
+	return leftLength == rightLength &&
+		my_strnicmp(left, right, (int)leftLength) == 0;
+}
+
+static bool IR_ProtocolUsesStatePayload(const decode_type_t protocol) {
+	return hasACState(protocol) || protocol == decode_type_t::MWM;
+}
+
+static bool IR_ProtocolUsesACState(const decode_type_t protocol) {
+	return hasACState(protocol);
+}
+
+static decode_type_t IR_ParseProtocol(const char *text) {
+	uint32_t protocol = 0;
+	if (parseBoundedDecimal(text, 1U, (uint32_t)kLastDecodeType, &protocol))
+		return (decode_type_t)protocol;
+	for (int value = 1; value <= (int)kLastDecodeType; value++) {
+		const decode_type_t candidate = (decode_type_t)value;
+		if (IR_EqualsIgnoreCase(text, typeToString(candidate).c_str()))
+			return candidate;
+	}
+	return decode_type_t::UNKNOWN;
+}
+
+// The OpenBeken transmitter advances edges on the IR-owned periodic timer.
+// Reject protocols whose shortest symbols cannot be kept within their upstream
+// tolerance at the actual timer period. This does not change any shared timer
+// cadence; it only prevents knowingly malformed transmissions.
+static bool IR_ProtocolTxTimingSupported(const decode_type_t protocol) {
+	if (protocol == decode_type_t::RCMM) return ir_periodus <= 16.0f;
+	if (protocol == decode_type_t::LEGOPF) return ir_periodus <= 39.0f;
+	return true;
+}
+
+
+#if SEND_ARGO
+// IRremoteESP8266 2.9.0 keeps its WREM-3 preamble constant private to
+// ir_Argo.cpp. Keep the port's selector local rather than depending on a
+// non-public upstream symbol.
+static const uint8_t kIRArgoWrem3Preamble = 0x0BU;
+
+static bool IR_IsArgoWrem3Payload(const uint8_t *state,
+	const uint16_t nbytes) {
+	if (!state || !nbytes || (state[0] & 0x0FU) != kIRArgoWrem3Preamble)
+		return false;
+	const uint8_t messageType = state[0] >> 6U;
+	if (messageType == (uint8_t)argoIrMessageType_t::AC_CONTROL)
+		return nbytes == kArgo3AcControlStateLength;
+	if (messageType == (uint8_t)argoIrMessageType_t::IFEEL_TEMP_REPORT)
+		return nbytes == kArgo3iFeelReportStateLength;
+	if (messageType == (uint8_t)argoIrMessageType_t::TIMER_COMMAND)
+		return nbytes == kArgo3TimerStateLength;
+	if (messageType == (uint8_t)argoIrMessageType_t::CONFIG_PARAM_SET)
+		return nbytes == kArgo3ConfigStateLength;
+	return false;
+}
+
+static bool IR_IsValidArgoPayload(const uint8_t *state,
+	const uint16_t nbytes) {
+	if (!state || nbytes < 2U) return false;
+	if ((state[0] & 0x0FU) == kIRArgoWrem3Preamble)
+		return IR_IsArgoWrem3Payload(state, nbytes);
+	if (nbytes != kArgoStateLength && nbytes != kArgoShortStateLength)
+		return false;
+	return state[0] == kArgoPreamble1 && state[1] == kArgoPreamble2;
+}
+#endif  // SEND_ARGO
 
 static bool isValidStatePayloadLength(const decode_type_t protocol,
 	const uint16_t bits, const uint16_t nbytes) {
-	if (!nbytes || nbytes != (bits + 7) / 8) return false;
-
-	// Carrier AC84 carries four data bits in its first byte, followed by ten
-	// complete bytes. It is the only supported state protocol that is not byte
-	// aligned.
+	if (!nbytes || nbytes != (uint16_t)((bits + 7U) / 8U)) return false;
 	if (protocol == decode_type_t::CARRIER_AC84)
 		return bits == kCarrierAc84Bits;
-	if (bits & 7) return false;
-
-	// Protocols with more than one valid state frame size.
+	if (bits & 7U) return false;
+	if (protocol == decode_type_t::MWM)
+		return bits >= 24U && bits <= kIRSendMaxBits;
 	if (protocol == decode_type_t::ARGO)
-		return bits == 32 || bits == 96;
+		return bits == 16U || bits == 32U || bits == 48U ||
+			bits == 72U || bits == 96U;
 	if (protocol == decode_type_t::CORONA_AC)
-		return bits == 56 || bits == 168;
+		return bits == 56U || bits == 168U;
 	if (protocol == decode_type_t::DAIKIN)
-		return bits == 216 || bits == 280;
+		return bits == 216U || bits == 280U;
 	if (protocol == decode_type_t::FUJITSU_AC)
-		return bits == 48 || bits == 56 || bits == 120 || bits == 128;
+		return bits == 48U || bits == 56U || bits == 120U || bits == 128U;
 	if (protocol == decode_type_t::HITACHI_AC3)
-		return bits == 120 || bits == 136 || bits == 168 ||
-			bits == 184 || bits == 216;
+		return bits == 120U || bits == 136U || bits == 168U ||
+			bits == 184U || bits == 216U;
 	if (protocol == decode_type_t::PANASONIC_AC)
-		return bits == 128 || bits == 216;
+		return bits == 128U || bits == 216U;
 	if (protocol == decode_type_t::SAMSUNG_AC)
-		return bits == 112 || bits == 168;
+		return bits == 112U || bits == 168U;
 	if (protocol == decode_type_t::TOSHIBA_AC)
-		return bits >= 56 && bits <= 80;
-
-	// MWM is intentionally variable length. The per-frame staging check below
-	// still rejects lengths for which the upstream sender emits nothing.
-	if (protocol == decode_type_t::MWM) return true;
-
+		return bits == 56U || bits == 72U || bits == 80U;
 	const uint16_t expectedBits = IRsend::defaultBits(protocol);
 	return expectedBits && bits == expectedBits;
 }
 
-
-static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
+static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out,
+	uint16_t outSize, uint16_t *outBytes, const char **endPtr) {
 	if (!hexIn || !out || !outBytes) return false;
 	const char *hex = hexIn;
 	if (hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) hex += 2;
-	uint16_t nbytes = (bits + 7) / 8;
+	const uint16_t nbytes = (uint16_t)((bits + 7U) / 8U);
 	if (!nbytes || nbytes > outSize) return false;
-	for (uint16_t i = 0; i < nbytes; i++) out[i] = 0;
+	memset(out, 0, nbytes);
 	uint16_t nibbleCount = 0;
 	while (hex[nibbleCount] && hex[nibbleCount] != ',') {
 		if (hexNibbleValue(hex[nibbleCount]) < 0) return false;
 		nibbleCount++;
 	}
 	if (!nibbleCount) return false;
-	uint16_t maxNibbles = nbytes * 2;
-	// Allow extra leading zeros beyond the requested bit-length.
-	// This keeps older command strings working (e.g. bits=56 but payload has 16 nibbles with leading 00).
-	while (nibbleCount > maxNibbles && hex[0] == '0') { hex++; nibbleCount--; }
-	if (nibbleCount > maxNibbles) return false;
-	uint16_t nibbleOffset = maxNibbles - nibbleCount;
-	for (uint16_t i = 0; i < nibbleCount; i++) {
-		int v = hexNibbleValue(hex[i]);
-		uint16_t pos = nibbleOffset + i;
-		uint16_t byteIndex = pos / 2;
-		if ((pos & 1) == 0)
-			out[byteIndex] |= (uint8_t)(v << 4);
-		else
-			out[byteIndex] |= (uint8_t)v;
+	const uint16_t maxNibbles = nbytes * 2U;
+	while (nibbleCount > maxNibbles && hex[0] == '0') {
+		hex++;
+		nibbleCount--;
 	}
-
-	// State bytes are right-aligned. Reject any supplied high bits that
-	// fall outside the requested width rather than silently discarding them.
-	const uint8_t unusedHighBits = (uint8_t)(nbytes * 8 - bits);
+	if (nibbleCount > maxNibbles) return false;
+	const uint16_t nibbleOffset = maxNibbles - nibbleCount;
+	for (uint16_t index = 0; index < nibbleCount; index++) {
+		const int value = hexNibbleValue(hex[index]);
+		const uint16_t position = nibbleOffset + index;
+		const uint16_t byteIndex = position / 2U;
+		if ((position & 1U) == 0)
+			out[byteIndex] |= (uint8_t)(value << 4);
+		else
+			out[byteIndex] |= (uint8_t)value;
+	}
+	const uint8_t unusedHighBits = (uint8_t)(nbytes * 8U - bits);
 	if (unusedHighBits) {
 		const uint8_t unusedMask =
-			(uint8_t)(0xFFU << (8 - unusedHighBits));
+			(uint8_t)(0xFFU << (8U - unusedHighBits));
 		if (out[0] & unusedMask) return false;
 	}
-
 	*outBytes = nbytes;
 	if (endPtr) *endPtr = hex + nibbleCount;
 	return true;
+}
+
+static bool IR_ValidateClassicFields(const decode_type_t protocol,
+	const uint32_t address, const uint32_t command) {
+	if (protocol == decode_type_t::RC5)
+		return address <= 0x1FU && command <= 0x3FU;
+	if (protocol == decode_type_t::RC5X)
+		return address <= 0x1FU && command <= 0x7FU;
+	if (protocol == decode_type_t::RC6)
+		return address <= 0xFFFU && command <= 0xFFU;
+	if (protocol == decode_type_t::NEC)
+		return address <= 0xFFFFU && command <= 0xFFU;
+	if (protocol == decode_type_t::PANASONIC)
+		return address <= 0xFFFFU;
+	if (protocol == decode_type_t::JVC)
+		return address <= 0xFFU && command <= 0xFFU;
+	if (protocol == decode_type_t::SAMSUNG)
+		return address <= 0xFFU && command <= 0xFFU;
+	if (protocol == decode_type_t::LG)
+		return address <= 0xFFU && command <= 0xFFFFU;
+	return false;
+}
+
+static void IR_ServicePendingCarrier(void) {
+	if (!pIRsend || !pIRsend->hasCarrierServicePending()) return;
+	const bool restartTimer = gIRDriverReady && ir_chan >= 0;
+	if (ir_chan >= 0) HAL_HWTimerStop(ir_chan);
+	pIRsend->serviceCarrier();
+	if (restartTimer) HAL_HWTimerStart(ir_chan);
+}
+
+static bool IR_CommitSendTransaction(void) {
+	if (!pIRsend || ir_chan < 0) return false;
+	HAL_HWTimerStop(ir_chan);
+	const bool committed = pIRsend->commitSendTransaction();
+	if (gIRDriverReady) HAL_HWTimerStart(ir_chan);
+	return committed;
+}
+
+static commandResult_t IR_SendCommaCommand(char *args) {
+	char *protocolEnd = strchr(args, ',');
+	if (!protocolEnd) return CMD_RES_BAD_ARGUMENT;
+	*protocolEnd = '\0';
+	const decode_type_t protocol = IR_ParseProtocol(args);
+	if (protocol == decode_type_t::UNKNOWN) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend unknown protocol '%s'", args);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!IR_ProtocolTxTimingSupported(protocol)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend protocol %s is unsupported at %.2fus timer resolution",
+			args, ir_periodus);
+		return CMD_RES_ERROR;
+	}
+	char *bitsText = protocolEnd + 1;
+	char *bitsEnd = strchr(bitsText, ',');
+	if (!bitsEnd) return CMD_RES_BAD_ARGUMENT;
+	*bitsEnd = '\0';
+	uint32_t bitValue = 0;
+	if (!parseBoundedDecimal(bitsText, 1, kIRSendMaxBits, &bitValue)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend invalid bit count '%s' (expected 1-%u)",
+			bitsText, (unsigned int)kIRSendMaxBits);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	const uint16_t bits = (uint16_t)bitValue;
+	uint8_t state[kIRSendMaxStateBytes];
+	uint16_t nbytes = 0;
+	const char *payloadEnd = NULL;
+	if (!parseHexStateBytes(bitsEnd + 1, bits, state, sizeof(state),
+		&nbytes, &payloadEnd)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	uint32_t repeats = 0;
+	if (payloadEnd && *payloadEnd == ',') {
+		if (!parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats,
+			&repeats)) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IRSend invalid repeat count '%s' (expected 0-%u)",
+				payloadEnd + 1, (unsigned int)kIRSendMaxRepeats);
+			return CMD_RES_BAD_ARGUMENT;
+		}
+	} else if (payloadEnd && *payloadEnd) {
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!gIRDriverReady || !pIRsend) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend: transmitter is not active");
+		return CMD_RES_ERROR;
+	}
+	const bool statePayload = IR_ProtocolUsesStatePayload(protocol);
+	if (statePayload && !isValidStatePayloadLength(protocol, bits, nbytes)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend invalid state length for %s: bits %d bytes %d",
+			args, (int)bits, (int)nbytes);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!statePayload && bits > 64U) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend scalar protocol %s cannot use %u bits",
+			args, (unsigned int)bits);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!pIRsend->beginSendTransaction()) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IR send busy; previous transmission has not completed");
+		return CMD_RES_ERROR;
+	}
+	const uint16_t stagedBefore = pIRsend->getStagedItemCount();
+	bool sent = false;
+	if (statePayload) {
+		if (protocol == decode_type_t::ARGO) {
+#if SEND_ARGO
+			if (!IR_IsValidArgoPayload(state, nbytes)) {
+				pIRsend->abortSendTransaction();
+				ADDLOG_ERROR(LOG_FEATURE_IR,
+					(char *)"IRSend invalid ARGO message type/length");
+				return CMD_RES_BAD_ARGUMENT;
+			}
+			if (IR_IsArgoWrem3Payload(state, nbytes))
+				pIRsend->sendArgoWREM3(state, nbytes, 0);
+			else
+				pIRsend->sendArgo(state, nbytes, 0);
+			sent = pIRsend->getStagedItemCount() > stagedBefore;
+#else
+			sent = false;
+#endif
+		} else {
+			sent = pIRsend->send(protocol, state, nbytes) &&
+				pIRsend->getStagedItemCount() > stagedBefore;
+		}
+		if (sent) {
+			pIRsend->delay(100);
+			sent = pIRsend->setTransactionRepeats((uint16_t)repeats);
+		}
+	} else {
+		uint64_t data = 0;
+		for (uint16_t index = 0; index < nbytes; index++)
+			data = (data << 8) | state[index];
+		sent = pIRsend->send(protocol, data, bits, (uint16_t)repeats) &&
+			pIRsend->getStagedItemCount() > stagedBefore;
+		if (sent) pIRsend->delay(100);
+	}
+	if (!sent || !IR_CommitSendTransaction()) {
+		pIRsend->abortSendTransaction();
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IR can't queue complete send %s: protocol %d bits %d repeats %d",
+			args, (int)protocol, (int)bits, (int)repeats);
+		return CMD_RES_ERROR;
+	}
+	ADDLOG_INFO(LOG_FEATURE_IR,
+		(char *)"IR send %s: protocol %d bits %d bytes %d repeats %d",
+		args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
+	return CMD_RES_OK;
+}
+
+static commandResult_t IR_SendClassicCommand(char *args) {
+	char *fields[4] = { NULL, NULL, NULL, NULL };
+	const uint8_t count = IR_SplitClassicFields(args, fields, 4);
+	if (count < 3 || count > 4) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend classic form expects PROTOCOL ADDRESS COMMAND [REPEAT]");
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	const decode_type_t protocol = IR_ParseProtocol(fields[0]);
+	if (protocol == decode_type_t::UNKNOWN || IR_ProtocolUsesStatePayload(protocol)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend classic protocol '%s' is unsupported", fields[0]);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!IR_ProtocolTxTimingSupported(protocol)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend protocol %s is unsupported at %.2fus timer resolution",
+			fields[0], ir_periodus);
+		return CMD_RES_ERROR;
+	}
+	uint32_t address = 0;
+	uint32_t command = 0;
+	uint32_t repeats = 0;
+	if (!parseBoundedHex(fields[1], 0, UINT32_MAX, &address) ||
+		!parseBoundedHex(fields[2], 0, UINT32_MAX, &command) ||
+		(count == 4 && !parseBoundedHex(fields[3], 0, kIRSendMaxRepeats,
+			&repeats))) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend invalid classic hexadecimal field");
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!IR_ValidateClassicFields(protocol, address, command)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend address/command out of range for %s", fields[0]);
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (!gIRDriverReady || !pIRsend) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend: transmitter is not active");
+		return CMD_RES_ERROR;
+	}
+	if (!pIRsend->beginSendTransaction()) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IR send busy; previous transmission has not completed");
+		return CMD_RES_ERROR;
+	}
+	const uint16_t stagedBefore = pIRsend->getStagedItemCount();
+	if (protocol == decode_type_t::RC5) {
+		pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(address, command),
+			kRC5Bits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::RC5X) {
+		pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5X(address, command),
+			kRC5XBits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::RC6) {
+		pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(address, command),
+			kRC6Mode0Bits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::NEC) {
+		pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(address, command),
+			kNECBits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::PANASONIC) {
+		pIRsend->sendPanasonic((uint16_t)address, command,
+			kPanasonicBits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::JVC) {
+		pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(address, command),
+			kJvcBits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::SAMSUNG) {
+		pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(address, command),
+			kSamsungBits, (uint16_t)repeats);
+	} else if (protocol == decode_type_t::LG) {
+		pIRsend->sendLG((uint64_t)pIRsend->encodeLG(address, command),
+			kLgBits, (uint16_t)repeats);
+	} else {
+		pIRsend->abortSendTransaction();
+		return CMD_RES_BAD_ARGUMENT;
+	}
+	if (pIRsend->getStagedItemCount() <= stagedBefore) {
+		pIRsend->abortSendTransaction();
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRSend protocol %s produced no waveform", fields[0]);
+		return CMD_RES_ERROR;
+	}
+	pIRsend->delay(100);
+	if (!IR_CommitSendTransaction()) {
+		pIRsend->abortSendTransaction();
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IR can't queue complete send %s", fields[0]);
+		return CMD_RES_ERROR;
+	}
+	ADDLOG_INFO(LOG_FEATURE_IR,
+		(char *)"IR send %s addr 0x%X cmd 0x%X repeats %u",
+		fields[0], (unsigned int)address, (unsigned int)command,
+		(unsigned int)repeats);
+	return CMD_RES_OK;
 }
 
 #if PLATFORM_BEKEN && defined(__GNUC__)
@@ -629,459 +1162,265 @@ static bool parseHexStateBytes(const char *hexIn, uint16_t bits, uint8_t *out, u
 #define IR_SEND_CMD_OPT
 #endif
 
-extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
-	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+extern "C" IR_SEND_CMD_OPT commandResult_t IR_Send_Cmd(const void *context,
+	const char *cmd, const char *args_in, int cmdFlags) {
+	(void)context;
+	(void)cmd;
+	(void)cmdFlags;
+	if (!args_in || !args_in[0]) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+	IR_ServicePendingCarrier();
 	char args[384];
-	strncpy(args, args_in, sizeof(args) - 1);
-	args[sizeof(args) - 1] = 0;
-
-	// split arg at hyphen;
-	char *p = args;
-	while (*p && (*p != '-') && (*p != ' ')) {
-		p++;
-	}
-
-	if ((*p != '-') && (*p != ' ')) {
-		// try to decode "new" format, separated by comma
-		// the format is PROT,bits,0xDATA[,repeat]
-		char *p = args;
-		while (*p && (*p != ',')) {
-			p++;
-		}
-		if(*p==',')
-		{
-			*p='\0';
-			decode_type_t protocol = strToDecodeType(args);
-			p++;
-			char *_bits=p;
-			while (*p && (*p != ',')) {
-				p++;
-			}
-			if(*p==',')
-			{
-				*p='\0';
-				uint32_t bitsValue = 0;
-				if (!parseBoundedDecimal(_bits, 1, kIRSendMaxBits, &bitsValue)) {
-					ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid bit count '%s' (expected 1-%u)", _bits, (unsigned int)kIRSendMaxBits);
-					return CMD_RES_BAD_ARGUMENT;
-				}
-				const uint16_t bits = (uint16_t)bitsValue;
-				p++;
-				if(protocol!=decode_type_t::UNKNOWN && pIRsend)
-				{
-					int repeats=0;
-					char *_data=p;
-					uint8_t state[kIRSendMaxStateBytes];
-					uint16_t nbytes = 0;
-					const char *payloadEnd = NULL;
-					if (!parseHexStateBytes(_data, bits, state, sizeof(state), &nbytes, &payloadEnd)) {
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid payload for %s (bits=%d)", args, (int)bits);
-						return CMD_RES_BAD_ARGUMENT;
-					}
-					if(payloadEnd && *payloadEnd==',') {
-						uint32_t repeatValue = 0;
-						if (!parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats, &repeatValue)) {
-							ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid repeat count '%s' (expected 0-%u)", payloadEnd + 1, (unsigned int)kIRSendMaxRepeats);
-							return CMD_RES_BAD_ARGUMENT;
-						}
-						repeats = (int)repeatValue;
-					}
-					const bool statePayload = bits > 64 || hasACState(protocol);
-					if (statePayload && !isValidStatePayloadLength(protocol, bits, nbytes)) {
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend invalid state length for %s: bits %d bytes %d", args, (int)bits, (int)nbytes);
-						return CMD_RES_BAD_ARGUMENT;
-					}
-					if (!pIRsend->beginSendTransaction()) {
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
-						return CMD_RES_ERROR;
-					}
-					if (statePayload)
-					{
-						const uint16_t stagedBefore =
-							pIRsend->getStagedItemCount();
-						bool sent = pIRsend->send(protocol, state, nbytes) &&
-							pIRsend->getStagedItemCount() > stagedBefore;
-						if (sent) {
-							pIRsend->delay(100);
-							sent = pIRsend->setTransactionRepeats(
-								(uint16_t)repeats);
-						}
-						if (sent && pIRsend->commitSendTransaction())
-						{
-							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
-							return CMD_RES_OK;
-						}
-						pIRsend->abortSendTransaction();
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s: protocol %d bits %d bytes %d repeats %d", args, (int)protocol, (int)bits, (int)nbytes, (int)repeats);
-						return CMD_RES_BAD_ARGUMENT;
-					}
-					else
-					{
-						uint64_t data = 0;
-						for (uint16_t bi = 0; bi < nbytes; bi++) {
-							data = (data << 8) | state[bi];
-						}
-						bool sent = pIRsend->send(protocol,data,bits,repeats);
-						if (sent) {
-							pIRsend->delay(100);
-						}
-						if (sent && pIRsend->commitSendTransaction())
-						{
-							ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
-							return CMD_RES_OK;
-						}
-						pIRsend->abortSendTransaction();
-						ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s: protocol %d bits %d data 0x%llX repeats %d", args, (int)protocol, (int)bits, (long long int)data, (int)repeats);
-						return CMD_RES_BAD_ARGUMENT;
-					}
-				}
-			} 
-		}
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend cmnd not valid [%s] not like [NEC-0-1A] or [NEC 0 1A 1] or [NEC,bits,0xDATA,[repeat]]", args);
- 		return CMD_RES_BAD_ARGUMENT;
-	}
-
-	*p='\0';
-	decode_type_t protocol = strToDecodeType(args);
-	if(hasACState(protocol))
-	{
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend can't send AC commands", args);
-		return CMD_RES_BAD_ARGUMENT;
-	}
-	p++;
-	int addr = strtol(p, &p, 16);
-	if ((*p != '-') && (*p != ' ')) {
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend cmnd not valid [%s] not like [NEC-0-1A] or [NEC 0 1A 1].", args);
-		return CMD_RES_BAD_ARGUMENT;
-	}
-	p++;
-	int command = strtol(p, &p, 16);
-
-	int repeats = 0;
-
-	if (*p) {
-		if ((*p != '-') && (*p != ' ')) {
-			ADDLOG_ERROR(LOG_FEATURE_IR,
-				(char *)"IRSend invalid classic repeat syntax in %s", args);
-			return CMD_RES_BAD_ARGUMENT;
-		}
-		p++;
-		uint32_t repeatValue = 0;
-		if (!parseBoundedHex(p, 0, kIRSendMaxRepeats, &repeatValue)) {
-			ADDLOG_ERROR(LOG_FEATURE_IR,
-				(char *)"IRSend invalid repeat count '%s' (expected 0-%X)",
-				p, (unsigned int)kIRSendMaxRepeats);
-			return CMD_RES_BAD_ARGUMENT;
-		}
-		repeats = (int)repeatValue;
-	}
-
-	if (pIRsend) {
-		if (!pIRsend->beginSendTransaction()) {
-			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send busy; previous transmission has not completed");
-			return CMD_RES_ERROR;
-		}
-
-		// BK7238 is built for Thumb-1 without the libgcc switch-table helper.
-		// Keep this dispatch as comparisons so GCC cannot emit __gnu_thumb1_case_si.
-		if (protocol == decode_type_t::RC5) {
-			pIRsend->sendRC5((uint64_t)pIRsend->encodeRC5(addr,command), kRC5XBits, repeats);
-		} else if (protocol == decode_type_t::RC6) {
-			pIRsend->sendRC6((uint64_t)pIRsend->encodeRC6(addr,command), kRC6Mode0Bits, repeats);
-		} else if (protocol == decode_type_t::NEC) {
-			pIRsend->sendNEC((uint64_t)pIRsend->encodeNEC(addr,command), kNECBits, repeats);
-		} else if (protocol == decode_type_t::PANASONIC) {
-			pIRsend->sendPanasonic((uint16_t)addr,(uint32_t)command, kPanasonicBits, repeats);
-		} else if (protocol == decode_type_t::JVC) {
-			pIRsend->sendJVC((uint64_t)pIRsend->encodeJVC(addr,command), kJvcBits, repeats);
-		} else if (protocol == decode_type_t::SAMSUNG) {
-			pIRsend->sendSAMSUNG((uint64_t)pIRsend->encodeSAMSUNG(addr,command), kSamsungBits, repeats);
-		} else if (protocol == decode_type_t::LG) {
-			pIRsend->sendLG((uint64_t)pIRsend->encodeLG(addr,command), kLgBits, repeats);
-		} else {
-			pIRsend->abortSendTransaction();
-			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR send %s protocol not supported", args);
-			return CMD_RES_ERROR;
-		}
-
-		// add a 100ms delay after command
-		// NOTE: this is NOT a delay here.  it adds 100ms 'space' in the TX queue
-		pIRsend->delay(100);
-		if (!pIRsend->commitSendTransaction()) {
-			pIRsend->abortSendTransaction();
-			ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR can't queue complete send %s", args);
-			return CMD_RES_ERROR;
-		}
-
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send %s protocol %d addr 0x%X cmd 0x%X repeats %d", args, (int)protocol, (int)addr, (int)command, (int)repeats);
-		return CMD_RES_OK;
-	}
-	else {
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR NOT send (no IRsend running) %s protocol %d addr 0x%X cmd 0x%X repeats %d", args, (int)protocol, (int)addr, (int)command, (int)repeats);
-	}
-	return CMD_RES_ERROR;
+	if (strlen(args_in) >= sizeof(args)) return CMD_RES_BAD_ARGUMENT;
+	strncpy(args, args_in, sizeof(args) - 1U);
+	args[sizeof(args) - 1U] = '\0';
+	if (strchr(args, ',')) return IR_SendCommaCommand(args);
+	return IR_SendClassicCommand(args);
 }
 
-extern "C" commandResult_t IR_Enable(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
-	if (!args_in || !args_in[0]) {
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IREnable expects arguments");
-		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
-	}
-
-	char args[384];
-	strncpy(args, args_in, sizeof(args)-1);
-	args[sizeof(args)-1] = 0;
-	char *p = args;
-	int enable = 1;
-	if (!my_strnicmp(p, "RXTX", 4)) {
-		p += 4;
-		if (*p == ' ') {
-			p++;
-			if (*p) {
-				enable = atoi(p);
-			}
-		}
-		gEnableIRSendWhilstReceive = enable;
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IREnable RX whilst TX enable set %d", enable);
+extern "C" commandResult_t IR_Enable(const void *context, const char *cmd,
+	const char *args_in, int cmdFlags) {
+	(void)context;
+	(void)cmd;
+	(void)cmdFlags;
+	if (!args_in || !args_in[0]) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+	IR_ServicePendingCarrier();
+	char args[64];
+	if (strlen(args_in) >= sizeof(args)) return CMD_RES_BAD_ARGUMENT;
+	strncpy(args, args_in, sizeof(args) - 1U);
+	args[sizeof(args) - 1U] = '\0';
+	char *words[2] = { NULL, NULL };
+	const uint8_t count = IR_SplitWords(args, words, 2);
+	if (!count || count > 2) return CMD_RES_BAD_ARGUMENT;
+	uint32_t enabled = 0;
+	if (count == 2 && !parseBoundedDecimal(words[1], 0, 1, &enabled))
+		return CMD_RES_BAD_ARGUMENT;
+	if (IR_EqualsIgnoreCase(words[0], "RXTX")) {
+		if (count == 1) enabled = 1;
+		if (pIRsend && pIRsend->isBusy()) return CMD_RES_ERROR;
+		gEnableIRSendWhilstReceive = (uint8_t)enabled;
+		ADDLOG_INFO(LOG_FEATURE_IR,
+			(char *)"IREnable RX whilst TX set %u", (unsigned int)enabled);
 		return CMD_RES_OK;
 	}
-
-	if (!my_strnicmp(p, "invert", 6)) {
-		// default normal.
-		enable = 0;
-		p += 6;
-		if (*p == ' ') {
-			p++;
-			if (*p) {
-				enable = atoi(p);
-			}
+	if (IR_EqualsIgnoreCase(words[0], "invert")) {
+		if (count == 1) enabled = 0;
+		if (pIRsend && !pIRsend->setInverted(enabled != 0U)) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IREnable invert rejected while a send is active");
+			return CMD_RES_ERROR;
 		}
-		gIRPinPolarity = enable;
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IREnable invert set %d", enable);
+		gIRPinPolarity = (uint8_t)enabled;
+		ADDLOG_INFO(LOG_FEATURE_IR,
+			(char *)"IREnable invert set %u", (unsigned int)enabled);
 		return CMD_RES_OK;
 	}
+	ADDLOG_ERROR(LOG_FEATURE_IR,
+		(char *)"IREnable protocol masks are not implemented; use RXTX or invert");
+	return CMD_RES_BAD_ARGUMENT;
+}
 
-
-	// find length of first arg.
-	while (*p && (*p != ' ')) {
-		p++;
+extern "C" commandResult_t IR_Param(const void *context, const char *cmd,
+	const char *args_in, int cmdFlags) {
+	(void)context;
+	(void)cmd;
+	(void)cmdFlags;
+	if (!args_in || !args_in[0]) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
+	if (!ourReceiver || !IR_ReceiverStorageReady()) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRParam: receiver is not active");
+		return CMD_RES_ERROR;
 	}
-
-	//int numProtocols = sizeof(ProtocolNames)/sizeof(*ProtocolNames);
-	#if 0 // number of protocols now is 125 
-	// TODO: reimpleemnt this using bigger mask
-	int numProtocols = 0;
-	int ournamelen = (p - args);
-	int protocol = -1;
-	for (int i = 0; i < numProtocols; i++) {
-		const char *name = "Unknown"; //= ProtocolNames[i];
-		int namelen = strlen(name);
-		if (!my_strnicmp(name, args, namelen) && (ournamelen == namelen)) {
-			protocol = i;
-			break;
-		}
-	}
-	if (*p == ' ') {
-		p++;
-		if (*p) {
-			enable = atoi(p);
-		}
-	}
-
-	uint32_t thisbit = (1 << protocol);
-	if (protocol < 0) {
-		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IREnable invalid protocol %s", args);
+	char args[64];
+	if (strlen(args_in) >= sizeof(args)) return CMD_RES_BAD_ARGUMENT;
+	strncpy(args, args_in, sizeof(args) - 1U);
+	args[sizeof(args) - 1U] = '\0';
+	char *words[2] = { NULL, NULL };
+	if (IR_SplitWords(args, words, 2) != 2) return CMD_RES_BAD_ARGUMENT;
+	uint32_t minimumSize = 0;
+	uint32_t tolerance = 0;
+	const uint32_t maximumSize = ourReceiver->getBufSize();
+	if (!parseBoundedDecimal(words[0], 1, maximumSize, &minimumSize) ||
+		!parseBoundedDecimal(words[1], 0, 100, &tolerance)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRParam expects MinSize 1-%u and tolerance 0-100",
+			(unsigned int)maximumSize);
 		return CMD_RES_BAD_ARGUMENT;
 	}
-	else {
-		//ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IREnable found protocol %s(%d), enable %d from %s, bitmask 0x%08X", ProtocolNames[protocol], protocol, enable, p, thisbit);
-	}
-	if (enable) {
-		gIRProtocolEnable = gIRProtocolEnable | thisbit;
-	}
-	else {
-		gIRProtocolEnable = gIRProtocolEnable & (~thisbit);
-	}
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IREnable Protocol mask now 0x%08X", gIRProtocolEnable);
-	#endif //TODO
+	ourReceiver->setUnknownThreshold((uint16_t)minimumSize);
+	ourReceiver->setTolerance((uint8_t)tolerance);
+	ADDLOG_INFO(LOG_FEATURE_IR,
+		(char *)"IRParam MinUnknownSize: %u tolerance: %u%%",
+		(unsigned int)minimumSize, (unsigned int)tolerance);
 	return CMD_RES_OK;
 }
-
-
-extern "C" commandResult_t IR_Param(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
-	if (!args_in || !args_in[0]) {
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRParam expects two arguments");
-		return CMD_RES_NOT_ENOUGH_ARGUMENTS;
-	}
-
-	if(!ourReceiver)
-	{
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRParam: IR receiver disabled");
-		return CMD_RES_BAD_ARGUMENT;
-	}
-
-	// Set higher if you get lots of random short UNKNOWN messages when nothing
-	// should be sending a message.
-	// Set lower if you are sure your setup is working, but it doesn't see messages
-	// from your device. (e.g. Other IR remotes work.)
-	// NOTE: Set this value very high to effectively turn off UNKNOWN detection.	
-	int kMinUnknownSize = 12;
-
-	// How much percentage lee way do we give to incoming signals in order to match
-	// it?
-	// e.g. +/- 25% (default) to an expected value of 500 would mean matching a
-	//      value between 375 & 625 inclusive.
-	// Note: Default is 25(%). Going to a value >= 50(%) will cause some protocols
-	//       to no longer match correctly. In normal situations you probably do not
-	//       need to adjust this value. Typically that's when the library detects
-	//       your remote's message some of the time, but not all of the time.
-	int kTolerancePercentage = 25;  // kTolerance is normally 25%
-
-	int res = sscanf(args_in, "%d %d", &kMinUnknownSize, &kTolerancePercentage);
-
-	if(res!=2)
-	{
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRParam invalid parameters %s", args_in);
-		return CMD_RES_BAD_ARGUMENT;
-	}
-	ourReceiver->setUnknownThreshold(kMinUnknownSize);
-	ourReceiver->setTolerance(kTolerancePercentage);
-
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IRParam MinUnknownSize: %d  Noice tolerance: %d%%", kMinUnknownSize,kTolerancePercentage);
-	return CMD_RES_OK;
-}
-
-
 
 #ifdef ENABLE_IRAC
-extern "C" commandResult_t IR_AC_Cmd(const void *context, const char *cmd, const char *args_in, int cmdFlags) {
-	if (!args_in) return CMD_RES_NOT_ENOUGH_ARGUMENTS;
-
-	char args[64];
-	strncpy(args, args_in, sizeof(args) - 1);
-	args[sizeof(args) - 1] = 0;
-
-	// split arg at hyphen;
-	char *p = args;
-	while (*p && (*p != '-') && (*p != ' ')) {
-		p++;
-	}
-	int ournamelen = (p - args);
-	if ((*p != '-') && (*p != ' ')) {
-		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRAC cmnd not valid [%s] ", args);
-		return CMD_RES_BAD_ARGUMENT;
-	}
-	//	decode_type_t protocol = strToDecodeType(args);
-
-	ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRAC cmnd not implemented yet", args);
-
-	return CMD_RES_OK;
+extern "C" commandResult_t IR_AC_Cmd(const void *context, const char *cmd,
+	const char *args_in, int cmdFlags) {
+	(void)context;
+	(void)cmd;
+	(void)args_in;
+	(void)cmdFlags;
+	ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRAC is not implemented");
+	return CMD_RES_ERROR;
 }
-#endif //ENABLE_IRAC
+#endif
 
+static void IR_RegisterCommands(void) {
+	static bool registered = false;
+	if (registered) return;
+	//cmddetail:{"name":"IRSend","args":"[PROT-ADDR-CMD-REP] or [PROT,bits,0xDATA[,repeat]]",
+	//cmddetail:"descr":"Sends IR commands either in the classic form PROT-ADDR-CMD-REP, e.g. NEC-1-1A-0, or in the raw-data form PROT,bits,0xDATA[,repeat] for long payloads such as A/C state frames",
+	//cmddetail:"fn":"IR_Send_Cmd","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
+	//cmddetail:"examples":""}
+	CMD_RegisterCommand("IRSend", IR_Send_Cmd, NULL);
+	//cmddetail:{"name":"IREnable","args":"[RXTX|invert] [0|1]",
+	//cmddetail:"descr":"Enable or disable receiving while transmitting, or invert the IR transmit output",
+	//cmddetail:"fn":"IR_Enable","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
+	//cmddetail:"examples":""}
+	CMD_RegisterCommand("IREnable", IR_Enable, NULL);
+	//cmddetail:{"name":"IRParam","args":"[MinSize] [Tolerance]",
+	//cmddetail:"descr":"Set the minimum received-message size and matching tolerance percentage",
+	//cmddetail:"fn":"IR_Param","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
+	//cmddetail:"examples":""}
+	CMD_RegisterCommand("IRParam", IR_Param, NULL);
+#ifdef ENABLE_IRAC
+	//cmddetail:{"name":"IRAC","args":"[TODO]",
+	//cmddetail:"descr":"Sends IR commands for HVAC control (not implemented)",
+	//cmddetail:"fn":"IR_AC_Cmd","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
+	//cmddetail:"examples":""}
+	CMD_RegisterCommand("IRAC", IR_AC_Cmd, NULL);
+#endif
+	registered = true;
+}
 
-// test routine to start IR RX and TX
-// currently fixed pins for testing.
-extern "C" void DRV_IR_Init() {
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"Log from extern C CPP");
-
-	int pin = -1; //9;// PWM3/25
-	int txpin = -1; //24;// PWM3/25
-	bool pup = true;
-
-	// allow user to change them
-	pin = PIN_FindPinIndexForRole(IOR_IRRecv, pin);
-	if(pin == -1)
-	{
-		pin = PIN_FindPinIndexForRole(IOR_IRRecv_nPup, pin);
-		if(pin >= 0) pup = false;
-	}
-	txpin = PIN_FindPinIndexForRole(IOR_IRSend, txpin);
-
-	if (ourReceiver){
-	     IRrecv *temp = ourReceiver;
-	     ourReceiver = NULL;
-	     delete temp;
-	 }
-	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"DRV_IR_Init: recv pin %i", pin);
-	if ((pin >= 0) || (txpin >= 0)) {
-	}
-	else {
-		_timer_disable();
-	}
-
-	if (pin >= 0) {
-		// setup IRrecv pin as input
-		//bk_gpio_config_input_pup((GPIO_INDEX)pin); // enabled by enableIRIn
-
-		//TODO: we should specify buffer size (now set to 1024), timeout (now 90ms) and tolerance 
-		 ourReceiver = new IRrecv(pin);
-		 ourReceiver->enableIRIn(pup);
-	}
+extern "C" void DRV_IR_Deinit(void) {
+	gIRDriverReady = false;
+	gIRDeferredStart = false;
+	if (ir_chan >= 0) HAL_HWTimerStop(ir_chan);
 
 	if (pIRsend) {
-		myIRsend *pIRsendTemp = pIRsend;
+		myIRsend *sender = pIRsend;
 		pIRsend = NULL;
-		delete pIRsendTemp;
+		sender->stopAndReleaseResources();
+		delete sender;
+	}
+	if (ourReceiver) {
+		IRrecv *receiver = ourReceiver;
+		ourReceiver = NULL;
+		delete receiver;
+	}
+	IR_ClearReceiverStorageState();
+
+	if (ir_chan >= 0) {
+		HAL_HWTimerDeinit(ir_chan);
+		ir_chan = -1;
+	}
+	ir_periodus = 50.0f;
+	ir_periodus_rounded = 50U;
+	gIRUseVirtualMicros = false;
+}
+
+extern "C" void DRV_IR_Init(void) {
+	IR_RegisterCommands();
+	DRV_IR_Deinit();
+
+#if ENABLE_DRIVER_TINYIR_NEC
+	if (TinyIR_NEC_IsReady()) {
+		gIRDeferredStart = true;
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IRremoteESP8266 deferred while TinyIR_NEC is running");
+		return;
+	}
+#endif
+
+	int receivePin = PIN_FindPinIndexForRole(IOR_IRRecv, -1);
+	bool pullup = true;
+	if (receivePin < 0) {
+		receivePin = PIN_FindPinIndexForRole(IOR_IRRecv_nPup, -1);
+		pullup = false;
+	}
+	const int transmitPin = PIN_FindPinIndexForRole(IOR_IRSend, -1);
+	if (receivePin < 0 && transmitPin < 0) {
+		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR driver has no configured pins");
+		return;
 	}
 
-	if (txpin > 0) {
-		// is this pin capable of PWM?
-		if (HAL_PIN_CanThisPinBePWM(txpin)) {
-			uint32_t pwmfrequency = 38000;
-			myIRsend *pIRsendTemp = new myIRsend((uint_fast8_t)txpin);
-			pIRsendTemp->resetsendqueue();
-			pIRsendTemp->enableIROut(pwmfrequency, 50);
-
-			pIRsend = pIRsendTemp;
-
-			//cmddetail:{"name":"IRSend","args":"[PROT-ADDR-CMD-REP] or [PROT,bits,0xDATA[,repeat]]",
-			//cmddetail:"descr":"Sends IR commands either in the classic form PROT-ADDR-CMD-REP, e.g. NEC-1-1A-0, or in the raw-data form PROT,bits,0xDATA[,repeat] for long payloads such as A/C state frames",
-			//cmddetail:"fn":"IR_Send_Cmd","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
-			//cmddetail:"examples":""}
-			CMD_RegisterCommand("IRSend", IR_Send_Cmd, NULL);
-			//cmddetail:{"name":"IRAC","args":"[TODO]",
-			//cmddetail:"descr":"Sends IR commands for HVAC control (TODO)",
-			//cmddetail:"fn":"IR_AC_Cmd","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
-			//cmddetail:"examples":""}
-			#ifdef ENABLE_IRAC
-			CMD_RegisterCommand("IRAC", IR_AC_Cmd, NULL);
-			#endif //ENABLE_IRAC
-			//cmddetail:{"name":"IREnable","args":"[Str][1or0]",
-			//cmddetail:"descr":"Enable/disable aspects of IR.  IREnable RXTX 0/1 - enable Rx whilst Tx.  IREnable [protocolname] 0/1 - enable/disable a specified protocol",
-			//cmddetail:"fn":"IR_Enable","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
-			//cmddetail:"examples":""}
-			CMD_RegisterCommand("IREnable",IR_Enable, NULL);
-			//cmddetail:{"name":"IRParam","args":"[MinSize] [Noise Threshold]",
-			//cmddetail:"descr":"Set minimal size of the message and noise threshold",
-			//cmddetail:"fn":"IR_Param","file":"driver/drv_ir_new.cpp","requires":"ENABLE_DRIVER_IRREMOTEESP (IRremoteESP8266)",
-			//cmddetail:"examples":""}
-			CMD_RegisterCommand("IRParam",IR_Param, NULL);
+	if (receivePin >= 0) {
+		IRrecv *receiver = new IRrecv((uint16_t)receivePin);
+		if (!receiver || !IR_ReceiverStorageReady()) {
+			delete receiver;
+			IR_ClearReceiverStorageState();
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IR receiver allocation failed on pin %d", receivePin);
+		} else {
+			ourReceiver = receiver;
+			ourReceiver->enableIRIn(pullup);
 		}
 	}
-	if ((pin >= 0) || (txpin >= 0)) {
-		// both tx and rx need the interrupt
-		_timerConfigForReceive();
-		delay_ms(10);
-		_timer_enable();
+
+	if (transmitPin >= 0) {
+		if (!HAL_PIN_CanThisPinBePWM(transmitPin)) {
+			ADDLOG_ERROR(LOG_FEATURE_IR,
+				(char *)"IR transmit pin %d is not PWM-capable", transmitPin);
+		} else {
+			myIRsend *sender = new myIRsend((uint_fast8_t)transmitPin);
+			if (!sender) {
+				ADDLOG_ERROR(LOG_FEATURE_IR,
+					(char *)"IR transmitter allocation failed on pin %d", transmitPin);
+			} else {
+				pIRsend = sender;
+				pIRsend->enableIROut(38000, 50);
+				pIRsend->setInverted(gIRPinPolarity != 0);
+			}
+		}
+	}
+
+	if (!ourReceiver && !pIRsend) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR driver failed to initialize");
+		return;
+	}
+	if (!_timerConfigForReceive()) {
+		DRV_IR_Deinit();
+		return;
+	}
+	if (ourReceiver && !IR_SyncReceiverInput(false)) {
+		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IR receiver synchronization failed");
+		DRV_IR_Deinit();
+		return;
+	}
+	delay_ms(10);
+	_timer_enable();
+	gIRDriverReady = true;
+	ADDLOG_INFO(LOG_FEATURE_IR,
+		(char *)"IR ready: RX pin %d TX pin %d timer %d period %.2fus",
+		receivePin, transmitPin, (int)ir_chan, ir_periodus);
+	if (pIRsend && (!IR_ProtocolTxTimingSupported(decode_type_t::RCMM) ||
+		!IR_ProtocolTxTimingSupported(decode_type_t::LEGOPF))) {
+		ADDLOG_INFO(LOG_FEATURE_IR,
+			(char *)"IR TX timer resolution disables RCMM and/or LEGOPF");
 	}
 }
 
-extern "C" void DRV_IR_Deinit()
-{
-	_timer_disable();
-	HAL_HWTimerDeinit(ir_chan);
+extern "C" int DRV_IR_IsReady(void) {
+	return gIRDriverReady ? 1 : 0;
 }
+
+extern "C" int DRV_IR_IsDeferred(void) {
+	return gIRDeferredStart ? 1 : 0;
+}
+
 
 void dump(decode_results *results) {
 	// Dumps out the decode_results structure.
 	// Call this after IRrecv::decode()
-	ADDLOG_INFO(LOG_FEATURE_IR, resultToHumanReadableBasic(results).c_str());
+	ADDLOG_INFO(LOG_FEATURE_IR, (char *)"%s",
+		resultToHumanReadableBasic(results).c_str());
 
 	#ifdef ENABLE_IRAC
 	if (hasACState(results->decode_type))
 	{
-		ADDLOG_INFO(LOG_FEATURE_IR, IRAcUtils::resultAcToString(results).c_str());
+		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"%s",
+			IRAcUtils::resultAcToString(results).c_str());
 	}
 	#endif
 }
@@ -1091,141 +1430,116 @@ void dump(decode_results *results) {
 ////////////////////////////////////////////////////
 // this polls the IR receive to see if there was any IR received
 extern "C" void DRV_IR_RunFrame() {
-	// Debug-only check to see if the timer interrupt is running
-	if (ir_counter) {
-		//ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR counter: %u", ir_counter);
-	}
-	if (pIRsend) {
-		if (pIRsend->overflows) {
-			ADDLOG_DEBUG(LOG_FEATURE_IR, (char *)"##### IR send overflows %d", (int)pIRsend->overflows);
-			pIRsend->resetsendqueue();
+	if (!gIRDriverReady) {
+#if ENABLE_DRIVER_TINYIR_NEC
+		if (gIRDeferredStart && !TinyIR_NEC_IsReady()) {
+			gIRDeferredStart = false;
+			DRV_IR_Init();
 		}
-		else {
-			//ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR send count %d remains %d currentus %d", (int)pIRsend->timecounttotal, (int)pIRsend->timecount, (int)pIRsend->currentsendtime);
-		}
+#endif
+		if (!gIRDriverReady) return;
 	}
+	IR_ServicePendingCarrier();
+	if (pIRsend && pIRsend->overflows) {
+		ADDLOG_ERROR(LOG_FEATURE_IR,
+			(char *)"IR send queue overflowed; transmission aborted");
+		if (ir_chan >= 0) HAL_HWTimerStop(ir_chan);
+		pIRsend->cancelActiveSend();
+		if (gIRDriverReady && ir_chan >= 0) HAL_HWTimerStart(ir_chan);
+	}
+	if (!ourReceiver || !IR_ReceiverStorageReady()) return;
 
+	decode_results results;
+	if (!ourReceiver->decode(&results)) return;
 
-	if (ourReceiver) {
-		decode_results results;
-		if (ourReceiver->decode(&results)) {
-			// TODO: find a better way?
-			String proto_name = typeToString(results.decode_type, results.repeat).c_str();
+	const String protocolName = typeToString(results.decode_type, results.repeat);
+	const bool stateResult = IR_ProtocolUsesStatePayload(results.decode_type);
+	const bool acStateResult = IR_ProtocolUsesACState(results.decode_type);
+	const String dataText = resultToHexidecimal(&results);
+	String lastIrReceived = String((int)results.decode_type, 16) + "," + dataText;
+	// Preserve the established MQTT form: AC states omit Bits, all other
+	// protocols (including MWM) include it.
+	if (!acStateResult)
+		lastIrReceived += "," + String((int)results.bits);
 
-			#if 0 // TODO: implement different masking
-			if (!(gIRProtocolEnable & (1 << (int)results.decode_type))) {
-				ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR decode ignore masked protocol %s (%d) - mask 0x%08X", proto_name.c_str(), (int)results.decode_type, gIRProtocolEnable);
+	char logText[256] = { 0 };
+	const int repeat = results.repeat ? 1 : 0;
+	const bool allowed = results.decode_type != decode_type_t::UNKNOWN ||
+		CFG_HasFlag(OBK_FLAG_IR_ALLOW_UNKNOWN);
+	if (allowed) {
+		if (results.decode_type == decode_type_t::UNKNOWN) {
+			snprintf(logText, sizeof(logText), "IR Unknown %s",
+				lastIrReceived.c_str());
+		} else if (stateResult) {
+			snprintf(logText, sizeof(logText), "IR %s,%u,%s",
+				protocolName.c_str(), (unsigned int)results.bits,
+				dataText.c_str());
+#ifdef ENABLE_IRAC
+			if (acStateResult) {
+				const String description = IRAcUtils::resultAcToString(&results);
+				ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IRAC %s",
+					description.c_str());
 			}
-			#endif
-
-			//dump(&results);
-			// 'UNKNOWN' protocol is by default disabled in flags
-			// This is because I am getting a lot of 'UNKNOWN' spam with no IR signals in room
-			if (((results.decode_type != decode_type_t::UNKNOWN) ||
-				(results.decode_type == decode_type_t::UNKNOWN && CFG_HasFlag(OBK_FLAG_IR_ALLOW_UNKNOWN))) //&&
-				// only process if this protocol is enabled.  all by default.
-				//(gIRProtocolEnable & (1 << (int)results.decode_type)
-				) {
-				String lastIrReceived = String((int)results.decode_type, 16) + "," + resultToHexidecimal(&results);
-
-				if (!hasACState(results.decode_type))
-					lastIrReceived += "," + String((int)results.bits);
-				else
-					ADDLOG_INFO(LOG_FEATURE_IR, "Received AC code:%s",proto_name.c_str());
-
-				char out[128];
-
-				int repeat = results.repeat?0:1; // not sure how to deal with this
-
-				if (results.decode_type == decode_type_t::UNKNOWN) {
-					//snprintf(out, sizeof(out), "IR_RAW 0x%lX %d", (unsigned long)results.decodedRawData, repeat);
-					snprintf(out, sizeof(out), "IR %s %s", "Unknown", lastIrReceived.c_str());
-					ADDLOG_INFO(LOG_FEATURE_IR, (char *)out);
-				}
-				else if (!hasACState(results.decode_type)) {
-					snprintf(out, sizeof(out), "IR %s %lX %lX %d", proto_name.c_str(), (long int)results.address, (long int)results.command, repeat);
-					ADDLOG_INFO(LOG_FEATURE_IR, (char *)out);
-					// show new format too
-					snprintf(out, sizeof(out), "IR %s,%d,%s", proto_name.c_str(), (int)results.bits, resultToHexidecimal(&results).c_str());
-					ADDLOG_INFO(LOG_FEATURE_IR, (char *)out);
-				} else {
-					#ifdef ENABLE_IRAC
-					String description = IRAcUtils::resultAcToString(&results);
-					ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IRAC %s", description.c_str());
-					#endif //ENABLE_IRAC
-				}
-				// if user wants us to publish every received IR data, do it now
-				if (CFG_HasFlag(OBK_FLAG_IR_PUBLISH_RECEIVED)) {
-
-					// another flag required?
-					int publishrepeats = 1;
-
-					if (publishrepeats || !repeat) {
-						//ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR MQTT publish %s", out);
-
-						uint32_t counter_in = ir_counter;
-						MQTT_PublishMain_StringString("ir", lastIrReceived.c_str(), 0);
-						uint32_t counter_dur = ((ir_counter - counter_in) * 50) / 1000;
-						ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR MQTT publish %s took %dms", out, counter_dur);
-					}
-					else {
-						ADDLOG_INFO(LOG_FEATURE_IR, (char *)out);
-					}
-				}
-
-				if (CFG_HasFlag(OBK_FLAG_IR_PUBLISH_RECEIVED_IN_JSON)) {
-					// {"IrReceived":{"Protocol":"RC_5","Bits":0x1,"Data":"0xC"}}
-					//
-					String _data=resultToHexidecimal(&results);
-					snprintf(out, sizeof(out), "{\"IrReceived\":{\"Protocol\":\"%s\",\"Bits\":%i,\"Data\":\"%s\"}}",
-						proto_name.c_str(), (int)results.bits, _data.c_str());
-					MQTT_PublishMain_StringString("RESULT", out, OBK_PUBLISH_FLAG_FORCE_REMOVE_GET);
-				}
-
-				if (results.decode_type != decode_type_t::UNKNOWN) {
-					snprintf(out, sizeof(out), "%X", results.command);
-					int tgType = 0;
-					switch (results.decode_type)
-					{
-					case decode_type_t::NEC:
-						tgType = CMD_EVENT_IR_NEC;
-						break;
-					case decode_type_t::SAMSUNG:
-						tgType = CMD_EVENT_IR_SAMSUNG;
-						break;
-					case decode_type_t::SHARP:
-						tgType = CMD_EVENT_IR_SHARP;
-						break;
-					case decode_type_t::RC5:
-						tgType = CMD_EVENT_IR_RC5;
-						break;
-					case decode_type_t::RC6:
-						tgType = CMD_EVENT_IR_RC6;
-						break;
-					case decode_type_t::SONY:
-						tgType = CMD_EVENT_IR_SONY;
-						break;
-					default:
-						break;
-					}
-
-					// we should include repeat here?
-					// e.g. on/off button should not toggle on repeats, but up/down probably should eat them.
-					uint32_t counter_in = ir_counter;
-					EventHandlers_FireEvent2(tgType, results.address, results.command);
-					uint32_t counter_dur = ((ir_counter - counter_in) * 50) / 1000;
-					ADDLOG_DEBUG(LOG_FEATURE_IR, (char *)"IR fire event took %dms", counter_dur);
-				}
-			} else {
-				ADDLOG_INFO(LOG_FEATURE_IR, "Received Unknown IR ");
-			}
-			/*
-			* !!!Important!!! Enable receiving of the next value,
-			* since receiving has stopped after the end of the current received data packet.
-			*/
-			ourReceiver->resume(); // Enable receiving of the next value
+#endif
+		} else {
+			snprintf(logText, sizeof(logText), "IR %s %lX %lX %d",
+				protocolName.c_str(), (long int)results.address,
+				(long int)results.command, repeat);
 		}
+		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"%s", logText);
+		if (!stateResult && results.decode_type != decode_type_t::UNKNOWN) {
+			ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IR %s,%u,%s",
+				protocolName.c_str(), (unsigned int)results.bits,
+				dataText.c_str());
+		}
+
+		if (CFG_HasFlag(OBK_FLAG_IR_PUBLISH_RECEIVED)) {
+			const uint32_t before = ir_counter;
+			MQTT_PublishMain_StringString("ir", lastIrReceived.c_str(), 0);
+			const uint32_t duration = (uint32_t)(
+				((float)(ir_counter - before) * ir_periodus) / 1000.0f);
+			ADDLOG_INFO(LOG_FEATURE_IR,
+				(char *)"IR MQTT publish %s took %ums", logText,
+				(unsigned int)duration);
+		}
+		if (CFG_HasFlag(OBK_FLAG_IR_PUBLISH_RECEIVED_IN_JSON)) {
+			snprintf(logText, sizeof(logText),
+				"{\"IrReceived\":{\"Protocol\":\"%s\",\"Bits\":%u,\"Data\":\"%s\"}}",
+				protocolName.c_str(), (unsigned int)results.bits,
+				dataText.c_str());
+			MQTT_PublishMain_StringString("RESULT", logText,
+				OBK_PUBLISH_FLAG_FORCE_REMOVE_GET);
+		}
+
+		int eventType = 0;
+		if (!stateResult) {
+			if (results.decode_type == decode_type_t::NEC)
+				eventType = CMD_EVENT_IR_NEC;
+			else if (results.decode_type == decode_type_t::SAMSUNG)
+				eventType = CMD_EVENT_IR_SAMSUNG;
+			else if (results.decode_type == decode_type_t::SHARP)
+				eventType = CMD_EVENT_IR_SHARP;
+			else if (results.decode_type == decode_type_t::RC5)
+				eventType = CMD_EVENT_IR_RC5;
+			else if (results.decode_type == decode_type_t::RC6)
+				eventType = CMD_EVENT_IR_RC6;
+			else if (results.decode_type == decode_type_t::SONY)
+				eventType = CMD_EVENT_IR_SONY;
+		}
+		if (eventType) {
+			const uint32_t before = ir_counter;
+			EventHandlers_FireEvent2(eventType, results.address, results.command);
+			const uint32_t duration = (uint32_t)(
+				((float)(ir_counter - before) * ir_periodus) / 1000.0f);
+			ADDLOG_DEBUG(LOG_FEATURE_IR,
+				(char *)"IR fire event took %ums", (unsigned int)duration);
+		}
+	} else {
+		ADDLOG_INFO(LOG_FEATURE_IR, (char *)"Received Unknown IR");
 	}
+
+	ourReceiver->resume();
+	IR_SyncReceiverInput(true);
 }
 
 

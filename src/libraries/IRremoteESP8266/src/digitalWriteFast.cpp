@@ -64,8 +64,8 @@ void pinModeFast(unsigned char P, unsigned char V) {
 #else
 	switch(V)
 	{
-		case INPUT_PULLUP: HAL_PIN_Setup_Input_Pulldown(P); break;
-		case INPUT_PULLDOWN: HAL_PIN_Setup_Input_Pullup(P); break;
+		case INPUT_PULLUP: HAL_PIN_Setup_Input_Pullup(P); break;
+		case INPUT_PULLDOWN: HAL_PIN_Setup_Input_Pulldown(P); break;
 		case INPUT: HAL_PIN_Setup_Input(P); break;
 		case OUTPUT: HAL_PIN_Setup_Output(P); break;
 	}
