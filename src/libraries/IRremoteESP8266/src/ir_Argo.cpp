@@ -12,6 +12,8 @@
 // #include <algorithm>
 #include <cmath>
 #include <string.h>
+#include <set>
+#include <utility>
 #ifndef UNIT_TEST
 #include "String.h"
 #endif  // UNIT_TEST
@@ -63,12 +65,12 @@ using irutils::addTimerModeToString;
 /// @note Consider removing this param (default to true) if WREM-2 works w/ it
 void IRsend::sendArgo(const unsigned char data[], const uint16_t nbytes,
                       const uint16_t repeat, bool sendFooter /*= false*/) {
-  if (nbytes < ::min(kArgo3AcControlStateLength,
+  if (nbytes < ::min({kArgo3AcControlStateLength,
                          kArgo3ConfigStateLength,
                          kArgo3iFeelReportStateLength,
                          kArgo3TimerStateLength,
                          kArgoStateLength,
-                         kArgoShortStateLength)) {
+                         kArgoShortStateLength})) {
     return;  // Not enough bytes to send a proper message.
   }
 
@@ -1312,14 +1314,14 @@ stdAc::state_t IRArgoAC_WREM3::toCommon(void) const {
 
 
 namespace {
-  /// @brief Short-hand for casting enum to its underlying storage type
-  /// @tparam E The type of enum
-  /// @param e Enum value
-  /// @return Type of underlying value
-  template <typename E>
-  constexpr typename std::underlying_type<E>::type to_underlying(E e) noexcept {
-      return static_cast<typename std::underlying_type<E>::type>(e);
-  }
+/// @brief Short-hand for casting enum to its underlying storage type
+/// @tparam E The type of enum
+/// @param e Enum value
+/// @return Type of underlying value
+template <typename E>
+constexpr typename std::underlying_type<E>::type to_underlying(E e) noexcept {
+    return static_cast<typename std::underlying_type<E>::type>(e);
+}
 }
 
 /// Convert the current internal state into a human readable string (WREM2).
@@ -1557,16 +1559,16 @@ argo_ac_remote_model_t IRArgoAC_WREM3::getModel() const {
 }
 
 namespace {
-  String commandTypeToString(argoIrMessageType_t type, uint8_t channel) {
-    String result = irutils::irCommandTypeToString(to_underlying(type),
-        to_underlying(argoIrMessageType_t::AC_CONTROL),
-        to_underlying(argoIrMessageType_t::IFEEL_TEMP_REPORT),
-        to_underlying(argoIrMessageType_t::TIMER_COMMAND),
-        to_underlying(argoIrMessageType_t::CONFIG_PARAM_SET));
-    result += irutils::channelToString(channel);
-    result += kColonSpaceStr;
-    return result;
-  }
+String commandTypeToString(argoIrMessageType_t type, uint8_t channel) {
+  String result = irutils::irCommandTypeToString(to_underlying(type),
+      to_underlying(argoIrMessageType_t::AC_CONTROL),
+      to_underlying(argoIrMessageType_t::IFEEL_TEMP_REPORT),
+      to_underlying(argoIrMessageType_t::TIMER_COMMAND),
+      to_underlying(argoIrMessageType_t::CONFIG_PARAM_SET));
+  result += irutils::channelToString(channel);
+  result += kColonSpaceStr;
+  return result;
+}
 }  // namespace
 
 /// Convert the current internal state into a human readable string (WREM3).
@@ -1792,16 +1794,20 @@ bool IRArgoAC_WREM3::isValidWrem3Message(const uint8_t state[],
 
   switch (messageType) {
     case argoIrMessageType_t::AC_CONTROL :
-      if (stateLengthBytes != kArgo3AcControlStateLength) { return false; }
+      if (stateLengthBytes != kArgo3AcControlStateLength)
+        return false;
       break;
-  case argoIrMessageType_t::CONFIG_PARAM_SET:
-      if (stateLengthBytes != kArgo3ConfigStateLength) { return false; }
+    case argoIrMessageType_t::CONFIG_PARAM_SET:
+      if (stateLengthBytes != kArgo3ConfigStateLength)
+        return false;
       break;
-  case argoIrMessageType_t::TIMER_COMMAND:
-      if (stateLengthBytes != kArgo3TimerStateLength) { return false; }
+    case argoIrMessageType_t::TIMER_COMMAND:
+      if (stateLengthBytes != kArgo3TimerStateLength)
+        return false;
       break;
     case argoIrMessageType_t::IFEEL_TEMP_REPORT:
-      if (stateLengthBytes != kArgo3iFeelReportStateLength) { return false; }
+      if (stateLengthBytes != kArgo3iFeelReportStateLength)
+        return false;
       break;
     default:
       return false;

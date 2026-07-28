@@ -41,15 +41,16 @@
 //   Brand: Fujitsu,  Model: AR-REG1U remote (ARRAH2E)
 //   Brand: OGeneral,  Model: AR-RCL1E remote (ARRAH2E)
 //   Brand: Fujitsu General,  Model: AR-JW17 remote (ARDB1)
+//   Brand: Fujitsu General,  Model: AR-JW19 remote (ARDB1)
 
 #ifndef IR_FUJITSU_H_
 #define IR_FUJITSU_H_
 
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
-//#ifdef ARDUINO
+#ifdef ARDUINO
 #include "String.h"
-//#endif
+#endif
 #include "IRrecv.h"
 #include "IRremoteESP8266.h"
 #include "IRsend.h"
@@ -241,7 +242,7 @@ class IRFujitsuAC {
   static stdAc::opmode_t toCommonMode(const uint8_t mode);
   static stdAc::fanspeed_t toCommonFanSpeed(const uint8_t speed);
   stdAc::state_t toCommon(const stdAc::state_t *prev = NULL);
-  arduino::String toString(void) const;
+  String toString(void) const;
 #ifndef UNIT_TEST
 
  private:

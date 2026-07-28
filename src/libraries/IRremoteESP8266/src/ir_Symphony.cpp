@@ -28,12 +28,11 @@
 //     0x588 - Timer
 //     0x590 - OSC
 
-//// #include <algorithm>
+// #include <algorithm>
 #include "IRrecv.h"
 #include "IRsend.h"
 #include "IRtimer.h"
 #include "IRutils.h"
-#include "minmax.h"
 
 // Constants
 const uint16_t kSymphonyZeroMark = 400;

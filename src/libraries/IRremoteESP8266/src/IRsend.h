@@ -12,6 +12,11 @@
 // Updated by markszabo (https://github.com/crankyoldgit/IRremoteESP8266) for
 // sending IR code on ESP8266
 
+#if TEST || UNIT_TEST
+#define VIRTUAL virtual
+#else
+#define VIRTUAL
+#endif
 
 // Constants
 // Offset (in microseconds) to use in Period time calculations to account for
@@ -27,10 +32,6 @@ const int8_t kPeriodOffset = -2;
 // Calculated on ESP8266 Wemos D1 mini using v2.4.1 with v2.4.0 ESP core @ 40MHz
 const int8_t kPeriodOffset = -5;
 #endif  // (defined(ESP8266) && F_CPU == 160000000L)
-
-
-
-
 const uint8_t kDutyDefault = 50;  // Percentage
 const uint8_t kDutyMax = 100;     // Percentage
 // delayMicroseconds() is only accurate to 16383us.
@@ -212,6 +213,11 @@ enum whirlpool_ac_remote_model_t {
   DG11J191,
 };
 
+// Kelon/Hisense (Kelon168) A/C remote model numbers
+enum kelon168_ac_remote_model_t {
+  DG11R201 = 1,  // RCH-R0Y3 too?
+};
+
 /// LG A/C model numbers
 enum lg_ac_remote_model_t {
   GE6711AR2853M = 1,  // (1) LG 28-bit Protocol (default)
@@ -227,6 +233,13 @@ enum argo_ac_remote_model_t {
   SAC_WREM3        // (2) ARGO WREM3 remote (touch buttons), bit-len vary by cmd
 };
 
+/// Toshiba A/C model numbers
+enum toshiba_ac_remote_model_t {
+  kToshibaGenericRemote_A = 0,  // Default from existing codebase
+  kToshibaGenericRemote_B = 1,  // Newly discovered remote control b, applies to
+  // many remote models such as WA-TH03A, WA-TH04A etc.
+};
+
 // Classes
 
 /// Class for sending all basic IR protocols.
@@ -238,12 +251,10 @@ class IRsend {
   explicit IRsend(uint16_t IRsendPin, bool inverted = false,
                   bool use_modulation = true);
   void begin();
-  virtual void enableIROut(uint32_t freq, uint8_t duty = kDutyDefault);
-
-  virtual void _delayMicroseconds(uint32_t usec);
-  virtual uint16_t mark(uint16_t usec);
-  virtual void space(uint32_t usec);
-
+  void enableIROut(uint32_t freq, uint8_t duty = kDutyDefault);
+  VIRTUAL void _delayMicroseconds(uint32_t usec);
+  VIRTUAL uint16_t mark(uint16_t usec);
+  VIRTUAL void space(uint32_t usec);
   int8_t calibrate(uint16_t hz = 38000U);
   void sendRaw(const uint16_t buf[], const uint16_t len, const uint16_t hz);
   void sendData(uint16_t onemark, uint32_t onespace, uint16_t zeromark,
@@ -311,11 +322,12 @@ class IRsend {
   void sendSherwood(uint64_t data, uint16_t nbits = kSherwoodBits,
                     uint16_t repeat = kSherwoodMinRepeat);
 #endif
-#if SEND_SAMSUNG
+  // `sendSAMSUNG()` is required by `sendLG()`
+#if (SEND_SAMSUNG || SEND_LG)
   void sendSAMSUNG(const uint64_t data, const uint16_t nbits = kSamsungBits,
                    const uint16_t repeat = kNoRepeat);
   uint32_t encodeSAMSUNG(const uint8_t customer, const uint8_t command);
-#endif
+#endif  // (SEND_SAMSUNG || SEND_LG)
 #if SEND_SAMSUNG36
   void sendSamsung36(const uint64_t data, const uint16_t nbits = kSamsung36Bits,
                      const uint16_t repeat = kNoRepeat);
@@ -619,11 +631,13 @@ class IRsend {
                         uint16_t nbytes = kCarrierAc128StateLength,
                         uint16_t repeat = kCarrierAc128MinRepeat);
 #endif  // SEND_CARRIER_AC128
-#if (SEND_HAIER_AC || SEND_HAIER_AC_YRW02 || SEND_HAIER_AC176)
+#if (SEND_HAIER_AC || SEND_HAIER_AC_YRW02 || SEND_HAIER_AC160 || \
+    SEND_HAIER_AC176)
   void sendHaierAC(const unsigned char data[],
                    const uint16_t nbytes = kHaierACStateLength,
                    const uint16_t repeat = kHaierAcDefaultRepeat);
-#endif  // (SEND_HAIER_AC || SEND_HAIER_AC_YRW02 || SEND_HAIER_AC176)
+#endif  // (SEND_HAIER_AC || SEND_HAIER_AC_YRW02 || SEND_HAIER_AC160 ||
+        //  SEND_HAIER_AC176)
 #if SEND_HAIER_AC_YRW02
   void sendHaierACYRW02(const unsigned char data[],
                         const uint16_t nbytes = kHaierACYRW02StateLength,
@@ -841,7 +855,7 @@ class IRsend {
 #if SEND_KELON168
   void sendKelon168(const unsigned char data[],
                     const uint16_t nbytes = kKelon168StateLength,
-                    const uint16_t repeat = kNoRepeat);
+                    const uint16_t repeat = kKelon168DefaultRepeat);
 #endif  // SEND_KELON168
 #if SEND_BOSE
   void sendBose(const uint64_t data, const uint16_t nbits = kBoseBits,
@@ -880,6 +894,21 @@ class IRsend {
   void sendWowwee(const uint64_t data, const uint16_t nbits = kWowweeBits,
                   const uint16_t repeat = kWowweeDefaultRepeat);
 #endif  // SEND_WOWWEE
+#if SEND_YORK
+  void sendYork(const unsigned char data[],
+                    const uint16_t nbytes = kYorkStateLength,
+                    const uint16_t repeat = kNoRepeat);
+#endif  // SEND_YORK
+#if SEND_BLUESTARHEAVY
+  void sendBluestarHeavy(const unsigned char data[],
+                       const uint16_t nbytes = kBluestarHeavyStateLength,
+                       const uint16_t repeat = kNoRepeat);
+#endif  // SEND_BLUESTARHEAVY
+#if SEND_EUROM
+  void sendEurom(const uint8_t data[],
+                 const uint16_t nbytes = kEuromStateLength,
+                 const uint16_t repeat = kNoRepeat);
+#endif  // SEND_EUROM
 
  protected:
 #ifdef UNIT_TEST
@@ -892,8 +921,8 @@ class IRsend {
 #endif  // UNIT_TEST
   uint8_t outputOn;
   uint8_t outputOff;
-  virtual void ledOff();
-  virtual void ledOn();
+  VIRTUAL void ledOff();
+  VIRTUAL void ledOn();
 #ifndef UNIT_TEST
 
  private:

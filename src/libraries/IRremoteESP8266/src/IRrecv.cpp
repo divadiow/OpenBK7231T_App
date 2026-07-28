@@ -1,14 +1,12 @@
+#include "../../../obk_config.h"
+
+#if ENABLE_DRIVER_IRREMOTEESP
+#define USE_IRAM_ATTR
+
 // Copyright 2009 Ken Shirriff
 // Copyright 2015 Mark Szabo
 // Copyright 2015 Sebastien Warin
 // Copyright 2017, 2019 David Conran
-
-
-#include "../../../obk_config.h"
-
-#if ENABLE_DRIVER_IRREMOTEESP
-
-#define USE_IRAM_ATTR 
 
 #include "IRrecv.h"
 #include <stddef.h>
@@ -27,23 +25,23 @@ extern "C" {
 #endif  // UNIT_TEST
 #include "IRremoteESP8266.h"
 #include "IRutils.h"
+#include "digitalWriteFast.h"
+#include "minmax.h"
+
+#define RECORD_GAP_MICROS   5000
+#define MICROS_PER_TICK     50
+#define RECORD_GAP_TICKS    (RECORD_GAP_MICROS / MICROS_PER_TICK)
+
+#if defined(ESP32)
+#if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3) )
+#include <driver/gpio.h>
+#endif  // ESP_ARDUINO_VERSION_MAJOR >= 3
+#endif
 
 #ifdef UNIT_TEST
 #undef ICACHE_RAM_ATTR
 #define ICACHE_RAM_ATTR
 #endif
-
-#include "digitalWriteFast.h"
-#include "minmax.h"
-
-// To change this value, you simply can add a line #define "RECORD_GAP_MICROS <My_new_value>" in your ino file before the line "#include <IRremote.hpp>"
-#define RECORD_GAP_MICROS   5000 // FREDRICH28AC / LG2 header space is 9700, NEC header space is 4500
-#define MICROS_PER_TICK		50
-
-/** Minimum gap between IR transmissions, in MICROS_PER_TICK */
-#define RECORD_GAP_TICKS    (RECORD_GAP_MICROS / MICROS_PER_TICK) // 221 for 1100
-
-
 
 #ifndef USE_IRAM_ATTR
 #if defined(ESP8266)
@@ -67,7 +65,6 @@ extern "C" {
 // Updated by markszabo (https://github.com/crankyoldgit/IRremoteESP8266) for
 // sending IR code on ESP8266
 
-
 // Globals
 #ifndef UNIT_TEST
 #if defined(ESP8266)
@@ -76,20 +73,24 @@ static ETSTimer timer;
 }  // namespace _IRrecv
 #endif  // ESP8266
 #if defined(ESP32)
+#if ( defined(ESP_ARDUINO_VERSION) && \
+    (ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)) )
+#define _ESP32_ARDUINO_CORE_V3PLUS
+#endif  // ESP_ARDUINO_VERSION >= 3
 // We need a horrible timer hack for ESP32 Arduino framework < v2.0.0
-#if !defined(_ESP32_IRRECV_TIMER_HACK)
+#if !defined(_ESP32_ARDUINO_CORE_V2PLUS)
 // Version check
 #if ( defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 2) )
 // No need for the hack if we are running version >= 2.0.0
-#define _ESP32_IRRECV_TIMER_HACK false
+#define _ESP32_ARDUINO_CORE_V2PLUS false
 #else  // Version check
 // If no ESP_ARDUINO_VERSION_MAJOR is defined, or less than 2, then we are
 // using an old ESP32 core, so we need the hack.
-#define _ESP32_IRRECV_TIMER_HACK true
+#define _ESP32_ARDUINO_CORE_V2PLUS true
 #endif  // Version check
-#endif  // !defined(_ESP32_IRRECV_TIMER_HACK)
+#endif  // !defined(_ESP32_ARDUINO_CORE_V2PLUS)
 
-#if _ESP32_IRRECV_TIMER_HACK
+#if _ESP32_ARDUINO_CORE_V2PLUS
 // Required structs/types from:
 // https://github.com/espressif/arduino-esp32/blob/6b0114366baf986c155e8173ab7c22bc0c5fcedc/cores/esp32/esp32-hal-timer.c#L28-L58
 // These are needed to be able to directly manipulate the timer registers from
@@ -151,10 +152,10 @@ typedef struct hw_timer_s {
         uint8_t timer;
         portMUX_TYPE lock;
 } hw_timer_t;
-#endif  // _ESP32_IRRECV_TIMER_HACK / End of Horrible Hack.
+#endif  // _ESP32_ARDUINO_CORE_V2PLUS / End of Horrible Hack.
 
 namespace _IRrecv {
-static hw_timer_t * timer = NULL;
+static hw_timer_t *timer = NULL;
 }  // namespace _IRrecv
 #endif  // ESP32
 //using _IRrecv::timer;
@@ -164,7 +165,7 @@ namespace _IRrecv {  // Namespace extension
 #if defined(ESP32)
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 #endif  // ESP32
-volatile irparams_t params;
+atomic_irparams_t params;
 irparams_t *params_save;  // A copy of the interrupt state while decoding.
 }  // namespace _IRrecv
 
@@ -175,91 +176,103 @@ using _IRrecv::params;
 using _IRrecv::params_save;
 
 #ifndef UNIT_TEST
-
+#if defined(ESP8266)
+/// Interrupt handler for when the timer runs out.
+/// It signals to the library that capturing of IR data has stopped.
+/// @param[in] arg Unused. (ESP8266 Only)
+static void USE_IRAM_ATTR read_timeout(void *arg __attribute__((unused))) {
+  os_intr_lock();
+#endif  // ESP8266
+/// @cond IGNORE
+#if defined(ESP32)
 /// Interrupt handler for when the timer runs out.
 /// It signals to the library that capturing of IR data has stopped.
 /// @note ESP32 version
 static void USE_IRAM_ATTR read_timeout(void) {
 /// @endcond
- // portENTER_CRITICAL(&mux);
-
-  if (params.rawlen) 
-	  params.rcvstate = kStopState;
+  portENTER_CRITICAL(&mux);
+#endif  // ESP32
+  if (params.rawlen) params.rcvstate = kStopState;
 #if defined(ESP8266)
   os_intr_unlock();
 #endif  // ESP8266
 #if defined(ESP32)
-  //portEXIT_CRITICAL(&mux);
+  portEXIT_CRITICAL(&mux);
 #endif  // ESP32
 }
 
 /// Interrupt handler for changes on the GPIO pin handling incoming IR messages.
-//static void USE_IRAM_ATTR gpio_intr() {
-//  uint32_t now = micros();
-//  static uint32_t start = 0;
-//
-//#if defined(ESP8266)
-//  uint32_t gpio_status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
-//  os_timer_disarm(&timer);
-//  GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, gpio_status);
-//#endif  // ESP8266
-//
-//  // Grab a local copy of rawlen to reduce instructions used in IRAM.
-//  // This is an ugly premature optimisation code-wise, but we do everything we
-//  // can to save IRAM.
-//  // It seems referencing the value via the structure uses more instructions.
-//  // Less instructions means faster and less IRAM used.
-//  // N.B. It saves about 13 bytes of IRAM.
-//  uint16_t rawlen = params.rawlen;
-//
-//  if (rawlen >= params.bufsize) {
-//    params.overflow = true;
-//    params.rcvstate = kStopState;
-//  }
-//
-//  if (params.rcvstate == kStopState) return;
-//
-//  if (params.rcvstate == kIdleState) {
-//    params.rcvstate = kMarkState;
-//    params.rawbuf[rawlen] = 1;
-//  } else {
-//    if (now < start)
-//      params.rawbuf[rawlen] = (UINT32_MAX - start + now) / kRawTick;
-//    else
-//      params.rawbuf[rawlen] = (now - start) / kRawTick;
-//  }
-//  params.rawlen++;
-//
-//  start = now;
-//
-//#if defined(ESP8266)
-//  os_timer_arm(&timer, params.timeout, ONCE);
-//#endif  // ESP8266
-//#if defined(ESP32)
-//  // Reset the timeout.
-//  //
-//#if _ESP32_IRRECV_TIMER_HACK
-//  // The following three lines of code are the equiv of:
-//  //   `timerWrite(timer, 0);`
-//  // We can't call that routine safely from inside an ISR as that procedure
-//  // is not stored in IRAM. Hence, we do it manually so that it's covered by
-//  // USE_IRAM_ATTR in this ISR.
-//  // @see https://github.com/crankyoldgit/IRremoteESP8266/issues/1350
-//  // @see https://github.com/espressif/arduino-esp32/blob/6b0114366baf986c155e8173ab7c22bc0c5fcedc/cores/esp32/esp32-hal-timer.c#L106-L110
-//  timer->dev->load_high = (uint32_t) 0;
-//  timer->dev->load_low = (uint32_t) 0;
-//  timer->dev->reload = 1;
-//  // The next line is the same, but instead replaces:
-//  //   `timerAlarmEnable(timer);`
-//  // @see https://github.com/crankyoldgit/IRremoteESP8266/issues/1350
-//  // @see https://github.com/espressif/arduino-esp32/blob/6b0114366baf986c155e8173ab7c22bc0c5fcedc/cores/esp32/esp32-hal-timer.c#L176-L178
-//  timer->dev->config.alarm_en = 1;
-//#else  // _ESP32_IRRECV_TIMER_HACK
-//  timerWrite(timer, 0);
-//  timerAlarmEnable(timer);
-//#endif  // _ESP32_IRRECV_TIMER_HACK
-//#endif  // ESP32
-//}
+static void USE_IRAM_ATTR gpio_intr() {
+  uint32_t now = micros();
+  static uint32_t start = 0;
+
+#if defined(ESP8266)
+  uint32_t gpio_status = GPIO_REG_READ(GPIO_STATUS_ADDRESS);
+  os_timer_disarm(&timer);
+  GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, gpio_status);
+#endif  // ESP8266
+
+  // Grab a local copy of rawlen to reduce instructions used in IRAM.
+  // This is an ugly premature optimisation code-wise, but we do everything we
+  // can to save IRAM.
+  // It seems referencing the value via the structure uses more instructions.
+  // Less instructions means faster and less IRAM used.
+  // N.B. It saves about 13 bytes of IRAM.
+  uint16_t rawlen = params.rawlen;
+
+  if (rawlen >= params.bufsize) {
+    params.overflow = true;
+    params.rcvstate = kStopState;
+  }
+
+  if (params.rcvstate == kStopState) return;
+
+  if (params.rcvstate == kIdleState) {
+    params.rcvstate = kMarkState;
+    params.rawbuf[rawlen] = 1;
+  } else {
+    if (now < start)
+      params.rawbuf[rawlen] = (UINT32_MAX - start + now) / kRawTick;
+    else
+      params.rawbuf[rawlen] = (now - start) / kRawTick;
+  }
+  params.rawlen = params.rawlen + 1;  // C++20 fix
+
+  start = now;
+
+#if defined(ESP8266)
+  os_timer_arm(&timer, params.timeout, ONCE);
+#endif  // ESP8266
+#if defined(ESP32)
+  // Reset the timeout.
+  //
+#if _ESP32_ARDUINO_CORE_V2PLUS
+  // The following three lines of code are the equivalent of:
+  //   `timerWrite(timer, 0);`
+  // We can't call that routine safely from inside an ISR as that procedure
+  // is not stored in IRAM. Hence, we do it manually so that it's covered by
+  // USE_IRAM_ATTR in this ISR.
+  // @see https://github.com/crankyoldgit/IRremoteESP8266/issues/1350
+  // @see https://github.com/espressif/arduino-esp32/blob/6b0114366baf986c155e8173ab7c22bc0c5fcedc/cores/esp32/esp32-hal-timer.c#L106-L110
+  timer->dev->load_high = static_cast<uint32_t>(0);
+  timer->dev->load_low = static_cast<uint32_t>(0);
+  timer->dev->reload = 1;
+  // The next line is the same, but instead replaces:
+  //   `timerAlarmEnable(timer);`
+  // @see https://github.com/crankyoldgit/IRremoteESP8266/issues/1350
+  // @see https://github.com/espressif/arduino-esp32/blob/6b0114366baf986c155e8173ab7c22bc0c5fcedc/cores/esp32/esp32-hal-timer.c#L176-L178
+  timer->dev->config.alarm_en = 1;
+#elif defined(_ESP32_ARDUINO_CORE_V3PLUS)
+  // For ESP32 core version 3.x, replace `timerAlarmEnable`
+  timerWrite(timer, 0);
+  uint64_t alarm_value = 50000;  // Example value (50ms)
+  timerAlarm(timer, alarm_value, false, 0);
+#else  // !_ESP32_ARDUINO_CORE_V3PLUS
+  timerWrite(timer, 0);
+  timerAlarmEnable(timer);
+#endif  // _ESP32_ARDUINO_CORE_V2PLUS
+#endif  // ESP32
+}
 #endif  // UNIT_TEST
 
 // Start of IRrecv class -------------------
@@ -308,17 +321,15 @@ IRrecv::IRrecv(const uint16_t recvpin, const uint16_t bufsize,
   params.bufsize = bufsize;
   // Ensure we are going to be able to store all possible values in the
   // capture buffer.
-  params.timeout = timeout;
-  if (kMaxTimeoutMs < params.timeout)
-	  params.timeout = kMaxTimeoutMs;
+  params.timeout = ::min(timeout, (uint8_t)kMaxTimeoutMs);
   params.rawbuf = new uint16_t[bufsize];
   if (params.rawbuf == NULL) {
     DPRINTLN(
         "Could not allocate memory for the primary IR buffer.\n"
         "Try a smaller size for CAPTURE_BUFFER_SIZE.\nRebooting!");
 #ifndef UNIT_TEST
-   // ESP.restart();  // Mem alloc failure. Reboot.
-	return;
+    // ESP.restart();  // Mem alloc failure. Reboot.
+    return;
 #endif
   }
   // If we have been asked to use a save buffer (for decoding), then create one.
@@ -331,8 +342,8 @@ IRrecv::IRrecv(const uint16_t recvpin, const uint16_t bufsize,
           "Could not allocate memory for the second IR buffer.\n"
           "Try a smaller size for CAPTURE_BUFFER_SIZE.\nRebooting!");
 #ifndef UNIT_TEST
-   //   ESP.restart();  // Mem alloc failure. Reboot.
-	  return;
+      // ESP.restart();  // Mem alloc failure. Reboot.
+    return;
 #endif
     }
   } else {
@@ -350,9 +361,6 @@ IRrecv::IRrecv(const uint16_t recvpin, const uint16_t bufsize,
 /// timers or interrupts used.
 IRrecv::~IRrecv(void) {
   disableIRIn();
-#if defined(ESP32)
-  if (timer != NULL) timerEnd(timer);  // Cleanup the ESP32 timeout timer.
-#endif  // ESP32
   delete[] params.rawbuf;
   if (params_save != NULL) {
     delete[] params_save->rawbuf;
@@ -375,8 +383,15 @@ void IRrecv::enableIRIn(const bool pullup) {
   }
 #if defined(ESP32)
   // Initialise the ESP32 timer.
+#if defined(_ESP32_ARDUINO_CORE_V3PLUS)
+  // Use newer timerBegin signature for ESP32 core version 3.x
+  timer = timerBegin(1000000);  // Initialize with 1MHz (1us per tick)
+#else  // _ESP32_ARDUINO_CORE_V3PLUS
   // 80MHz / 80 = 1 uSec granularity.
   timer = timerBegin(_timer_num, 80, true);
+#endif  // _ESP32_ARDUINO_CORE_V3PLUS
+
+  // Ensure the timer is successfully initialized
 #ifdef DEBUG
   if (timer == NULL) {
     DPRINT("FATAL: Unable enable system timer: ");
@@ -384,12 +399,17 @@ void IRrecv::enableIRIn(const bool pullup) {
   }
 #endif  // DEBUG
   assert(timer != NULL);  // Check we actually got the timer.
-  // Set the timer so it only fires once, and set it's trigger in uSeconds.
+  // Set the timer so it only fires once, and set its trigger in microseconds.
+#if defined(_ESP32_ARDUINO_CORE_V3PLUS)
+  timerWrite(timer, 0);  // Reset the timer for ESP32 core version 3.x
+  timerAttachInterrupt(timer, &read_timeout);
+#else  // _ESP32_ARDUINO_CORE_V3PLUS
   timerAlarmWrite(timer, MS_TO_USEC(params.timeout), ONCE);
   // Note: Interrupt needs to be attached before it can be enabled or disabled.
   // Note: EDGE (true) is not supported, use LEVEL (false). Ref: #1713
   // See: https://github.com/espressif/arduino-esp32/blob/caef4006af491130136b219c1205bdcf8f08bf2b/cores/esp32/esp32-hal-timer.c#L224-L227
   timerAttachInterrupt(timer, &read_timeout, false);
+#endif  // _ESP32_ARDUINO_CORE_V3PLUS
 #endif  // ESP32
 
   // Initialise state machine variables
@@ -413,10 +433,15 @@ void IRrecv::disableIRIn(void) {
 #ifndef UNIT_TEST
 #if defined(ESP8266)
   os_timer_disarm(&timer);
-#endif  // ESP8266
-#if defined(ESP32)
-  timerAlarmDisable(timer);
+#elif defined(_ESP32_ARDUINO_CORE_V3PLUS)
+  timerWrite(timer, 0);  // Reset the timer
+  timerDetachInterrupt(timer);
   timerEnd(timer);
+#elif defined(ESP32)
+  timerAlarmDisable(timer);
+  timerDetachInterrupt(timer);
+  timerEnd(timer);
+  timer = NULL;  // Cleanup the ESP32 timeout timer.
 #endif  // ESP32
   //detachInterrupt(params.recvpin);
 #endif  // UNIT_TEST
@@ -442,7 +467,13 @@ void IRrecv::resume(void) {
   params.rawlen = 0;
   params.overflow = false;
 #if defined(ESP32)
+  // Check for ESP32 core version and handle timer functions differently
+#if defined(_ESP32_ARDUINO_CORE_V3PLUS)
+  timerWrite(timer, 0);  // Reset the timer (no need for timerAlarmDisable)
+#else  // _ESP32_ARDUINO_CORE_V3PLUS
   timerAlarmDisable(timer);
+#endif  // _ESP32_ARDUINO_CORE_V3PLUS
+  // Re-enable GPIO interrupt in both versions
   gpio_intr_enable((gpio_num_t)params.recvpin);
 #endif  // ESP32
 }
@@ -453,7 +484,7 @@ void IRrecv::resume(void) {
 /// i.e. In kStopState.
 /// @param[in] src Pointer to an irparams_t structure to copy from.
 /// @param[out] dst Pointer to an irparams_t structure to copy to.
-void IRrecv::copyIrParams(volatile irparams_t *src, irparams_t *dst) {
+void IRrecv::copyIrParams(atomic_irparams_t *src, irparams_t *dst) {
   // Typecast src and dst addresses to (char *)
   char *csrc = (char *)src;  // NOLINT(readability/casting)
   char *cdst = (char *)dst;  // NOLINT(readability/casting)
@@ -491,9 +522,7 @@ void IRrecv::setUnknownThreshold(const uint16_t length) {
 /// Set the base tolerance percentage for matching incoming IR messages.
 /// @param[in] percent An integer percentage. (0-100)
 void IRrecv::setTolerance(const uint8_t percent) {
-	_tolerance = percent;
-	if (_tolerance > 100)
-		_tolerance = 100;
+  _tolerance = ::min(percent, (uint8_t)100);
 }
 
 /// Get the base tolerance percentage for matching incoming IR messages.
@@ -520,8 +549,8 @@ void IRrecv::crudeNoiseFilter(decode_results *results, const uint16_t floor) {
       for (uint16_t i = offset + 2; i <= results->rawlen && i < kBufSize; i++)
         results->rawbuf[i - 2] = results->rawbuf[i];
       if (offset > 1) {  // There is a previous pair we can add to.
-        // Merge this pair into into the previous space.
-        results->rawbuf[offset - 1] += addition;
+        // Merge this pair into into the previous space. // C++20 fix applied
+        results->rawbuf[offset - 1] = results->rawbuf[offset - 1] + addition;
       }
       results->rawlen -= 2;  // Adjust the length.
     } else {
@@ -720,9 +749,12 @@ bool IRrecv::decode(decode_results *results, irparams_t *save,
       return true;
 #endif
 #if DECODE_PANASONIC
-    DPRINTLN("Attempting Panasonic decode");
+    DPRINTLN("Attempting Panasonic (48-bit) decode");
     if (decodePanasonic(results, offset)) return true;
-#endif
+    DPRINTLN("Attempting Panasonic (40-bit) decode");
+    if (decodePanasonic(results, offset, kPanasonic40Bits, true,
+                        kPanasonic40Manufacturer)) return true;
+#endif  // DECODE_PANASONIC
 #if DECODE_LG
     DPRINTLN("Attempting LG (28-bit) decode");
     if (decodeLG(results, offset, kLgBits, true)) return true;
@@ -1196,6 +1228,18 @@ bool IRrecv::decode(decode_results *results, irparams_t *save,
     DPRINTLN("Attempting Carrier A/C 84-bit decode");
     if (decodeCarrierAC84(results, offset)) return true;
 #endif  // DECODE_CARRIER_AC84
+#if DECODE_YORK
+    DPRINTLN("Attempting York decode");
+    if (decodeYork(results, offset, kYorkBits)) return true;
+#endif  // DECODE_YORK
+#if DECODE_BLUESTARHEAVY
+    DPRINTLN("Attempting BluestarHeavy decode");
+    if (decodeBluestarHeavy(results, offset, kBluestarHeavyBits)) return true;
+#endif  // DECODE_BLUESTARHEAVY
+#if DECODE_EUROM
+    DPRINTLN("Attempting Eurom decode");
+    if (decodeEurom(results, offset, kEuromBits)) return true;
+#endif  // DECODE_EUROM
   // Typically new protocols are added above this line.
   }
 #if DECODE_HASH
@@ -1226,11 +1270,10 @@ uint8_t IRrecv::_validTolerance(const uint8_t percentage) {
 uint32_t IRrecv::ticksLow(const uint32_t usecs, const uint8_t tolerance,
                           const uint16_t delta) {
   // max() used to ensure the result can't drop below 0 before the cast.
-	float res;
-	res = usecs * (1.0 - _validTolerance(tolerance) / 100.0) - delta;
-	if (res < 0)
-		res = 0;
-  return res;
+  return (static_cast<uint32_t>(::max(
+      static_cast<int32_t>(usecs * (1.0 - _validTolerance(tolerance) / 100.0) -
+          delta),
+      static_cast<int32_t>(0))));
 }
 
 /// Calculate the upper bound of the nr. of ticks.
@@ -1240,8 +1283,8 @@ uint32_t IRrecv::ticksLow(const uint32_t usecs, const uint8_t tolerance,
 /// @return Nr. of ticks.
 uint32_t IRrecv::ticksHigh(const uint32_t usecs, const uint8_t tolerance,
                            const uint16_t delta) {
-  return ((uint32_t)(usecs * (1.0 + _validTolerance(tolerance) / 100.0)) + 1 +
-          delta);
+  return (static_cast<uint32_t>(usecs * (1.0 + _validTolerance(tolerance) /
+                                100.0)) + 1 + delta);
 }
 
 /// Check if we match a pulse(measured) with the desired within
@@ -1253,14 +1296,13 @@ uint32_t IRrecv::ticksHigh(const uint32_t usecs, const uint8_t tolerance,
 /// @return A Boolean. true if it matches, false if it doesn't.
 bool IRrecv::match(uint32_t measured, uint32_t desired, uint8_t tolerance,
                    uint16_t delta) {
-  char tmp[24];
   measured *= kRawTick;  // Convert to uSecs.
   DPRINT("Matching: ");
-  DPRINT(itoa(ticksLow(desired, tolerance, delta),tmp,10));
+  DPRINT(ticksLow(desired, tolerance, delta));
   DPRINT(" <= ");
-  DPRINT(itoa(measured,tmp,10));
+  DPRINT(measured);
   DPRINT(" <= ");
-  DPRINTLN(itoa(ticksHigh(desired, tolerance, delta),tmp,10));
+  DPRINTLN(ticksHigh(desired, tolerance, delta));
 #ifdef UNIT_TEST
   // Sanity checks that we don't have values that cause integer over/underflow.
   // Only performed during testing so there is no performance hit in normal
@@ -1285,22 +1327,24 @@ bool IRrecv::match(uint32_t measured, uint32_t desired, uint8_t tolerance,
 /// @return A Boolean. true if it matches, false if it doesn't.
 bool IRrecv::matchAtLeast(uint32_t measured, uint32_t desired,
                           uint8_t tolerance, uint16_t delta) {
-  char tmp[24];
   measured *= kRawTick;  // Convert to uSecs.
   DPRINT("Matching ATLEAST ");
-  DPRINT(itoa(measured,tmp,10));
+  DPRINT(measured);
   DPRINT(" vs ");
-  DPRINT(itoa(desired,tmp,10));
+  DPRINT(desired);
   DPRINT(". Matching: ");
-  DPRINT(itoa(measured,tmp,10));
+  DPRINT(measured);
   DPRINT(" >= ");
-  DPRINT(itoa(ticksLow(::min(desired, (uint32_t)MS_TO_USEC(params.timeout)),
-                  tolerance, delta),tmp,10));
+  DPRINT(ticksLow(::min(desired,
+                           static_cast<uint32_t>(MS_TO_USEC(params.timeout))),
+                  tolerance, delta));
   DPRINT(" [min(");
-  DPRINT(itoa(ticksLow(desired, tolerance, delta),tmp,10));
+  DPRINT(ticksLow(desired, tolerance, delta));
   DPRINT(", ");
-  DPRINT(itoa(ticksLow(MS_TO_USEC(params.timeout), tolerance, delta),tmp,10));
+  DPRINT(ticksLow(MS_TO_USEC(params.timeout), tolerance, delta));
   DPRINTLN(")]");
+
+
 #ifdef UNIT_TEST
   // Sanity checks that we don't have values that cause integer over/underflow.
   // Only performed during testing so there is no performance hit in normal
@@ -1315,11 +1359,9 @@ bool IRrecv::matchAtLeast(uint32_t measured, uint32_t desired,
   // We really should never get a value of 0, except as the last value
   // in the buffer. If that is the case, then assume infinity and return true.
   if (measured == 0) return true;
-  uint32_t mins = MS_TO_USEC(params.timeout);
-  if (mins > desired)
-	  mins = desired;
-  return measured >= ticksLow(mins,
-                              tolerance, delta);
+  return measured >= ticksLow(::min(
+      desired, static_cast<uint32_t>(MS_TO_USEC(params.timeout))), tolerance,
+      delta);
 }
 
 /// Check if we match a mark signal(measured) with the desired within
@@ -1331,13 +1373,12 @@ bool IRrecv::matchAtLeast(uint32_t measured, uint32_t desired,
 /// @return A Boolean. true if it matches, false if it doesn't.
 bool IRrecv::matchMark(uint32_t measured, uint32_t desired, uint8_t tolerance,
                        int16_t excess) {
-  char tmp[24];
   DPRINT("Matching MARK ");
-  DPRINT(itoa(measured * kRawTick,tmp,10));
+  DPRINT(measured * kRawTick);
   DPRINT(" vs ");
-  DPRINT(itoa(desired,tmp,10));
+  DPRINT(desired);
   DPRINT(" + ");
-  DPRINT(itoa(excess,tmp,10));
+  DPRINT(excess);
   DPRINT(". ");
   return match(measured, desired + excess, tolerance);
 }
@@ -1352,13 +1393,12 @@ bool IRrecv::matchMark(uint32_t measured, uint32_t desired, uint8_t tolerance,
 /// @return A Boolean. true if it matches, false if it doesn't.
 bool IRrecv::matchMarkRange(const uint32_t measured, const uint32_t desired,
                             const uint16_t range, const int16_t excess) {
-  char tmp[24];
   DPRINT("Matching MARK ");
-  DPRINT(itoa(measured * kRawTick,tmp,10));
+  DPRINT(measured * kRawTick);
   DPRINT(" vs ");
-  DPRINT(itoa(desired,tmp,10));
+  DPRINT(desired);
   DPRINT(" + ");
-  DPRINT(itoa(excess,tmp,10));
+  DPRINT(excess);
   DPRINT(". ");
   return match(measured, desired + excess, 0, range);
 }
@@ -1372,13 +1412,12 @@ bool IRrecv::matchMarkRange(const uint32_t measured, const uint32_t desired,
 /// @return A Boolean. true if it matches, false if it doesn't.
 bool IRrecv::matchSpace(uint32_t measured, uint32_t desired, uint8_t tolerance,
                         int16_t excess) {
-  char tmp[24];
   DPRINT("Matching SPACE ");
-  DPRINT(itoa(measured * kRawTick,tmp,10));
+  DPRINT(measured * kRawTick);
   DPRINT(" vs ");
-  DPRINT(itoa(desired,tmp,10));
+  DPRINT(desired);
   DPRINT(" - ");
-  DPRINT(itoa(excess,tmp,10));
+  DPRINT(excess);
   DPRINT(". ");
   return match(measured, desired - excess, tolerance);
 }
@@ -1393,13 +1432,12 @@ bool IRrecv::matchSpace(uint32_t measured, uint32_t desired, uint8_t tolerance,
 /// @return A Boolean. true if it matches, false if it doesn't.
 bool IRrecv::matchSpaceRange(const uint32_t measured, const uint32_t desired,
                              const uint16_t range, const int16_t excess) {
-  char tmp[24];
   DPRINT("Matching SPACE ");
-  DPRINT(itoa(measured * kRawTick,tmp,10));
+  DPRINT(measured * kRawTick);
   DPRINT(" vs ");
-  DPRINT(itoa(desired,tmp,10));
+  DPRINT(desired);
   DPRINT(" - ");
-  DPRINT(itoa(excess,tmp,10));
+  DPRINT(excess);
   DPRINT(". ");
   return match(measured, desired - excess, 0, range);
 }
@@ -1470,7 +1508,7 @@ bool IRrecv::decodeHash(decode_results *results) {
 /// @return A match_result_t structure containing the success (or not), the
 ///   data value, and how many buffer entries were used.
 match_result_t IRrecv::matchData(
-    volatile uint16_t *data_ptr, const uint16_t nbits, const uint16_t onemark,
+    atomic_uint16_t *data_ptr, const uint16_t nbits, const uint16_t onemark,
     const uint32_t onespace, const uint16_t zeromark, const uint32_t zerospace,
     const uint8_t tolerance, const int16_t excess, const bool MSBfirst,
     const bool expectlastspace) {
@@ -1530,7 +1568,7 @@ match_result_t IRrecv::matchData(
 ///   true is Most Significant Bit First Order, false is Least Significant First
 /// @param[in] expectlastspace Do we expect a space at the end of the message?
 /// @return If successful, how many buffer entries were used. Otherwise 0.
-uint16_t IRrecv::matchBytes(volatile uint16_t *data_ptr, uint8_t *result_ptr,
+uint16_t IRrecv::matchBytes(atomic_uint16_t *data_ptr, uint8_t *result_ptr,
                             const uint16_t remaining, const uint16_t nbytes,
                             const uint16_t onemark, const uint32_t onespace,
                             const uint16_t zeromark, const uint32_t zerospace,
@@ -1582,7 +1620,7 @@ uint16_t IRrecv::matchBytes(volatile uint16_t *data_ptr, uint8_t *result_ptr,
 /// @param[in] MSBfirst Bit order to save the data in. (Def: true)
 ///   true is Most Significant Bit First Order, false is Least Significant First
 /// @return If successful, how many buffer entries were used. Otherwise 0.
-uint16_t IRrecv::_matchGeneric(volatile uint16_t *data_ptr,
+uint16_t IRrecv::_matchGeneric(atomic_uint16_t *data_ptr,
                               uint64_t *result_bits_ptr,
                               uint8_t *result_bytes_ptr,
                               const bool use_bits,
@@ -1684,7 +1722,7 @@ uint16_t IRrecv::_matchGeneric(volatile uint16_t *data_ptr,
 /// @param[in] MSBfirst Bit order to save the data in. (Def: true)
 ///   true is Most Significant Bit First Order, false is Least Significant First
 /// @return If successful, how many buffer entries were used. Otherwise 0.
-uint16_t IRrecv::matchGeneric(volatile uint16_t *data_ptr,
+uint16_t IRrecv::matchGeneric(atomic_uint16_t *data_ptr,
                               uint64_t *result_ptr,
                               const uint16_t remaining,
                               const uint16_t nbits,
@@ -1731,7 +1769,7 @@ uint16_t IRrecv::matchGeneric(volatile uint16_t *data_ptr,
 /// @param[in] MSBfirst Bit order to save the data in. (Def: true)
 ///   true is Most Significant Bit First Order, false is Least Significant First
 /// @return If successful, how many buffer entries were used. Otherwise 0.
-uint16_t IRrecv::matchGeneric(volatile uint16_t *data_ptr,
+uint16_t IRrecv::matchGeneric(atomic_uint16_t *data_ptr,
                               uint8_t *result_ptr,
                               const uint16_t remaining,
                               const uint16_t nbits,
@@ -1778,7 +1816,7 @@ uint16_t IRrecv::matchGeneric(volatile uint16_t *data_ptr,
 /// @return If successful, how many buffer entries were used. Otherwise 0.
 /// @note Parameters one + zero add up to the total time for a bit.
 ///   e.g. mark(one) + space(zero) is a `1`, mark(zero) + space(one) is a `0`.
-uint16_t IRrecv::matchGenericConstBitTime(volatile uint16_t *data_ptr,
+uint16_t IRrecv::matchGenericConstBitTime(atomic_uint16_t *data_ptr,
                                           uint64_t *result_ptr,
                                           const uint16_t remaining,
                                           const uint16_t nbits,
@@ -1865,7 +1903,7 @@ uint16_t IRrecv::matchGenericConstBitTime(volatile uint16_t *data_ptr,
 /// @return If successful, how many buffer entries were used. Otherwise 0.
 /// @see https://en.wikipedia.org/wiki/Manchester_code
 /// @see http://ww1.microchip.com/downloads/en/AppNotes/Atmel-9164-Manchester-Coding-Basics_Application-Note.pdf
-uint16_t IRrecv::matchManchester(volatile const uint16_t *data_ptr,
+uint16_t IRrecv::matchManchester(atomic_const_uint16_t *data_ptr,
                                  uint64_t *result_ptr,
                                  const uint16_t remaining,
                                  const uint16_t nbits,
@@ -1972,7 +2010,7 @@ uint16_t IRrecv::matchManchester(volatile const uint16_t *data_ptr,
 /// @see https://en.wikipedia.org/wiki/Manchester_code
 /// @see http://ww1.microchip.com/downloads/en/AppNotes/Atmel-9164-Manchester-Coding-Basics_Application-Note.pdf
 /// @todo Clean up and optimise this. It is just "get it working code" atm.
-uint16_t IRrecv::matchManchesterData(volatile const uint16_t *data_ptr,
+uint16_t IRrecv::matchManchesterData(atomic_const_uint16_t *data_ptr,
                                      uint64_t *result_ptr,
                                      const uint16_t remaining,
                                      const uint16_t nbits,
@@ -1983,7 +2021,6 @@ uint16_t IRrecv::matchManchesterData(volatile const uint16_t *data_ptr,
                                      const bool MSBfirst,
                                      const bool GEThomas) {
   DPRINTLN("DEBUG: Entered matchManchesterData");
-  char tmp[24];
   uint16_t offset = 0;
   uint64_t data = 0;
   uint16_t nr_half_periods = 0;
@@ -2024,10 +2061,10 @@ uint16_t IRrecv::matchManchesterData(volatile const uint16_t *data_ptr,
          nr_half_periods < expected_half_periods) {
     // Get the next entry if we haven't anything existing to process.
     DPRINT("DEBUG: Offset = ");
-    DPRINTLN(itoa(offset,tmp,10));
+    DPRINTLN(offset);
     if (!bank) bank = *(data_ptr + offset++);
     DPRINT("DEBUG: Bank = ");
-    DPRINTLN(itoa(bank * kRawTick,tmp,10));
+    DPRINTLN(bank * kRawTick);
     // Check if we don't have a short interval.
     DPRINTLN("DEBUG: Checking for short interval");
     if (!match(bank, half_period, tolerance, excess)) {
@@ -2037,13 +2074,13 @@ uint16_t IRrecv::matchManchesterData(volatile const uint16_t *data_ptr,
     // We've succeeded in matching half a period, so count it.
     nr_half_periods++;
     DPRINT("DEBUG: Half Periods = ");
-    DPRINTLN(itoa(nr_half_periods,tmp,10));
+    DPRINTLN(nr_half_periods);
     // We've now used up our bank, so refill it with the next item, unless we
     // are at the end of the capture buffer.
     // If we are assume a single half period of "space".
     if (offset < remaining) {
       DPRINT("DEBUG: Offset = ");
-      DPRINTLN(itoa(offset,tmp,10));
+      DPRINTLN(offset);
       bank = *(data_ptr + offset++);
     } else if (offset == remaining) {
       bank = raw_half_period;
@@ -2051,7 +2088,7 @@ uint16_t IRrecv::matchManchesterData(volatile const uint16_t *data_ptr,
       return 0;  // We are out of buffer, so abort!
     }
     DPRINT("DEBUG: Bank = ");
-    DPRINTLN(itoa(bank * kRawTick,tmp,10));
+    DPRINTLN(bank * kRawTick);
 
     // Shift the data along and add our new bit.
     DPRINT("DEBUG: Adding bit: ");
@@ -2093,73 +2130,35 @@ uint16_t IRrecv::matchManchesterData(volatile const uint16_t *data_ptr,
 }
 
 
-/**********************************************************************************************************************
- * Interrupt Service Routine - Called every 50 us
- *
- * Duration in ticks of 50 us of alternating SPACE, MARK are recorded in irparams.rawbuf array.
- * 'rawlen' counts the number of entries recorded so far.
- * First entry is the SPACE between transmissions.
- *
- * As soon as one SPACE entry gets longer than RECORD_GAP_TICKS, state switches to STOP (frame received). Timing of SPACE continues.
- * A call of resume() switches from STOP to IDLE.
- * As soon as first MARK arrives in IDLE, gap width is recorded and new logging starts.
- *
- * With digitalRead and Feedback LED
- * 15 pushs, 1 in, 1 eor before start of code = 2 us @16MHz + * 7.2 us computation time (6us idle time) + * pop + reti = 2.25 us @16MHz => 10.3 to 11.5 us @16MHz
- * With portInputRegister and mask and Feedback LED code commented
- * 9 pushs, 1 in, 1 eor before start of code = 1.25 us @16MHz + * 2.25 us computation time + * pop + reti = 1.5 us @16MHz => 5 us @16MHz
- * => Minimal CPU frequency is 4 MHz
- *
- **********************************************************************************************************************/
- /*
- * Activate this line if your receiver has an external output driver transistor / "inverted" output
- */
- //#define IR_INPUT_IS_ACTIVE_HIGH
 #if defined(IR_INPUT_IS_ACTIVE_HIGH)
-// IR detector output is active high
-#define INPUT_MARK   1 ///< Sensor output for a mark ("flash")
+#define INPUT_MARK   1
 #else
-// IR detector output is active low
-#define INPUT_MARK   0 ///< Sensor output for a mark ("flash")
+#define INPUT_MARK   0
 #endif
 
-// current time in us
 static float        ir_now = 0;
-// last value of the IR detector
 static uint_fast8_t ir_old = 0;
-// start time of the condition
 static float        ir_start = 0;
 
 void IR_ISR(float period_us) {
-  ir_now += period_us; // timer is supposed to be running at 50us ?
+  ir_now += period_us;
   if (params.rcvstate == kStopState) return;
   uint_fast8_t tIRInputLevel = (uint_fast8_t)digitalReadFast(params.recvpin);
   uint32_t time_since_last_change;
-  // check if timeout is reached and stop recieving 
   if (ir_now < ir_start)
-      time_since_last_change = (UINT32_MAX - ir_start + ir_now);
-    else
-      time_since_last_change = (ir_now - ir_start);
+    time_since_last_change = (UINT32_MAX - ir_start + ir_now);
+  else
+    time_since_last_change = (ir_now - ir_start);
 
-  // Timeout is in mS 
-  if((time_since_last_change/1000) >= params.timeout && params.rawlen) // timed out
-  {
-	    params.rcvstate = kStopState;
-      return;
+  if ((time_since_last_change / 1000) >= params.timeout && params.rawlen) {
+    params.rcvstate = kStopState;
+    return;
   }
 
-  if (tIRInputLevel == ir_old)
-    return;
+  if (tIRInputLevel == ir_old) return;
 
   ir_old = tIRInputLevel;
-  // Grab a local copy of rawlen to reduce instructions used in IRAM.
-  // This is an ugly premature optimisation code-wise, but we do everything we
-  // can to save IRAM.
-  // It seems referencing the value via the structure uses more instructions.
-  // Less instructions means faster and less IRAM used.
-  // N.B. It saves about 13 bytes of IRAM.
   uint16_t rawlen = params.rawlen;
-
   if (rawlen >= params.bufsize) {
     params.overflow = true;
     params.rcvstate = kStopState;
@@ -2169,143 +2168,20 @@ void IR_ISR(float period_us) {
   if (params.rcvstate == kIdleState) {
     params.rcvstate = kMarkState;
     params.rawbuf[rawlen] = 1;
-  }
-  else {
-    // buffer stores in units of 2uS for some reason?
-    params.rawbuf[rawlen] = time_since_last_change/ kRawTick;
+  } else {
+    params.rawbuf[rawlen] = time_since_last_change / kRawTick;
   }
   params.rawlen++;
-
   ir_start = ir_now;
-}
- //#define _IR_MEASURE_TIMING
- //#define _IR_TIMING_TEST_PIN 7 // do not forget to execute: "pinModeFast(_IR_TIMING_TEST_PIN, OUTPUT);" if activated by line above
-#if defined(TIMER_INTR_NAME)
-ISR(TIMER_INTR_NAME) // for ISR definitions
-#else
-void IR_ISRqq() // for functions definitions which are called by separate (board specific) ISR
-#endif
-{
-#if defined(_IR_MEASURE_TIMING) && defined(_IR_TIMING_TEST_PIN)
-	digitalWriteFast(_IR_TIMING_TEST_PIN, HIGH); // 2 clock cycles
-#endif
-// 7 - 8.5 us for ISR body (without pushes and pops) for ATmega328 @16MHz
-
-	//TIMER_RESET_INTR_PENDING;// reset timer interrupt flag if required (currently only for Teensy and ATmega4809)
-
-// Read if IR Receiver -> SPACE [xmt LED off] or a MARK [xmt LED on]
-#if defined(__AVR__)
-	uint8_t tIRInputLevel = *params.IRReceivePinPortInputRegister & params.IRReceivePinMask;
-#else
-	uint_fast8_t tIRInputLevel = (uint_fast8_t)digitalReadFast(params.recvpin);
-#endif
-
-	/*
-	 * Increase TickCounter and clip it at maximum 0xFFFF / 3.2 seconds at 50 us ticks
-	 */
-	if (params.timer < UINT16_MAX) {
-		params.timer++;  // One more 50uS tick
-	}
-#define MY_TIMER_MULT_FOR_BUFF 25
-	/*
-	 * Due to a ESP32 compiler bug https://github.com/espressif/esp-idf/issues/1552 no switch statements are possible for ESP32
-	 * So we change the code to if / else if
-	 */
-	 //    switch (params.rcvstate) {
-	 //......................................................................
-	if (params.rcvstate == kIdleState) { // In the middle of a gap or just resumed (and maybe in the middle of a transmission
-		if (tIRInputLevel == INPUT_MARK) {
-			// check if we did not start in the middle of a transmission by checking the minimum length of leading space
-			if (params.timer > RECORD_GAP_TICKS) {
-				// Gap just ended; Record gap duration + start recording transmission
-				// Initialize all state machine variables
-#if defined(_IR_MEASURE_TIMING) && defined(_IR_TIMING_TEST_PIN)
-//                digitalWriteFast(_IR_TIMING_TEST_PIN, HIGH); // 2 clock cycles
-#endif
-				params.overflow = false;
-				params.rawbuf[0] = params.timer*MY_TIMER_MULT_FOR_BUFF;
-				params.rawlen = 1;
-				params.rcvstate = kMarkState;
-			} // otherwise stay in idle state
-			params.timer = 0;// reset counter in both cases
-		}
-
-	}
-	else if (params.rcvstate == kMarkState) {  // Timing mark
-		if (tIRInputLevel != INPUT_MARK) {   // Mark ended; Record time
-#if defined(_IR_MEASURE_TIMING) && defined(_IR_TIMING_TEST_PIN)
-//            digitalWriteFast(_IR_TIMING_TEST_PIN, HIGH); // 2 clock cycles
-#endif
-			params.rawbuf[params.rawlen++] = params.timer*MY_TIMER_MULT_FOR_BUFF;
-			params.rcvstate = kSpaceState;
-			params.timer = 0;
-		}
-
-	}
-	else if (params.rcvstate == kSpaceState) {  // Timing space
-		if (tIRInputLevel == INPUT_MARK) {  // Space just ended; Record time
-			if (params.rawlen >=params.bufsize) // RAW_BUFFER_LENGTH) 
-			{
-				// Flag up a read overflow; Stop the state machine
-				params.overflow = true;
-				params.rcvstate = kStopState;
-			}
-			else {
-#if defined(_IR_MEASURE_TIMING) && defined(_IR_TIMING_TEST_PIN)
-				//                digitalWriteFast(_IR_TIMING_TEST_PIN, HIGH); // 2 clock cycles
-#endif
-				params.rawbuf[params.rawlen++] = params.timer*MY_TIMER_MULT_FOR_BUFF;
-				params.rcvstate = kMarkState;
-			}
-			params.timer = 0;
-
-		}
-		else if (params.timer > RECORD_GAP_TICKS) {
-			/*
-			 * Current code is ready for processing!
-			 * We received a long space, which indicates gap between codes.
-			 * Switch to kStopState
-			 * Don't reset timer; keep counting width of next leading space
-			 */
-			params.rcvstate = kStopState;
-		}
-	}
-	else if (params.rcvstate == kStopState) {
-		/*
-		 * Complete command received
-		 * stay here until resume() is called, which switches state to kIdleState
-		 */
-#if defined(_IR_MEASURE_TIMING) && defined(_IR_TIMING_TEST_PIN)
-		 //        digitalWriteFast(_IR_TIMING_TEST_PIN, HIGH); // 2 clock cycles
-#endif
-		if (tIRInputLevel == INPUT_MARK) {
-			// Reset gap timer, to prepare for detection if we are in the middle of a transmission after call of resume()
-			params.timer = 0;
-		}
-	}
-
-#if !defined(NO_LED_FEEDBACK_CODE)
-///	if (FeedbackLEDControl.LedFeedbackEnabled == LED_FEEDBACK_ENABLED_FOR_RECEIVE) {
-///		setFeedbackLED(tIRInputLevel == INPUT_MARK);
-//	}
-#endif
-
-#ifdef _IR_MEASURE_TIMING
-	digitalWriteFast(_IR_TIMING_TEST_PIN, LOW); // 2 clock cycles
-#endif
 }
 
 
 #if UNIT_TEST
 /// Unit test helper to get access to the params structure.
-volatile irparams_t *IRrecv::_getParamsPtr(void) {
+atomic_irparams_t *IRrecv::_getParamsPtr(void) {
   return &params;
 }
 #endif  // UNIT_TEST
 // End of IRrecv class -------------------
 
-
-
 #endif
-
-

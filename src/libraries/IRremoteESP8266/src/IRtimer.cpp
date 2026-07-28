@@ -5,15 +5,6 @@
 #include "String.h"
 #endif
 
-
-//#if PLATFORM_BEKEN || PLATFORM_REALTEK || PLATFORM_BL602 || PLATFORM_LN882H
-//TODO
-extern unsigned long micros(void);
-extern unsigned long millis(void);
-
-//#endif
-
-
 #ifdef UNIT_TEST
 // Used to help simulate elapsed time in unit tests.
 uint32_t _IRtimer_unittest_now = 0;

@@ -6,7 +6,7 @@
 /// Vestel added by Erdem U. Altinyurt
 
 #include "ir_Vestel.h"
-//// #include <algorithm>
+// #include <algorithm>
 #ifndef UNIT_TEST
 #include "String.h"
 #endif
@@ -15,8 +15,9 @@
 #include "IRsend.h"
 #include "IRtext.h"
 #include "IRutils.h"
-#include "ir_Haier.h"
 #include "minmax.h"
+#include "ir_Haier.h"
+
 // Ref:
 //   None. Totally reverse engineered.
 

@@ -45,9 +45,9 @@
 
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
-//#ifdef ARDUINO
+#ifdef ARDUINO
 #include "String.h"
-//#endif
+#endif
 #include "IRremoteESP8266.h"
 #include "IRsend.h"
 #ifdef UNIT_TEST
@@ -246,7 +246,7 @@ class IRMideaAC {
   static stdAc::opmode_t toCommonMode(const uint8_t mode);
   static stdAc::fanspeed_t toCommonFanSpeed(const uint8_t speed);
   stdAc::state_t toCommon(const stdAc::state_t *prev = NULL);
-  arduino::String toString(void);
+  String toString(void);
 #ifndef UNIT_TEST
 
  private:
