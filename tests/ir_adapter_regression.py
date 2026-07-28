@@ -148,7 +148,7 @@ def source_contracts(s: dict[str, str]) -> None:
              "IR_ReceiverStorageReady()", "IR_SyncReceiverInput(false)",
              "gIRDriverReady = true")
     deinit = block(d, 'extern "C" void DRV_IR_Deinit')
-    contains(deinit, "gIRDriverReady = false", "sender->shutdown()", "delete sender",
+    contains(deinit, "gIRDriverReady = false", "sender->stopAndReleaseResources()", "delete sender",
              "delete receiver", "HAL_HWTimerDeinit(ir_chan)", "ir_chan = -1")
     run = block(d, 'extern "C" void DRV_IR_RunFrame')
     contains(run, "char logText[256] = { 0 }", "const bool stateResult",

@@ -512,7 +512,7 @@ public:
 		lastCarrierDuty = -1;
 	}
 
-	void shutdown() {
+	void stopAndReleaseResources() {
 		cancelActiveSend();
 	}
 
@@ -1286,7 +1286,7 @@ extern "C" void DRV_IR_Deinit(void) {
 	if (pIRsend) {
 		myIRsend *sender = pIRsend;
 		pIRsend = NULL;
-		sender->shutdown();
+		sender->stopAndReleaseResources();
 		delete sender;
 	}
 	if (ourReceiver) {
