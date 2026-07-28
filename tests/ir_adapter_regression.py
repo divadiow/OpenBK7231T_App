@@ -17,6 +17,9 @@ FILES = {
     "bl602": ROOT / "src/hal/bl602/hal_pins_bl602.c",
     "ln": ROOT / "src/hal/ln882h/hal_pins_ln882h.c",
     "realtek": ROOT / "src/hal/realtek/hal_pins_realtek.c",
+    "rtl8720e": ROOT / "src/hal/realtek/rtl8720e/hal_pins_rtl8720e.c",
+    "main": ROOT / "src/driver/drv_main.c",
+    "workflow": ROOT / ".github/workflows/workflow.yaml",
 }
 
 
@@ -147,6 +150,69 @@ int main() {{
         subprocess.run([str(exe)], check=True)
 
 
+def protocol_boundary_tests(driver: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    validator = block(driver, "static bool IR_ValidateClassicFields")
+    harness = f'''#include <cassert>\n#include <cstdint>\n
+enum decode_type_t {{
+  UNKNOWN = -1, RC5 = 1, RC6, NEC, PANASONIC, JVC, SAMSUNG, LG, RC5X
+}};\n
+{validator}\n
+int main() {{
+  assert(IR_ValidateClassicFields(decode_type_t::NEC, 0xFFFFU, 0xFFU));
+  assert(!IR_ValidateClassicFields(decode_type_t::NEC, 0xFFFFU, 0x100U));
+  assert(IR_ValidateClassicFields(decode_type_t::LG, 0xFFU, 0xFFFFU));
+  assert(!IR_ValidateClassicFields(decode_type_t::LG, 0x100U, 0xFFFFU));
+  assert(IR_ValidateClassicFields(decode_type_t::RC5, 0x1FU, 0x3FU));
+  assert(!IR_ValidateClassicFields(decode_type_t::RC5, 0x20U, 0x3FU));
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-protocol-test-") as directory:
+        src = Path(directory) / "protocol.cpp"
+        exe = Path(directory) / "protocol"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def pwm_policy_tests(realtek: str, rtl8720e: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    allocator = block(realtek, "static int HAL_RTK_GetFreeChannel")
+    shared_timer = block(realtek, "static bool Realtek_SharesPWMPeriodTimer")
+    class_mask = block(rtl8720e, "static uint32_t RTL8720E_PWMClassToChannelMask")
+    harness = f'''#include <cassert>\n#include <cstdint>\n
+#define OBK_REALTEK_PWM_CHANNEL_COUNT 8
+static int g_active_pwm = 0;\n
+{allocator}\n
+{shared_timer}\n
+{class_mask}\n
+int main() {{
+  assert(RTL8720E_PWMClassToChannelMask(0U) == 0xFFU);
+  assert(RTL8720E_PWMClassToChannelMask(1U) == 0x0FU);
+  assert(RTL8720E_PWMClassToChannelMask(2U) == 0xF0U);
+  assert(RTL8720E_PWMClassToChannelMask(0xFFFFFFFFU) == 0U);
+
+  assert(HAL_RTK_GetFreeChannel(0xF0U) == 4);
+  assert(HAL_RTK_GetFreeChannel(0x0FU) == 0);
+  g_active_pwm = 0xFF;
+  assert(HAL_RTK_GetFreeChannel(0xFFU) == -1);
+  assert(HAL_RTK_GetFreeChannel(0U) == -1);
+
+  // RTL8720D's SDK shares one global prescaler across both timer pointers.
+  assert(Realtek_SharesPWMPeriodTimer(0, 1));
+  assert(Realtek_SharesPWMPeriodTimer(0, 100));
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-pwm-test-") as directory:
+        src = Path(directory) / "pwm.cpp"
+        exe = Path(directory) / "pwm"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
 def source_contracts(s: dict[str, str]) -> None:
     d = s["driver"]
     contains(block(d, "bool beginSendTransaction()"),
@@ -187,9 +253,16 @@ def source_contracts(s: dict[str, str]) -> None:
              "IR_IsValidArgoPayload", "sendArgoWREM3",
              "getStagedItemCount() > stagedBefore", "setTransactionRepeats")
     classic = block(d, "static commandResult_t IR_SendClassicCommand")
-    contains(classic, "IR_ValidateClassicFields", "parseBoundedHex(fields[1]",
+    contains(classic, "IR_ParseProtocol(fields[0])", "IR_ValidateClassicFields",
+             "parseBoundedHex(fields[1]",
              "parseBoundedHex(fields[2]", "sendRC5", "sendRC6", "sendNEC",
              "sendPanasonic", "sendJVC", "sendSAMSUNG", "sendLG")
+    contains(comma, "IR_ParseProtocol(args)")
+    protocol_parser = block(d, "static decode_type_t IR_ParseProtocol")
+    contains(protocol_parser, "parseBoundedDecimal", "kLastDecodeType",
+             "IR_EqualsIgnoreCase", "typeToString")
+    require("strToDecodeType" not in classic + comma,
+            "adapter commands still use the permissive upstream protocol parser")
     contains(block(d, "static bool IR_ProtocolTxTimingSupported"), "RCMM", "LEGOPF")
 
     init = block(d, 'extern "C" void DRV_IR_Init')
@@ -202,6 +275,7 @@ def source_contracts(s: dict[str, str]) -> None:
              "delete receiver", "HAL_HWTimerDeinit(ir_chan)", "ir_chan = -1")
     run = block(d, 'extern "C" void DRV_IR_RunFrame')
     contains(run, "char logText[256] = { 0 }", "const bool stateResult",
+             "const bool acStateResult", "IR_ProtocolUsesACState",
              "if (eventType)", "IR_SyncReceiverInput(true)", "* ir_periodus")
     contains(block(d, 'extern "C" commandResult_t IR_Enable'),
              "parseBoundedDecimal(words[1], 0, 1", "protocol masks are not implemented")
@@ -220,25 +294,41 @@ def source_contracts(s: dict[str, str]) -> None:
              "INPUT_PULLDOWN: HAL_PIN_Setup_Input_Pulldown")
     contains(s["tiny"], "TinyIR_NEC_IsReady", "DRV_IR_IsReady()",
              "gTinyIRDeferredStart", "if(ir_chan < 0)")
-    contains(s["bl602"], "g_bl602_pwm_owner", "g_bl602_pwm_owner[pwm] != index",
+    contains(s["bl602"], "g_bl602_active_pwm", "g_bl602_ir_pwm_pin",
+             "HAL_IR_PWM_Reserve", "HAL_IR_PWM_Release",
              "PWM_SW_Force_Value", "PWM_SW_Mode", "HAL_IR_PWM_IsActive")
+    require("g_bl602_pwm_owner" not in s["bl602"],
+            "ordinary BL602 PWM remains subject to the removed owner lock")
     contains(s["ln"], "const uint8_t channel", "BIT_CLEAR(g_active_pwm, channel)",
              "if(freecha >= PWM_CH_MAX)",
              "LL_PWM_Compare_Set(pin->pwm_cha, g_pwm_load[pin->pwm_cha])",
              "LL_PWM_Compare_Set(pin->pwm_cha, 0)")
     allocator = block(s["realtek"], "static int HAL_RTK_GetFreeChannel")
-    contains(allocator, "OBK_REALTEK_PWM_CHANNEL_COUNT", "return -1")
+    contains(allocator, "OBK_REALTEK_PWM_CHANNEL_COUNT", "allowedChannels",
+             "return -1")
     contains(s["realtek"], "if(pin->gpio == NULL)", "if(pin->pwm == NULL)",
              "HAL_IR_PWM_Reserve", "Realtek_SharesPWMPeriodTimer",
-             "Realtek_HasOtherPWMOwner", "g_realtek_ir_pwm_pin")
+             "Realtek_HasOtherPWMOwner", "g_realtek_ir_pwm_pin",
+             "RTL8720E_GetPWMChannelMask")
+    require("pwmout_pin2chan(g_pins[left].pin)" not in s["realtek"],
+            "RTL8720D cross-bank coexistence returned")
+    contains(s["rtl8720e"], "RTL8720E_PWMClassToChannelMask",
+             "RTL8720E_GetPWMChannelMask", "pwmout_pin2chan",
+             "return RTL8720E_GetPWMChannelMask(index) != 0U")
     require("Realtek IRQ allocation failed" not in s["realtek"],
             "unrelated Realtek IRQ hardening returned")
+    contains(s["main"], "DRV_IR_IsReady()", "DRV_IR_IsDeferred()",
+             "Drv IR failed to start.")
+    contains(s["workflow"], "IR Adapter Regression Tests",
+             "python3 tests/ir_adapter_regression.py")
 
 
 def main() -> None:
     sources = {name: path.read_text() for name, path in FILES.items()}
     parser_tests(sources["driver"])
     receive_clock_tests(sources["recv"])
+    protocol_boundary_tests(sources["driver"])
+    pwm_policy_tests(sources["realtek"], sources["rtl8720e"])
     source_contracts(sources)
     print("IR adapter regression tests passed")
 
