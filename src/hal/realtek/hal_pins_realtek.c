@@ -21,10 +21,15 @@ static int g_active_pwm = 0b0;
 // RTL8720E/RTL8721DA currently expose eight application-selectable PWM
 // channels. Return a signed result so exhaustion cannot wrap to channel 255.
 #define OBK_REALTEK_PWM_CHANNEL_COUNT 8
-static int HAL_RTK_GetFreeChannel(void)
+#if PLATFORM_RTL8720E
+extern uint32_t RTL8720E_GetPWMChannelMask(int index);
+#endif
+
+static int HAL_RTK_GetFreeChannel(uint32_t allowedChannels)
 {
 	for (int channel = 0; channel < OBK_REALTEK_PWM_CHANNEL_COUNT; channel++) {
-		if (((g_active_pwm >> channel) & 1) == 0) {
+		if ((allowedChannels & (1U << channel)) &&
+			((g_active_pwm >> channel) & 1) == 0) {
 			g_active_pwm |= 1 << channel;
 			return channel;
 		}
@@ -42,22 +47,15 @@ static void HAL_RTK_FreeChannel(int channel)
 
 #if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
 // Realtek-new drives all PWM compare channels from one period timer. RTL8720D
-// has separate low-power and high-speed timer banks. IR must not silently
-// retime a light or other PWM output sharing its period timer.
+// exposes two timer pointers, but its SDK uses one global prescaler for both.
+// IR must therefore not coexist with any ordinary PWM on these targets.
 static int g_realtek_ir_pwm_pin = -1;
 
 static bool Realtek_SharesPWMPeriodTimer(const int left, const int right)
 {
-#if PLATFORM_RTL8720D
-	const uint32_t leftChannel = pwmout_pin2chan(g_pins[left].pin);
-	const uint32_t rightChannel = pwmout_pin2chan(g_pins[right].pin);
-	// RTL8720D encodes the high-speed timer bank in channel bit 7.
-	return ((leftChannel ^ rightChannel) & 0x80U) == 0;
-#else
 	(void)left;
 	(void)right;
 	return true;
-#endif
 }
 
 static bool Realtek_HasOtherPWMOwner(const int index)
@@ -219,11 +217,15 @@ void HAL_PIN_PWM_Start(int index, int freq)
 	}
 	memset(pin->pwm, 0, sizeof(pwmout_t));
 #if PLATFORM_REALTEK_NEW
-	const int channel = HAL_RTK_GetFreeChannel();
+	uint32_t allowedChannels = (1U << OBK_REALTEK_PWM_CHANNEL_COUNT) - 1U;
+#if PLATFORM_RTL8720E
+	allowedChannels = RTL8720E_GetPWMChannelMask(index);
+#endif
+	const int channel = HAL_RTK_GetFreeChannel(allowedChannels);
 	if(channel < 0)
 	{
 		ADDLOG_ERROR(LOG_FEATURE_DRV,
-			"Realtek PWM channels exhausted on pin %d", index);
+			"Realtek PWM has no compatible free channel on pin %d", index);
 		os_free(pin->pwm);
 		pin->pwm = NULL;
 		return;

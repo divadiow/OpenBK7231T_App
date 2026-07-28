@@ -11,9 +11,10 @@
 #include <bl602_pwm.h>
 
 // BL602 GPIOs are physically routed to one of five PWM channels in a repeating
-// pattern. Track the owning pin so a second PWM user cannot silently reconfigure
-// a channel that is already active on another pin.
-static int8_t g_bl602_pwm_owner[5] = { -1, -1, -1, -1, -1 };
+// pattern. Preserve the established ordinary-PWM alias behaviour, but reserve
+// an active IR channel so another pin cannot retime it during a transmission.
+static uint8_t g_bl602_active_pwm = 0;
+static int8_t g_bl602_ir_pwm_pin = -1;
 
 int BL_FindPWMForPin(int index){
 	return index % 5;
@@ -54,20 +55,22 @@ void HAL_PIN_Setup_Output(int index) {
 
 void HAL_PIN_PWM_Stop(int index) {
 	const int pwm = BL_FindPWMForPin(index);
-	if (pwm < 0 || pwm >= 5 || g_bl602_pwm_owner[pwm] != index) return;
+	if (pwm < 0 || pwm >= 5) return;
+	if (g_bl602_ir_pwm_pin >= 0 && g_bl602_ir_pwm_pin != index &&
+		BL_FindPWMForPin(g_bl602_ir_pwm_pin) == pwm) return;
 	PWM_SW_Mode((PWM_CH_ID_Type)pwm, DISABLE);
 	bl_pwm_stop((uint8_t)pwm);
-	g_bl602_pwm_owner[pwm] = -1;
+	g_bl602_active_pwm &= (uint8_t)~(1U << pwm);
 }
 
 void HAL_PIN_PWM_Start(int index, int freq) {
 	const int pwm = BL_FindPWMForPin(index);
 	if (pwm < 0 || pwm >= 5) return;
-	if (g_bl602_pwm_owner[pwm] >= 0 &&
-		g_bl602_pwm_owner[pwm] != index) {
+	if (g_bl602_ir_pwm_pin >= 0 && g_bl602_ir_pwm_pin != index &&
+		BL_FindPWMForPin(g_bl602_ir_pwm_pin) == pwm) {
 		ADDLOG_ERROR(LOG_FEATURE_DRV,
-			"BL602 PWM channel %d already belongs to pin %d; pin %d rejected",
-			pwm, g_bl602_pwm_owner[pwm], index);
+			"BL602 PWM channel %d is reserved by IR pin %d; pin %d rejected",
+			pwm, g_bl602_ir_pwm_pin, index);
 		return;
 	}
 
@@ -81,17 +84,19 @@ void HAL_PIN_PWM_Start(int index, int freq) {
 	if (bl_pwm_init((uint8_t)pwm, (uint8_t)index, (uint32_t)freq) != 0 ||
 		bl_pwm_start((uint8_t)pwm) != 0) {
 		bl_pwm_stop((uint8_t)pwm);
-		g_bl602_pwm_owner[pwm] = -1;
+		g_bl602_active_pwm &= (uint8_t)~(1U << pwm);
 		ADDLOG_ERROR(LOG_FEATURE_DRV,
 			"BL602 PWM start failed on pin %d channel %d", index, pwm);
 		return;
 	}
-	g_bl602_pwm_owner[pwm] = (int8_t)index;
+	g_bl602_active_pwm |= (uint8_t)(1U << pwm);
 }
 
 void HAL_PIN_PWM_Update(int index, float value) {
 	const int pwm = BL_FindPWMForPin(index);
-	if (pwm < 0 || pwm >= 5 || g_bl602_pwm_owner[pwm] != index) return;
+	if (pwm < 0 || pwm >= 5) return;
+	if (g_bl602_ir_pwm_pin >= 0 && g_bl602_ir_pwm_pin != index &&
+		BL_FindPWMForPin(g_bl602_ir_pwm_pin) == pwm) return;
 	if(value < 0) value = 0;
 	if(value > 100) value = 100;
 	/* Ordinary PWM updates must leave any prior IR force mode. */
@@ -101,7 +106,8 @@ void HAL_PIN_PWM_Update(int index, float value) {
 
 void HAL_IR_PWM_Update(int index, float value) {
 	const int pwm = BL_FindPWMForPin(index);
-	if (pwm < 0 || pwm >= 5 || g_bl602_pwm_owner[pwm] != index) return;
+	if (pwm < 0 || pwm >= 5 || g_bl602_ir_pwm_pin != index ||
+		(g_bl602_active_pwm & (1U << pwm)) == 0) return;
 	const PWM_CH_ID_Type channel = (PWM_CH_ID_Type)pwm;
 	if (value <= 0.0f) {
 		PWM_SW_Force_Value(channel, 0);
@@ -117,9 +123,27 @@ void HAL_IR_PWM_Update(int index, float value) {
 	bl_pwm_set_duty((uint8_t)pwm, value);
 }
 
+bool HAL_IR_PWM_Reserve(int index) {
+	const int pwm = BL_FindPWMForPin(index);
+	if (pwm < 0 || pwm >= 5) return false;
+	if (g_bl602_ir_pwm_pin >= 0) return g_bl602_ir_pwm_pin == index;
+	if (g_bl602_active_pwm & (1U << pwm)) {
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"IR pin %d cannot claim active BL602 PWM channel %d", index, pwm);
+		return false;
+	}
+	g_bl602_ir_pwm_pin = (int8_t)index;
+	return true;
+}
+
+void HAL_IR_PWM_Release(int index) {
+	if (g_bl602_ir_pwm_pin == index) g_bl602_ir_pwm_pin = -1;
+}
+
 bool HAL_IR_PWM_IsActive(int index) {
 	const int pwm = BL_FindPWMForPin(index);
-	return pwm >= 0 && pwm < 5 && g_bl602_pwm_owner[pwm] == index;
+	return pwm >= 0 && pwm < 5 && g_bl602_ir_pwm_pin == index &&
+		(g_bl602_active_pwm & (1U << pwm)) != 0;
 }
 
 unsigned int HAL_GetGPIOPin(int index) {
