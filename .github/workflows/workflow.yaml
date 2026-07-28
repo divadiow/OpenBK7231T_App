@@ -12,6 +12,15 @@ env:
   APP_NAME: ${{ github.event.repository.name }}
 
 jobs:
+  ir_adapter_regression:
+    name: IR Adapter Regression Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v5
+      - name: Run focused IR adapter tests
+        run: python3 tests/ir_adapter_regression.py
+
   refs:
     name: Prepare CI Environment
     runs-on: ubuntu-22.04
