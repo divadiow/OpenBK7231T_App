@@ -379,7 +379,9 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 
 	timeMS = Tokenizer_GetArgInteger(0);
 
+#if !PLATFORM_ECR6600
 	HAL_DisconnectFromWifi();
+#endif
 #if defined(PLATFORM_BEKEN) && !defined(PLATFORM_BEKEN_NEW)
 	// It requires a define in SDK file:
 	// OpenBK7231T\platforms\bk7231t\bk7231t_os\beken378\func\include\manual_ps_pub.h
@@ -420,22 +422,14 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	//unsigned int sleep_time;
-	//if(timeMS < 1000)
-	//{
-	//	sleep_time = 1;
-	//}
-	//else
-	//{
-	//	sleep_time = (timeMS + 1000 - 1) / 1000;
-	//}
-	// not working
-	//psm_set_deep_sleep(sleep_time);
-	// not working
-	//psm_enter_sleep(DEEP_SLEEP);
-	// this works fine, but wifi will not receive anything after waking up, and only full power cycle will fix it up.
-	drv_rtc_set_alarm_relative(timeMS * 1000 * 33);
-	psm_enter_deep_sleep();
+	// The SDK's GSLP implementation enters deep sleep while the STA is still active.
+	// wifi_disconnect() is asynchronous on ECR6600, so do not race it against
+	// the PSM transition. Use the public wrapper so the SDK performs its complete
+	// deep-sleep preparation, including recording RST_TYPE_WAKEUP.
+	unsigned int rtcTicks = (unsigned int)(((unsigned long long)timeMS * 32768ULL) %
+		(86400ULL * 32768ULL));
+	drv_rtc_set_alarm_relative(rtcTicks);
+	psm_enter_sleep(DEEP_SLEEP);
 #elif PLATFORM_GD32VW553
 	delay_ms(50);
 	wifi_netlink_wifi_close();
