@@ -8,6 +8,13 @@
 
 #include "bl_gpio.h"
 #include <bl_pwm.h>
+#include <bl602_pwm.h>
+
+// BL602 GPIOs are physically routed to one of five PWM channels in a repeating
+// pattern. Preserve the established ordinary-PWM alias behaviour, but reserve
+// an active IR channel so another pin cannot retime it during a transmission.
+static uint8_t g_bl602_active_pwm = 0;
+static int8_t g_bl602_ir_pwm_pin = -1;
 
 int BL_FindPWMForPin(int index){
 	return index % 5;
@@ -47,54 +54,96 @@ void HAL_PIN_Setup_Output(int index) {
 }
 
 void HAL_PIN_PWM_Stop(int index) {
-	int pwm;
-
-	pwm = BL_FindPWMForPin(index);
-
-	if(pwm == -1) {
-		return;
-	}
-	bl_pwm_stop(pwm);
+	const int pwm = BL_FindPWMForPin(index);
+	if (pwm < 0 || pwm >= 5) return;
+	if (g_bl602_ir_pwm_pin >= 0 && g_bl602_ir_pwm_pin != index &&
+		BL_FindPWMForPin(g_bl602_ir_pwm_pin) == pwm) return;
+	PWM_SW_Mode((PWM_CH_ID_Type)pwm, DISABLE);
+	bl_pwm_stop((uint8_t)pwm);
+	g_bl602_active_pwm &= (uint8_t)~(1U << pwm);
 }
 
 void HAL_PIN_PWM_Start(int index, int freq) {
-	int pwm;
-
-	pwm = BL_FindPWMForPin(index);
-
-	if(pwm == -1) {
+	const int pwm = BL_FindPWMForPin(index);
+	if (pwm < 0 || pwm >= 5) return;
+	if (g_bl602_ir_pwm_pin >= 0 && g_bl602_ir_pwm_pin != index &&
+		BL_FindPWMForPin(g_bl602_ir_pwm_pin) == pwm) {
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"BL602 PWM channel %d is reserved by IR pin %d; pin %d rejected",
+			pwm, g_bl602_ir_pwm_pin, index);
 		return;
 	}
 
 	//addLogAdv(LOG_INFO, LOG_FEATURE_MAIN,"HAL_PIN_PWM_Start: pin %i chose pwm %i",index,pwm);
     //  Frequency must be between 2000 and 800000
 	if(freq < 2000) freq = 2000;
-	bl_pwm_init(pwm, index, freq);
-	bl_pwm_start(pwm);
-
-}
-void HAL_PIN_PWM_Update(int index, float value) {
-	int pwm;
-	float duty;
-
-	pwm = BL_FindPWMForPin(index);
-
-	if(pwm == -1) {
+	// IR uses hardware software-force mode for exact static space levels. Clear
+	// it before every ordinary/restarted PWM setup so state cannot leak between
+	// owners or between consecutive IR transmissions.
+	PWM_SW_Mode((PWM_CH_ID_Type)pwm, DISABLE);
+	if (bl_pwm_init((uint8_t)pwm, (uint8_t)index, (uint32_t)freq) != 0 ||
+		bl_pwm_start((uint8_t)pwm) != 0) {
+		bl_pwm_stop((uint8_t)pwm);
+		g_bl602_active_pwm &= (uint8_t)~(1U << pwm);
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"BL602 PWM start failed on pin %d channel %d", index, pwm);
 		return;
 	}
-	if(value<0)
-		value = 0;
-	if(value>100)
-		value = 100;
-	duty = value;
-/*duty is the PWM Duty Cycle (0 to 100). When duty=25, it means that in every PWM Cycle...
---> PWM Ouput is 1 (High) for the initial 25% of the PWM Cycle
---> Followed by PWM Output 0 (Low) for the remaining 75% of the PWM Cycle
-*/
+	g_bl602_active_pwm |= (uint8_t)(1U << pwm);
+}
 
-	//addLogAdv(LOG_INFO, LOG_FEATURE_MAIN,"HAL_PIN_PWM_Update: pin %i had pwm %i, set %i",index,pwm,value);
-	bl_pwm_set_duty(pwm, duty);
+void HAL_PIN_PWM_Update(int index, float value) {
+	const int pwm = BL_FindPWMForPin(index);
+	if (pwm < 0 || pwm >= 5) return;
+	if (g_bl602_ir_pwm_pin >= 0 && g_bl602_ir_pwm_pin != index &&
+		BL_FindPWMForPin(g_bl602_ir_pwm_pin) == pwm) return;
+	if(value < 0) value = 0;
+	if(value > 100) value = 100;
+	/* Ordinary PWM updates must leave any prior IR force mode. */
+	PWM_SW_Mode((PWM_CH_ID_Type)pwm, DISABLE);
+	bl_pwm_set_duty((uint8_t)pwm, value);
+}
 
+void HAL_IR_PWM_Update(int index, float value) {
+	const int pwm = BL_FindPWMForPin(index);
+	if (pwm < 0 || pwm >= 5 || g_bl602_ir_pwm_pin != index ||
+		(g_bl602_active_pwm & (1U << pwm)) == 0) return;
+	const PWM_CH_ID_Type channel = (PWM_CH_ID_Type)pwm;
+	if (value <= 0.0f) {
+		PWM_SW_Force_Value(channel, 0);
+		PWM_SW_Mode(channel, ENABLE);
+		return;
+	}
+	if (value >= 100.0f) {
+		PWM_SW_Force_Value(channel, 1);
+		PWM_SW_Mode(channel, ENABLE);
+		return;
+	}
+	PWM_SW_Mode(channel, DISABLE);
+	bl_pwm_set_duty((uint8_t)pwm, value);
+}
+
+bool HAL_IR_PWM_Reserve(int index) {
+	const int pwm = BL_FindPWMForPin(index);
+	if (pwm < 0 || pwm >= 5) return false;
+	if (g_bl602_ir_pwm_pin >= 0) return g_bl602_ir_pwm_pin == index;
+	if (g_bl602_active_pwm & (1U << pwm)) {
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"IR pin %d cannot claim active BL602 PWM channel %d", index, pwm);
+		return false;
+	}
+	g_bl602_ir_pwm_pin = (int8_t)index;
+	return true;
+}
+
+void HAL_IR_PWM_Release(int index) {
+	if (g_bl602_ir_pwm_pin == index) g_bl602_ir_pwm_pin = -1;
+}
+
+bool HAL_IR_PWM_IsActive(int index) {
+	const int pwm = BL_FindPWMForPin(index);
+	return pwm >= 0 && pwm < 5 && g_bl602_ir_pwm_pin == index &&
+		(g_bl602_active_pwm & (1U << pwm)) != 0;
 }
 
 unsigned int HAL_GetGPIOPin(int index) {

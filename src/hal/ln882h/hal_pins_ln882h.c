@@ -428,11 +428,11 @@ void HAL_PIN_PWM_Stop(int index)
 	if(index >= g_numPins) return;
 	lnPinMapping_t* pin = g_pins + index;
 	if(pin->pwm_cha < 0) return;
-	uint8_t chan = pin->pwm_cha;
+	const uint8_t channel = (uint8_t)pin->pwm_cha;
 	pin->pwm_cha = -1;
-	HAL_PWM_Stop(chan);
-	BIT_CLEAR(g_active_pwm, pin->pwm_cha);
-	HAL_SYSCON_FuncIOSet(chan + GPIO_AF_PWM0, pin->pin, 0);
+	HAL_PWM_Stop(channel);
+	BIT_CLEAR(g_active_pwm, channel);
+	HAL_SYSCON_FuncIOSet(channel + GPIO_AF_PWM0, pin->pin, 0);
 }
 
 void HAL_PIN_PWM_Start(int index, int freq)
@@ -468,6 +468,12 @@ void HAL_PIN_PWM_Start(int index, int freq)
 	}
 	uint8_t freecha;
 	for(freecha = 0; freecha < PWM_CH_MAX; freecha++) if(!BIT_CHECK(g_active_pwm, freecha)) break;
+	if(freecha >= PWM_CH_MAX)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"LN8825 PWM channels exhausted on pin %d", index);
+		return;
+	}
 
 	BIT_SET(g_active_pwm, freecha);
 	pin->pwm_cha = freecha;
@@ -552,4 +558,33 @@ void HAL_DetachInterrupt(int pinIndex)
 
 #endif
 
-#endif // PLATFORM_LN882H
+void HAL_IR_PWM_Update(int index, float value)
+{
+	if(index < 0 || index >= g_numPins) return;
+#if PLATFORM_LN8825
+	lnPinMapping_t* pin = g_pins + index;
+	if(pin->pwm_cha < 0 || pin->pwm_cha >= PWM_CH_MAX) return;
+	if(value <= 0.0f) {
+		LL_PWM_Compare_Set(pin->pwm_cha, g_pwm_load[pin->pwm_cha]);
+		return;
+	}
+	if(value >= 100.0f) {
+		LL_PWM_Compare_Set(pin->pwm_cha, 0);
+		return;
+	}
+#endif
+	HAL_PIN_PWM_Update(index, value);
+}
+
+bool HAL_IR_PWM_IsActive(int index)
+{
+	if(index < 0 || index >= g_numPins) return false;
+	const lnPinMapping_t* pin = g_pins + index;
+#if PLATFORM_LN882H
+	return pin->pwm_cha >= 0 && pin->pwm_cha < 6;
+#else
+	return pin->pwm_cha >= 0 && pin->pwm_cha < PWM_CH_MAX;
+#endif
+}
+
+#endif // PLATFORM_LN882H || PLATFORM_LN8825
