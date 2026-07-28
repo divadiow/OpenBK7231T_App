@@ -10,6 +10,7 @@ void DRV_IR_Init();
 void DRV_IR_RunFrame();
 void DRV_IR_Deinit();
 int DRV_IR_IsReady(void);
+int DRV_IR_IsDeferred(void);
 
 #ifdef __cplusplus
 }

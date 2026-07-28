@@ -283,13 +283,13 @@ static bool IR_SyncReceiverInput(const bool restartTimer) {
 extern "C" bool HAL_IR_PWM_IsActive(int index);
 extern "C" void HAL_IR_PWM_Update(int index, float value);
 #endif
-#if PLATFORM_REALTEK
+#if PLATFORM_BL602 || PLATFORM_REALTEK
 extern "C" bool HAL_IR_PWM_Reserve(int index);
 extern "C" void HAL_IR_PWM_Release(int index);
 #endif
 
 static bool IR_PlatformPWMReserve(const int index) {
-#if PLATFORM_REALTEK
+#if PLATFORM_BL602 || PLATFORM_REALTEK
 	return HAL_IR_PWM_Reserve(index);
 #else
 	return index >= 0;
@@ -297,7 +297,7 @@ static bool IR_PlatformPWMReserve(const int index) {
 }
 
 static void IR_PlatformPWMRelease(const int index) {
-#if PLATFORM_REALTEK
+#if PLATFORM_BL602 || PLATFORM_REALTEK
 	HAL_IR_PWM_Release(index);
 #else
 	(void)index;
@@ -776,6 +776,22 @@ static bool IR_ProtocolUsesStatePayload(const decode_type_t protocol) {
 	return hasACState(protocol) || protocol == decode_type_t::MWM;
 }
 
+static bool IR_ProtocolUsesACState(const decode_type_t protocol) {
+	return hasACState(protocol);
+}
+
+static decode_type_t IR_ParseProtocol(const char *text) {
+	uint32_t protocol = 0;
+	if (parseBoundedDecimal(text, 1U, (uint32_t)kLastDecodeType, &protocol))
+		return (decode_type_t)protocol;
+	for (int value = 1; value <= (int)kLastDecodeType; value++) {
+		const decode_type_t candidate = (decode_type_t)value;
+		if (IR_EqualsIgnoreCase(text, typeToString(candidate).c_str()))
+			return candidate;
+	}
+	return decode_type_t::UNKNOWN;
+}
+
 // The OpenBeken transmitter advances edges on the IR-owned periodic timer.
 // Reject protocols whose shortest symbols cannot be kept within their upstream
 // tolerance at the actual timer period. This does not change any shared timer
@@ -900,7 +916,7 @@ static bool IR_ValidateClassicFields(const decode_type_t protocol,
 	if (protocol == decode_type_t::RC6)
 		return address <= 0xFFFU && command <= 0xFFU;
 	if (protocol == decode_type_t::NEC)
-		return address <= 0xFFFFU && command <= 0xFFFFU;
+		return address <= 0xFFFFU && command <= 0xFFU;
 	if (protocol == decode_type_t::PANASONIC)
 		return address <= 0xFFFFU;
 	if (protocol == decode_type_t::JVC)
@@ -908,7 +924,7 @@ static bool IR_ValidateClassicFields(const decode_type_t protocol,
 	if (protocol == decode_type_t::SAMSUNG)
 		return address <= 0xFFU && command <= 0xFFU;
 	if (protocol == decode_type_t::LG)
-		return address <= 0xFFFFU && command <= 0xFFFFU;
+		return address <= 0xFFU && command <= 0xFFFFU;
 	return false;
 }
 
@@ -932,7 +948,7 @@ static commandResult_t IR_SendCommaCommand(char *args) {
 	char *protocolEnd = strchr(args, ',');
 	if (!protocolEnd) return CMD_RES_BAD_ARGUMENT;
 	*protocolEnd = '\0';
-	const decode_type_t protocol = strToDecodeType(args);
+	const decode_type_t protocol = IR_ParseProtocol(args);
 	if (protocol == decode_type_t::UNKNOWN) {
 		ADDLOG_ERROR(LOG_FEATURE_IR, (char *)"IRSend unknown protocol '%s'", args);
 		return CMD_RES_BAD_ARGUMENT;
@@ -1054,7 +1070,7 @@ static commandResult_t IR_SendClassicCommand(char *args) {
 			(char *)"IRSend classic form expects PROTOCOL ADDRESS COMMAND [REPEAT]");
 		return CMD_RES_BAD_ARGUMENT;
 	}
-	const decode_type_t protocol = strToDecodeType(fields[0]);
+	const decode_type_t protocol = IR_ParseProtocol(fields[0]);
 	if (protocol == decode_type_t::UNKNOWN || IR_ProtocolUsesStatePayload(protocol)) {
 		ADDLOG_ERROR(LOG_FEATURE_IR,
 			(char *)"IRSend classic protocol '%s' is unsupported", fields[0]);
@@ -1389,6 +1405,10 @@ extern "C" int DRV_IR_IsReady(void) {
 	return gIRDriverReady ? 1 : 0;
 }
 
+extern "C" int DRV_IR_IsDeferred(void) {
+	return gIRDeferredStart ? 1 : 0;
+}
+
 
 void dump(decode_results *results) {
 	// Dumps out the decode_results structure.
@@ -1434,11 +1454,12 @@ extern "C" void DRV_IR_RunFrame() {
 
 	const String protocolName = typeToString(results.decode_type, results.repeat);
 	const bool stateResult = IR_ProtocolUsesStatePayload(results.decode_type);
+	const bool acStateResult = IR_ProtocolUsesACState(results.decode_type);
 	const String dataText = resultToHexidecimal(&results);
 	String lastIrReceived = String((int)results.decode_type, 16) + "," + dataText;
 	// Preserve the established MQTT form: AC states omit Bits, all other
 	// protocols (including MWM) include it.
-	if (!hasACState(results.decode_type))
+	if (!acStateResult)
 		lastIrReceived += "," + String((int)results.bits);
 
 	char logText[256] = { 0 };
@@ -1454,7 +1475,7 @@ extern "C" void DRV_IR_RunFrame() {
 				protocolName.c_str(), (unsigned int)results.bits,
 				dataText.c_str());
 #ifdef ENABLE_IRAC
-			if (hasACState(results.decode_type)) {
+			if (acStateResult) {
 				const String description = IRAcUtils::resultAcToString(&results);
 				ADDLOG_INFO(LOG_FEATURE_IR, (char *)"IRAC %s",
 					description.c_str());
