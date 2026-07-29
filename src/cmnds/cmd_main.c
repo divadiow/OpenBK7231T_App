@@ -77,6 +77,9 @@ int g_sleepfactor = 1;
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
 #include "hal_system.h"
+#include "oshal.h"
+#include "system_wifi.h"
+extern void psm_enter_deep_sleep(void);
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -105,6 +108,81 @@ static int generateHashValue(const char* fname) {
 
 command_t* g_commands[HASH_SIZE] = { NULL };
 bool g_powersave;
+
+#if PLATFORM_ECR6600
+#define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS       500U
+#define ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS 3000U
+#define ECR6600_DEEPSLEEP_DISCONNECT_POLL_MS      20U
+#define ECR6600_DEEPSLEEP_SETTLE_MS              200U
+#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE       4096
+#define ECR6600_DEEPSLEEP_TASK_PRIORITY            4
+
+static volatile bool g_ecr6600DeepSleepPending = false;
+static unsigned int g_ecr6600DeepSleepSeconds = 0;
+
+static void ECR6600_DeepSleepTask(void* arg) {
+	unsigned int waitedMS = 0;
+	unsigned int sleepSeconds = g_ecr6600DeepSleepSeconds;
+	unsigned int rtcTicks;
+	wifi_status_e wifiStatus;
+
+	(void)arg;
+
+	// Let the command transport finish sending its response before WiFi is stopped.
+	os_msleep(ECR6600_DEEPSLEEP_PREPARE_DELAY_MS);
+
+	wifiStatus = wifi_get_sta_status();
+	if (wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) {
+		ADDLOG_INFO(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: requesting WiFi disconnect (status %u)",
+			(unsigned int)wifiStatus);
+
+		// wifi_disconnect() only queues a WPA command. Do not enter deep sleep until
+		// the SDK has processed it and reported the station as disconnected.
+		if (wifi_disconnect() != 0) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD,
+				"ECR6600 deep sleep: failed to queue WiFi disconnect");
+			g_ecr6600DeepSleepPending = false;
+			os_task_delete(os_task_get_running_handle());
+			return;
+		}
+
+		do {
+			os_msleep(ECR6600_DEEPSLEEP_DISCONNECT_POLL_MS);
+			waitedMS += ECR6600_DEEPSLEEP_DISCONNECT_POLL_MS;
+			wifiStatus = wifi_get_sta_status();
+		} while (wifiStatus != STA_STATUS_STOP &&
+			wifiStatus != STA_STATUS_DISCON &&
+			waitedMS < ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS);
+
+		if (wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD,
+				"ECR6600 deep sleep: WiFi did not quiesce after %u ms (status %u); aborting",
+				waitedMS, (unsigned int)wifiStatus);
+			g_ecr6600DeepSleepPending = false;
+			os_task_delete(os_task_get_running_handle());
+			return;
+		}
+	}
+
+	// The disconnect event can precede the final WPA/driver cleanup by a short time.
+	os_msleep(ECR6600_DEEPSLEEP_SETTLE_MS);
+
+	rtcTicks = (unsigned int)((unsigned long long)sleepSeconds * 32768ULL);
+	ADDLOG_INFO(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep: WiFi quiesced in %u ms; sleeping %u s (%u RTC ticks)",
+		waitedMS, sleepSeconds, rtcTicks);
+
+	drv_rtc_set_alarm_relative(rtcTicks);
+	hal_set_reset_type(RST_TYPE_WAKEUP);
+	psm_enter_deep_sleep();
+
+	// A successful deep-sleep entry never returns.
+	ADDLOG_ERROR(LOG_FEATURE_CMD, "ECR6600 deep sleep: entry routine returned unexpectedly");
+	g_ecr6600DeepSleepPending = false;
+	os_task_delete(os_task_get_running_handle());
+}
+#endif
 
 #if defined(PLATFORM_LN882H) || PLATFORM_LN8825
 // this will be applied after WiFi connect
@@ -423,15 +501,41 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	// Keep the STA state intact: wifi_disconnect() is asynchronous on ECR6600
-	// and can leave the WiFi stack unusable across a deep-sleep reset.
-	// Program the RTC in native 32.768 kHz ticks, record the wake reset reason,
-	// then use the low-level entry routine that honours the programmed alarm.
-	unsigned int rtcTicks = (unsigned int)(((unsigned long long)timeMS * 32768ULL) %
-		(86400ULL * 32768ULL));
-	drv_rtc_set_alarm_relative(rtcTicks);
-	hal_set_reset_type(RST_TYPE_WAKEUP);
-	psm_enter_deep_sleep();
+	int taskHandle;
+
+	// drv_rtc_set_alarm_relative() wraps at 24 hours, so reject values that
+	// would turn into an immediate alarm rather than silently truncating them.
+	if (timeMS <= 0 || timeMS >= 86400) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 DeepSleep requires 1..86399 seconds");
+		return CMD_RES_BAD_ARGUMENT;
+	}
+
+	if (g_ecr6600DeepSleepPending) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep is already pending");
+		return CMD_RES_ERROR;
+	}
+
+	g_ecr6600DeepSleepSeconds = (unsigned int)timeMS;
+	g_ecr6600DeepSleepPending = true;
+	taskHandle = os_task_create("obk_deepsleep",
+		ECR6600_DEEPSLEEP_TASK_PRIORITY,
+		ECR6600_DEEPSLEEP_TASK_STACK_SIZE,
+		ECR6600_DeepSleepTask,
+		NULL);
+
+	if (taskHandle < 0) {
+		g_ecr6600DeepSleepPending = false;
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: failed to create preparation task");
+		return CMD_RES_ERROR;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep scheduled for %u seconds",
+		g_ecr6600DeepSleepSeconds);
+	return CMD_RES_OK;
 #elif PLATFORM_GD32VW553
 	delay_ms(50);
 	wifi_netlink_wifi_close();
