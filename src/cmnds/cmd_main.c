@@ -76,6 +76,7 @@ int g_sleepfactor = 1;
 #endif
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
+#include "hal_system.h"
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -422,14 +423,15 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	// The SDK's GSLP implementation enters deep sleep while the STA is still active.
-	// wifi_disconnect() is asynchronous on ECR6600, so do not race it against
-	// the PSM transition. Use the public wrapper so the SDK performs its complete
-	// deep-sleep preparation, including recording RST_TYPE_WAKEUP.
+	// Keep the STA state intact: wifi_disconnect() is asynchronous on ECR6600
+	// and can leave the WiFi stack unusable across a deep-sleep reset.
+	// Program the RTC in native 32.768 kHz ticks, record the wake reset reason,
+	// then use the low-level entry routine that honours the programmed alarm.
 	unsigned int rtcTicks = (unsigned int)(((unsigned long long)timeMS * 32768ULL) %
 		(86400ULL * 32768ULL));
 	drv_rtc_set_alarm_relative(rtcTicks);
-	psm_enter_sleep(DEEP_SLEEP);
+	hal_set_reset_type(RST_TYPE_WAKEUP);
+	psm_enter_deep_sleep();
 #elif PLATFORM_GD32VW553
 	delay_ms(50);
 	wifi_netlink_wifi_close();
