@@ -78,8 +78,12 @@ int g_sleepfactor = 1;
 #include "psm_system.h"
 #include "hal_system.h"
 #include "oshal.h"
-#include "system_wifi.h"
-extern void psm_enter_deep_sleep(void);
+
+// These are exported by the bundled ECR6600 PSM/WiFi libraries but are not
+// declared by their public headers. The Tuya ECR6600 door-contact SDK uses
+// this exact RF/PCU preparation sequence before psm_enter_sleep(DEEP_SLEEP).
+extern void psm_clear_pcu_isr(void);
+extern void rf_idle2sleep(void);
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -110,72 +114,41 @@ command_t* g_commands[HASH_SIZE] = { NULL };
 bool g_powersave;
 
 #if PLATFORM_ECR6600
-#define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS       500U
-#define ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS 3000U
-#define ECR6600_DEEPSLEEP_DISCONNECT_POLL_MS      20U
-#define ECR6600_DEEPSLEEP_SETTLE_MS              200U
-#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE       4096
-#define ECR6600_DEEPSLEEP_TASK_PRIORITY            4
+#define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS 500U
+#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE 4096
+#define ECR6600_DEEPSLEEP_TASK_PRIORITY      4
 
 static volatile bool g_ecr6600DeepSleepPending = false;
 static unsigned int g_ecr6600DeepSleepSeconds = 0;
 
 static void ECR6600_DeepSleepTask(void* arg) {
-	unsigned int waitedMS = 0;
 	unsigned int sleepSeconds = g_ecr6600DeepSleepSeconds;
 	unsigned int rtcTicks;
-	wifi_status_e wifiStatus;
 
 	(void)arg;
 
-	// Let the command transport finish sending its response before WiFi is stopped.
+	// Let the HTTP/UART command transport finish its response before the RF and
+	// CPU are powered down. Do not disconnect WiFi: the Tuya low-power path
+	// transitions the live RF hardware directly into its sleep state.
 	os_msleep(ECR6600_DEEPSLEEP_PREPARE_DELAY_MS);
-
-	wifiStatus = wifi_get_sta_status();
-	if (wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) {
-		ADDLOG_INFO(LOG_FEATURE_CMD,
-			"ECR6600 deep sleep: requesting WiFi disconnect (status %u)",
-			(unsigned int)wifiStatus);
-
-		// wifi_disconnect() only queues a WPA command. Do not enter deep sleep until
-		// the SDK has processed it and reported the station as disconnected.
-		if (wifi_disconnect() != 0) {
-			ADDLOG_ERROR(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: failed to queue WiFi disconnect");
-			g_ecr6600DeepSleepPending = false;
-			os_task_delete(os_task_get_running_handle());
-			return;
-		}
-
-		do {
-			os_msleep(ECR6600_DEEPSLEEP_DISCONNECT_POLL_MS);
-			waitedMS += ECR6600_DEEPSLEEP_DISCONNECT_POLL_MS;
-			wifiStatus = wifi_get_sta_status();
-		} while (wifiStatus != STA_STATUS_STOP &&
-			wifiStatus != STA_STATUS_DISCON &&
-			waitedMS < ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS);
-
-		if (wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) {
-			ADDLOG_ERROR(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: WiFi did not quiesce after %u ms (status %u); aborting",
-				waitedMS, (unsigned int)wifiStatus);
-			g_ecr6600DeepSleepPending = false;
-			os_task_delete(os_task_get_running_handle());
-			return;
-		}
-	}
-
-	// The disconnect event can precede the final WPA/driver cleanup by a short time.
-	os_msleep(ECR6600_DEEPSLEEP_SETTLE_MS);
 
 	rtcTicks = (unsigned int)((unsigned long long)sleepSeconds * 32768ULL);
 	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep: WiFi quiesced in %u ms; sleeping %u s (%u RTC ticks)",
-		waitedMS, sleepSeconds, rtcTicks);
+		"ECR6600 deep sleep: Tuya RF/PCU sequence, sleeping %u s (%u RTC ticks)",
+		sleepSeconds, rtcTicks);
 
+	// This is the sequence implemented by psm_deep_sleep() in the Tuya ECR6600
+	// door-contact PSM library. The current OpenECR6600 library exports the same
+	// constituent functions, although it no longer exports psm_deep_sleep().
+	//
+	// psm_clear_pcu_isr() removes a pending always-on wake interrupt that can
+	// otherwise wake the SoC immediately. rf_idle2sleep() performs the RF state
+	// transition omitted by a direct psm_enter_sleep() call. The full wrapper
+	// then prepares the remaining peripherals and records RST_TYPE_WAKEUP.
 	drv_rtc_set_alarm_relative(rtcTicks);
-	hal_set_reset_type(RST_TYPE_WAKEUP);
-	psm_enter_deep_sleep();
+	psm_clear_pcu_isr();
+	rf_idle2sleep();
+	psm_enter_sleep(DEEP_SLEEP);
 
 	// A successful deep-sleep entry never returns.
 	ADDLOG_ERROR(LOG_FEATURE_CMD, "ECR6600 deep sleep: entry routine returned unexpectedly");
