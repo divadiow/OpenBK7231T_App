@@ -77,6 +77,7 @@ int g_sleepfactor = 1;
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
 #include "psm_user.h"
+#include "hal_wdt.h"
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -423,14 +424,31 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	// The exact ECR6600F_v2.1.23.16 SDK exposes this public API in
-	// psm_user.h. Its argument is seconds; the SDK validates the duration,
-	// arms deep sleep and lets PSM perform the RF/peripheral transition from
-	// the scheduler idle path.
-	if (timeMS <= 0) {
+	WDT_RET_CODE wdtResult;
+
+	// psm_set_deep_sleep() is the public API supplied by the exact
+	// ECR6600F_v2.1.23.16 SDK. Its argument is seconds; the SDK converts it
+	// to native 32.768 kHz RTC ticks and performs the RF/peripheral shutdown
+	// from the scheduler idle path.
+	if (timeMS <= 0 || timeMS > 86400) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 DeepSleep requires a positive number of seconds");
+			"ECR6600 DeepSleep requires 1..86400 seconds");
 		return CMD_RES_BAD_ARGUMENT;
+	}
+
+	// OpenBeken enables the ECR6600 hardware watchdog with an effective
+	// timeout of about 4.5 seconds. The watchdog uses its own external clock
+	// and is not stopped by psm_set_deep_sleep(), so it can reset the chip
+	// before the RTC alarm expires. A deep-sleep wake performs a full boot,
+	// which configures the watchdog again normally.
+	wdtResult = hal_wdt_stop();
+	if (wdtResult == WDT_RET_OK) {
+		ADDLOG_INFO(LOG_FEATURE_CMD,
+			"ECR6600 watchdog stopped before deep sleep");
+	}
+	else {
+		ADDLOG_WARN(LOG_FEATURE_CMD,
+			"ECR6600 watchdog was not active before deep sleep");
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_CMD,
@@ -441,6 +459,12 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
 			"ECR6600 SDK rejected DeepSleep duration %d seconds",
 			timeMS);
+
+		// The request was rejected, so normal execution will continue.
+		// Restore the watchdog if this command stopped it.
+		if (wdtResult == WDT_RET_OK) {
+			HAL_Configure_WDT();
+		}
 		return CMD_RES_ERROR;
 	}
 
