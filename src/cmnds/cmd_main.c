@@ -76,14 +76,7 @@ int g_sleepfactor = 1;
 #endif
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
-#include "hal_system.h"
-#include "oshal.h"
-
-// These are exported by the bundled ECR6600 PSM/WiFi libraries but are not
-// declared by their public headers. The Tuya ECR6600 door-contact SDK uses
-// this exact RF/PCU preparation sequence before psm_enter_sleep(DEEP_SLEEP).
-extern void psm_clear_pcu_isr(void);
-extern void rf_idle2sleep(void);
+#include "psm_wifi.h"
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -112,50 +105,6 @@ static int generateHashValue(const char* fname) {
 
 command_t* g_commands[HASH_SIZE] = { NULL };
 bool g_powersave;
-
-#if PLATFORM_ECR6600
-#define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS 500U
-#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE 4096
-#define ECR6600_DEEPSLEEP_TASK_PRIORITY      4
-
-static volatile bool g_ecr6600DeepSleepPending = false;
-static unsigned int g_ecr6600DeepSleepSeconds = 0;
-
-static void ECR6600_DeepSleepTask(void* arg) {
-	unsigned int sleepSeconds = g_ecr6600DeepSleepSeconds;
-	unsigned int rtcTicks;
-
-	(void)arg;
-
-	// Let the HTTP/UART command transport finish its response before the RF and
-	// CPU are powered down. Do not disconnect WiFi: the Tuya low-power path
-	// transitions the live RF hardware directly into its sleep state.
-	os_msleep(ECR6600_DEEPSLEEP_PREPARE_DELAY_MS);
-
-	rtcTicks = (unsigned int)((unsigned long long)sleepSeconds * 32768ULL);
-	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep: Tuya RF/PCU sequence, sleeping %u s (%u RTC ticks)",
-		sleepSeconds, rtcTicks);
-
-	// This is the sequence implemented by psm_deep_sleep() in the Tuya ECR6600
-	// door-contact PSM library. The current OpenECR6600 library exports the same
-	// constituent functions, although it no longer exports psm_deep_sleep().
-	//
-	// psm_clear_pcu_isr() removes a pending always-on wake interrupt that can
-	// otherwise wake the SoC immediately. rf_idle2sleep() performs the RF state
-	// transition omitted by a direct psm_enter_sleep() call. The full wrapper
-	// then prepares the remaining peripherals and records RST_TYPE_WAKEUP.
-	drv_rtc_set_alarm_relative(rtcTicks);
-	psm_clear_pcu_isr();
-	rf_idle2sleep();
-	psm_enter_sleep(DEEP_SLEEP);
-
-	// A successful deep-sleep entry never returns.
-	ADDLOG_ERROR(LOG_FEATURE_CMD, "ECR6600 deep sleep: entry routine returned unexpectedly");
-	g_ecr6600DeepSleepPending = false;
-	os_task_delete(os_task_get_running_handle());
-}
-#endif
 
 #if defined(PLATFORM_LN882H) || PLATFORM_LN8825
 // this will be applied after WiFi connect
@@ -474,40 +423,28 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	int taskHandle;
+	unsigned int rtcTicks;
 
-	// drv_rtc_set_alarm_relative() wraps at 24 hours, so reject values that
-	// would turn into an immediate alarm rather than silently truncating them.
+	// The OpenBeken DeepSleep argument is seconds. ECR6600 PSM stores the
+	// requested deep-sleep duration as native 32.768 kHz RTC ticks.
 	if (timeMS <= 0 || timeMS >= 86400) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
 			"ECR6600 DeepSleep requires 1..86399 seconds");
 		return CMD_RES_BAD_ARGUMENT;
 	}
 
-	if (g_ecr6600DeepSleepPending) {
-		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 deep sleep is already pending");
-		return CMD_RES_ERROR;
-	}
+	rtcTicks = (unsigned int)((unsigned long long)timeMS * 32768ULL);
 
-	g_ecr6600DeepSleepSeconds = (unsigned int)timeMS;
-	g_ecr6600DeepSleepPending = true;
-	taskHandle = os_task_create("obk_deepsleep",
-		ECR6600_DEEPSLEEP_TASK_PRIORITY,
-		ECR6600_DEEPSLEEP_TASK_STACK_SIZE,
-		ECR6600_DeepSleepTask,
-		NULL);
-
-	if (taskHandle < 0) {
-		g_ecr6600DeepSleepPending = false;
-		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 deep sleep: failed to create preparation task");
-		return CMD_RES_ERROR;
-	}
-
+	// Use the scheduler-controlled PSM path. This is the sequence used by the
+	// newer ESWIN AT SDK: PSM performs the RF/peripheral shutdown itself once
+	// the system reaches a safe idle point. Do not call rf_idle2sleep(),
+	// psm_enter_sleep(), or psm_enter_deep_sleep() directly here.
 	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep scheduled for %u seconds",
-		g_ecr6600DeepSleepSeconds);
+		"ECR6600 deep sleep armed for %d s (%u RTC ticks); waiting for PSM idle",
+		timeMS, rtcTicks);
+	psm_deep_sleeptime_op(true, rtcTicks);
+	PSM_SLEEP_SET(DEEP_SLEEP_EN);
+	psm_set_psm_enable(1);
 	return CMD_RES_OK;
 #elif PLATFORM_GD32VW553
 	delay_ms(50);
