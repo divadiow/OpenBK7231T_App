@@ -76,7 +76,7 @@ int g_sleepfactor = 1;
 #endif
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
-#include "psm_wifi.h"
+#include "psm_user.h"
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -423,28 +423,27 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	unsigned int rtcTicks;
-
-	// The OpenBeken DeepSleep argument is seconds. ECR6600 PSM stores the
-	// requested deep-sleep duration as native 32.768 kHz RTC ticks.
-	if (timeMS <= 0 || timeMS >= 86400) {
+	// The exact ECR6600F_v2.1.23.16 SDK exposes this public API in
+	// psm_user.h. Its argument is seconds; the SDK validates the duration,
+	// arms deep sleep and lets PSM perform the RF/peripheral transition from
+	// the scheduler idle path.
+	if (timeMS <= 0) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 DeepSleep requires 1..86399 seconds");
+			"ECR6600 DeepSleep requires a positive number of seconds");
 		return CMD_RES_BAD_ARGUMENT;
 	}
 
-	rtcTicks = (unsigned int)((unsigned long long)timeMS * 32768ULL);
-
-	// Use the scheduler-controlled PSM path. This is the sequence used by the
-	// newer ESWIN AT SDK: PSM performs the RF/peripheral shutdown itself once
-	// the system reaches a safe idle point. Do not call rf_idle2sleep(),
-	// psm_enter_sleep(), or psm_enter_deep_sleep() directly here.
 	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep armed for %d s (%u RTC ticks); waiting for PSM idle",
-		timeMS, rtcTicks);
-	psm_deep_sleeptime_op(true, rtcTicks);
-	PSM_SLEEP_SET(DEEP_SLEEP_EN);
-	psm_set_psm_enable(1);
+		"ECR6600 deep sleep requested for %d seconds via SDK PSM",
+		timeMS);
+
+	if (!psm_set_deep_sleep((unsigned int)timeMS)) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 SDK rejected DeepSleep duration %d seconds",
+			timeMS);
+		return CMD_RES_ERROR;
+	}
+
 	return CMD_RES_OK;
 #elif PLATFORM_GD32VW553
 	delay_ms(50);
