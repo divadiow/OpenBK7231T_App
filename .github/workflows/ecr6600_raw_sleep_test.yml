@@ -33,6 +33,19 @@ jobs:
         run: |
           base64 -d tools/ecr6600_raw_sleep_test_bundle.tar.gz.b64 | tar -xzf -
 
+      - name: Supply WiFi library diagnostic global
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tools/ecr6600_raw_sleep_test/board/main.c')
+          source = path.read_text(encoding='utf-8')
+          needle = 'extern int psm_clear_pcu_isr(void);\n'
+          replacement = needle + '\n/* Referenced by the closed WiFi libraries even when vendor CLI commands are omitted. */\nuint8_t g_enable_cmw = 0U;\n'
+          if source.count(needle) != 1:
+              raise SystemExit('Could not locate psm_clear_pcu_isr declaration')
+          path.write_text(source.replace(needle, replacement, 1), encoding='utf-8', newline='\n')
+          PY
+
       - name: Build isolation variants
         run: bash tools/ecr6600_raw_sleep_test/build_raw_sleep_tests.sh
 
