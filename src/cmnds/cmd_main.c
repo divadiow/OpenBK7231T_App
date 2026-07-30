@@ -162,6 +162,12 @@ static void ECR6600_DeepSleepTask(void* arg) {
 	unsigned int sleepSeconds = g_ecr6600DeepSleepSeconds;
 	wifi_status_e wifiStatus;
 	bool sawStaActive = false;
+	bool finalRfCloseOk = true;
+	bool finalStaIdle = false;
+	bool finalApIdle = false;
+	bool finalBleIdle = false;
+	unsigned int finalDeviceStatus = 0;
+	unsigned int finalWifiStatus = 0;
 	bool staIdle;
 	bool apIdle;
 	bool bleIdle;
@@ -302,24 +308,52 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		// Flush all diagnostic output before the critical final sequence.
 		os_msleep(50);
 
-		// The Wi-Fi disconnection handler sets WIFI_STA ACTIVE at its very end.
-		// Reassert the intended offline/idle state immediately before the SDK's
-		// checked RF-close wrapper, with no logging or delay in between.
+		// V13 logged all three PSM radio users idle immediately before this
+		// point, yet psm_switch_rf_state() took its internal "radio busy"
+		// branch. The exact SDK wrapper checks STA, AP and BLE separately, so
+		// eliminate task-level pre-emption across the final state update and
+		// checked RF close. Interrupts remain enabled.
+		os_scheduler_lock();
+
 		psm_set_wifi_status(PSM_OFF_LINE);
 		psm_set_device_status(PSM_DEVICE_WIFI_STA, PSM_DEVICE_STATUS_IDLE);
+
+		finalDeviceStatus = psm_infs.device_status;
+		finalWifiStatus = (unsigned int)wifi_get_sta_status();
+		finalStaIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_STA);
+		finalApIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_AP);
+		finalBleIdle = psm_check_single_device_idle(PSM_DEVICE_BLE);
+
 		psm_clear_pcu_isr();
 
-		if (psm_infs.rf_open_enable && !psm_switch_rf_state(false)) {
+		if (!finalStaIdle || !finalApIdle || !finalBleIdle) {
+			finalRfCloseOk = false;
+		}
+		else if (psm_infs.rf_open_enable) {
+			finalRfCloseOk = psm_switch_rf_state(false);
+		}
+
+		os_scheduler_unlock();
+
+		if (!finalRfCloseOk) {
 			ADDLOG_ERROR(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: SDK refused final RF close");
-			ECR6600_LogSleepRegisters("rf-close-failed");
+				"ECR6600 deep sleep: final RF close failed under scheduler lock "
+				"(wifi=%u dev=%08X sta=%u ap=%u ble=%u rf=%u)",
+				finalWifiStatus,
+				finalDeviceStatus,
+				(unsigned int)finalStaIdle,
+				(unsigned int)finalApIdle,
+				(unsigned int)finalBleIdle,
+				(unsigned int)psm_infs.rf_open_enable);
+			ECR6600_LogSleepRegisters("rf-close-failed-locked");
 			g_ecr6600DeepSleepPending = false;
 			os_task_delete(os_task_get_running_handle());
 			return;
 		}
 
-		// Do not log after RF closes. Clear any status produced by the RF
-		// transition and enter the full SDK deep-sleep wrapper immediately.
+		// Once RF has closed, immediately clear status produced by that
+		// transition and enter the full SDK wrapper. No application log or
+		// deliberate delay occurs in this final window.
 		psm_clear_pcu_isr();
 		psm_enter_sleep(DEEP_SLEEP);
 	}
