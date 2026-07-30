@@ -164,6 +164,7 @@ static void ECR6600_DeepSleepTask(void* arg) {
 	wifi_status_e wifiStatus;
 	bool sawStaActive = false;
 	bool finalRfCloseOk = true;
+	bool finalRfStateResult = true;
 	bool finalStaIdle = false;
 	bool finalApIdle = false;
 	bool finalBleIdle = false;
@@ -336,24 +337,27 @@ static void ECR6600_DeepSleepTask(void* arg) {
 			finalRfCloseOk = false;
 		}
 		else if (psm_infs.rf_open_enable) {
-			finalRfCloseOk = psm_config_rf_state(false);
-			if (psm_infs.rf_open_enable) {
-				finalRfCloseOk = false;
-			}
+			// psm_config_rf_state() does not return a success flag. The exact
+			// v2.1.23.16 object stores the requested RF state, performs the
+			// transition, and returns the resulting rf_open_enable value.
+			// Therefore a successful close is expected to return false.
+			finalRfStateResult = psm_config_rf_state(false);
+			finalRfCloseOk = !psm_infs.rf_open_enable;
 		}
 
 		if (!finalRfCloseOk) {
 			os_scheduler_unlock();
 			ADDLOG_ERROR(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: direct RF close failed under scheduler lock "
-				"(wifi=%u dev=%08X sta=%u ap=%u ble=%u rf=%u)",
+				"ECR6600 deep sleep: direct RF close did not reach RF-off state "
+				"(wifi=%u dev=%08X sta=%u ap=%u ble=%u ret=%u rf=%u)",
 				finalWifiStatus,
 				finalDeviceStatus,
 				(unsigned int)finalStaIdle,
 				(unsigned int)finalApIdle,
 				(unsigned int)finalBleIdle,
+				(unsigned int)finalRfStateResult,
 				(unsigned int)psm_infs.rf_open_enable);
-			ECR6600_LogSleepRegisters("direct-rf-close-failed");
+			ECR6600_LogSleepRegisters("direct-rf-close-not-off");
 			g_ecr6600DeepSleepPending = false;
 			os_task_delete(os_task_get_running_handle());
 			return;
