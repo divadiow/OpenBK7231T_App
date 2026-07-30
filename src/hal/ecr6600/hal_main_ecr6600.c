@@ -5,6 +5,8 @@
 #include "flash.h"
 #include "sdk_version.h"
 #include "psm_system.h"
+#include "pmu_reg.h"
+#include "chip_memmap.h"
 
 #define DFE_VAR
 #include "tx_power_config.h"
@@ -23,6 +25,64 @@ extern void Main_OnEverySecond();
 E_DRV_UART_NUM uart_num = E_UART_NUM_2;
 TaskHandle_t g_sys_task_handle1;
 extern uint8_t wmac[6];
+
+#define ECR6600_BOOT_RTC_CNT_REG       (MEM_BASE_RTC + 0x04U)
+#define ECR6600_BOOT_RTC_ALARM_REG     (MEM_BASE_RTC + 0x14U)
+#define ECR6600_BOOT_RTC_CTRL_REG      (MEM_BASE_RTC + 0x18U)
+#define ECR6600_BOOT_RTC_STATUS_REG    (MEM_BASE_RTC + 0x1CU)
+
+typedef struct {
+	unsigned int wake;
+	unsigned int ena;
+	unsigned int status;
+	unsigned int fsm;
+	unsigned int rtcCnt;
+	unsigned int rtcAlarm;
+	unsigned int rtcCtrl;
+	unsigned int rtcStatus;
+} ECR6600_SleepRegisterSnapshot;
+
+static unsigned int ECR6600_BootReadRegister(unsigned int address)
+{
+	return *(volatile unsigned int*)address;
+}
+
+static void ECR6600_CaptureSleepRegisters(ECR6600_SleepRegisterSnapshot* snapshot)
+{
+	snapshot->wake = ECR6600_BootReadRegister(PCU_WAKEUP_CTRL_REG);
+	snapshot->ena = ECR6600_BootReadRegister(PCU_INT_ENA_CTRL_REG);
+	snapshot->status = ECR6600_BootReadRegister(PCU_INT_STATUS_CTRL_REG);
+	snapshot->fsm = ECR6600_BootReadRegister(PCU_FSM_STATE_CTRL_REG);
+	snapshot->rtcCnt = ECR6600_BootReadRegister(ECR6600_BOOT_RTC_CNT_REG);
+	snapshot->rtcAlarm = ECR6600_BootReadRegister(ECR6600_BOOT_RTC_ALARM_REG);
+	snapshot->rtcCtrl = ECR6600_BootReadRegister(ECR6600_BOOT_RTC_CTRL_REG);
+	snapshot->rtcStatus = ECR6600_BootReadRegister(ECR6600_BOOT_RTC_STATUS_REG);
+}
+
+static void ECR6600_PrintSleepRegisters(
+	const char* stage,
+	const ECR6600_SleepRegisterSnapshot* snapshot)
+{
+	printf(
+		"ECRSLPBOOT:%s wake=%08X ena=%08X status=%08X fsm=%08X "
+		"rtc_cnt=%08X rtc_alarm=%08X rtc_ctrl=%08X rtc_st=%08X\n",
+		stage,
+		snapshot->wake,
+		snapshot->ena,
+		snapshot->status,
+		snapshot->fsm,
+		snapshot->rtcCnt,
+		snapshot->rtcAlarm,
+		snapshot->rtcCtrl,
+		snapshot->rtcStatus);
+}
+
+static void ECR6600_CaptureAndPrintSleepRegisters(const char* stage)
+{
+	ECR6600_SleepRegisterSnapshot snapshot;
+	ECR6600_CaptureSleepRegisters(&snapshot);
+	ECR6600_PrintSleepRegisters(stage, &snapshot);
+}
 
 int _close_r()
 {
@@ -53,11 +113,20 @@ void* os_malloc(size_t size)
 
 int main(void)
 {
+	ECR6600_SleepRegisterSnapshot bootEntrySnapshot;
+
+	// Capture before any SDK initialisation can acknowledge or rewrite the
+	// wake source. UART is initialised immediately afterwards, then the saved
+	// values are printed.
+	ECR6600_CaptureSleepRegisters(&bootEntrySnapshot);
 	component_cli_init(E_UART_NUM_2);
+	ECR6600_PrintSleepRegisters("entry", &bootEntrySnapshot);
+
 	printf("SDK version %s, Release version %s\n",
 			  sdk_version, RELEASE_VERSION);
 
 	rf_platform_int();
+	ECR6600_CaptureAndPrintSleepRegisters("post-rf-init");
 
 	int pinit = partion_init();
 	if (pinit != 0)
@@ -85,7 +154,9 @@ int main(void)
 	os_task_create("time_check_temp", SYSTEM_EVENT_LOOP_PRIORITY, 4096, time_check_temp, NULL);
 
 	// disabling this will crash when getting ip
+	ECR6600_CaptureAndPrintSleepRegisters("pre-psm-init");
 	psm_wifi_ble_init();
+	ECR6600_CaptureAndPrintSleepRegisters("post-psm-init");
 
 	psm_boot_flag_dbg_op(true, 1);
 	extern volatile int rtc_task_handle;
