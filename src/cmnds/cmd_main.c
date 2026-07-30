@@ -77,6 +77,8 @@ int g_sleepfactor = 1;
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
 #include "psm_user.h"
+#include "psm_mode_ctrl.h"
+#include "rtc.h"
 #include "oshal.h"
 #include "system_wifi.h"
 #elif PLATFORM_GD32VW553
@@ -214,24 +216,42 @@ static void ECR6600_DeepSleepTask(void* arg) {
 	ADDLOG_INFO(LOG_FEATURE_CMD,
 		"ECR6600 deep sleep: GPIO17/external-edge wake disabled; "
 		"RTC-only sleep");
-	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep: disconnected and PSM-idle after %u ms; "
-		"arming %u seconds",
-		waitedMS, sleepSeconds);
 
-	// Keep OpenBeken's watchdog enabled. A valid hardware deep sleep gates it;
-	// a failed transition is recovered by the watchdog instead of hanging.
-	if (!psm_set_deep_sleep(sleepSeconds)) {
-		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 SDK rejected DeepSleep duration %u seconds",
-			sleepSeconds);
-		g_ecr6600DeepSleepPending = false;
-		os_task_delete(os_task_get_running_handle());
-		return;
+	// The scheduler-controlled psm_set_deep_sleep() route is not completing
+	// under OpenBeken: a 2-second request is recovered exactly 4.5 seconds
+	// later by the hardware watchdog. Use the direct GSLP sequence supplied
+	// in this exact v2.1.23.16 SDK instead. The preceding disconnect and PSM
+	// bookkeeping avoid the retained-WiFi corruption seen with the old OBK
+	// low-level entry path.
+	{
+		unsigned int rtcTicks =
+			(unsigned int)((unsigned long long)sleepSeconds * 32768ULL);
+		unsigned int rtcAlarm;
+
+		ADDLOG_INFO(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: disconnected and PSM-idle after %u ms; "
+			"direct GSLP for %u seconds (%u RTC ticks)",
+			waitedMS, sleepSeconds, rtcTicks);
+
+		// Let the final UART diagnostic leave the FIFO before clocks are changed.
+		os_msleep(50);
+
+		rtcAlarm = drv_rtc_set_alarm_relative(rtcTicks);
+		ADDLOG_INFO(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: RTC alarm armed (0x%08X); "
+			"entering SDK DEEP_SLEEP",
+			rtcAlarm);
+
+		// Keep OpenBeken's watchdog enabled. If this direct full SDK wrapper
+		// stalls before the final PMU transition, the module recovers in about
+		// 4.5 seconds instead of becoming permanently inaccessible.
+		os_msleep(20);
+		psm_enter_sleep(DEEP_SLEEP);
 	}
 
-	// psm_set_deep_sleep() arms the scheduler idle hook and returns. Delete
-	// this temporary task so it cannot itself remain a PSM activity source.
+	// A successful DEEP_SLEEP call resets on wake and never returns here.
+	ADDLOG_ERROR(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep: psm_enter_sleep returned unexpectedly");
 	g_ecr6600DeepSleepPending = false;
 	os_task_delete(os_task_get_running_handle());
 }
@@ -557,9 +577,9 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	int taskHandle;
 
 	// The exact SDK public API accepts seconds and rejects values above one day.
-	if (timeMS <= 0 || timeMS > 86400) {
+	if (timeMS <= 0 || timeMS >= 86400) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 DeepSleep requires 1..86400 seconds");
+			"ECR6600 DeepSleep requires 1..86399 seconds");
 		return CMD_RES_BAD_ARGUMENT;
 	}
 
