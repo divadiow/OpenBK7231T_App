@@ -129,6 +129,7 @@ static unsigned int g_ecr6600DeepSleepSeconds = 0;
 #define ECR6600_RTC_STATUS_REG       (MEM_BASE_RTC + 0x1CU)
 
 extern int psm_clear_pcu_isr(void);
+extern bool psm_config_rf_state(bool rf_state);
 extern struct psm_info psm_infs;
 
 static unsigned int ECR6600_ReadRegister(unsigned int address) {
@@ -308,11 +309,16 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		// Flush all diagnostic output before the critical final sequence.
 		os_msleep(50);
 
-		// V13 logged all three PSM radio users idle immediately before this
-		// point, yet psm_switch_rf_state() took its internal "radio busy"
-		// branch. The exact SDK wrapper checks STA, AP and BLE separately, so
-		// eliminate task-level pre-emption across the final state update and
-		// checked RF close. Interrupts remain enabled.
+		// V14 proved this is not a scheduling race: immediately before and
+		// after psm_switch_rf_state(false), the exact SDK reported device_status
+		// zero and STA/AP/BLE all idle, yet the wrapper still took its own
+		// "Cloes the RF failure" branch. Disassembly of this exact libpsm.a
+		// shows that wrapper has an inconsistent STA predicate. Perform the same
+		// explicit safety checks here, then call its lower-level RF state helper,
+		// which owns rf_idle2sleep() and updates rf_open_enable.
+		//
+		// Keep the scheduler locked from the final state update through the PMU
+		// entry. Interrupts remain enabled.
 		os_scheduler_lock();
 
 		psm_set_wifi_status(PSM_OFF_LINE);
@@ -330,14 +336,16 @@ static void ECR6600_DeepSleepTask(void* arg) {
 			finalRfCloseOk = false;
 		}
 		else if (psm_infs.rf_open_enable) {
-			finalRfCloseOk = psm_switch_rf_state(false);
+			finalRfCloseOk = psm_config_rf_state(false);
+			if (psm_infs.rf_open_enable) {
+				finalRfCloseOk = false;
+			}
 		}
 
-		os_scheduler_unlock();
-
 		if (!finalRfCloseOk) {
+			os_scheduler_unlock();
 			ADDLOG_ERROR(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: final RF close failed under scheduler lock "
+				"ECR6600 deep sleep: direct RF close failed under scheduler lock "
 				"(wifi=%u dev=%08X sta=%u ap=%u ble=%u rf=%u)",
 				finalWifiStatus,
 				finalDeviceStatus,
@@ -345,17 +353,20 @@ static void ECR6600_DeepSleepTask(void* arg) {
 				(unsigned int)finalApIdle,
 				(unsigned int)finalBleIdle,
 				(unsigned int)psm_infs.rf_open_enable);
-			ECR6600_LogSleepRegisters("rf-close-failed-locked");
+			ECR6600_LogSleepRegisters("direct-rf-close-failed");
 			g_ecr6600DeepSleepPending = false;
 			os_task_delete(os_task_get_running_handle());
 			return;
 		}
 
-		// Once RF has closed, immediately clear status produced by that
-		// transition and enter the full SDK wrapper. No application log or
-		// deliberate delay occurs in this final window.
+		// No task-level pre-emption, logging or deliberate delay is allowed
+		// between successful RF closure and the full SDK deep-sleep wrapper.
 		psm_clear_pcu_isr();
 		psm_enter_sleep(DEEP_SLEEP);
+
+		// A successful call never reaches here. Release the scheduler only for
+		// the exceptional return path handled below.
+		os_scheduler_unlock();
 	}
 
 	// A successful DEEP_SLEEP call resets on wake and never returns here.
@@ -366,7 +377,7 @@ static void ECR6600_DeepSleepTask(void* arg) {
 	// Restore RF only for the exceptional return path, so the device is not
 	// deliberately left offline if the SDK rejects the PMU transition.
 	if (!psm_infs.rf_open_enable) {
-		psm_switch_rf_state(true);
+		psm_config_rf_state(true);
 	}
 
 	g_ecr6600DeepSleepPending = false;
