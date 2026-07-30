@@ -77,7 +77,8 @@ int g_sleepfactor = 1;
 #elif PLATFORM_ECR6600
 #include "psm_system.h"
 #include "psm_user.h"
-#include "hal_wdt.h"
+#include "oshal.h"
+#include "system_wifi.h"
 #elif PLATFORM_GD32VW553
 #include "gd32vw55x.h"
 #include "gd32vw55x_platform.h"
@@ -106,6 +107,105 @@ static int generateHashValue(const char* fname) {
 
 command_t* g_commands[HASH_SIZE] = { NULL };
 bool g_powersave;
+
+#if PLATFORM_ECR6600
+#define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS       500U
+#define ECR6600_DEEPSLEEP_READY_TIMEOUT_MS      3000U
+#define ECR6600_DEEPSLEEP_READY_POLL_MS           20U
+#define ECR6600_DEEPSLEEP_SETTLE_MS              100U
+#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE       4096
+#define ECR6600_DEEPSLEEP_TASK_PRIORITY            4
+
+static volatile bool g_ecr6600DeepSleepPending = false;
+static unsigned int g_ecr6600DeepSleepSeconds = 0;
+
+static void ECR6600_DeepSleepTask(void* arg) {
+	unsigned int waitedMS = 0;
+	unsigned int sleepSeconds = g_ecr6600DeepSleepSeconds;
+	wifi_status_e wifiStatus;
+	bool staIdle;
+	bool apIdle;
+	bool bleIdle;
+
+	(void)arg;
+
+	// Let HTTP/UART finish returning the command result before Wi-Fi is stopped.
+	os_msleep(ECR6600_DEEPSLEEP_PREPARE_DELAY_MS);
+
+	wifiStatus = wifi_get_sta_status();
+	if (wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) {
+		ADDLOG_INFO(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: requesting WiFi disconnect (status %u)",
+			(unsigned int)wifiStatus);
+
+		// wifi_disconnect() queues "disable_network 0" to the WPA task.
+		if (wifi_disconnect() != SYS_OK) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD,
+				"ECR6600 deep sleep: failed to queue WiFi disconnect");
+			g_ecr6600DeepSleepPending = false;
+			os_task_delete(os_task_get_running_handle());
+			return;
+		}
+	}
+
+	// rf_idle2sleep(), which the SDK PSM path calls internally, explicitly
+	// requires the station to be disconnected. Also wait for the three
+	// PSM-tracked radio users checked by the SDK's own RF-state wrapper.
+	do {
+		wifiStatus = wifi_get_sta_status();
+		staIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_STA);
+		apIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_AP);
+		bleIdle = psm_check_single_device_idle(PSM_DEVICE_BLE);
+
+		if ((wifiStatus == STA_STATUS_STOP || wifiStatus == STA_STATUS_DISCON) &&
+			staIdle && apIdle && bleIdle) {
+			break;
+		}
+
+		os_msleep(ECR6600_DEEPSLEEP_READY_POLL_MS);
+		waitedMS += ECR6600_DEEPSLEEP_READY_POLL_MS;
+	} while (waitedMS < ECR6600_DEEPSLEEP_READY_TIMEOUT_MS);
+
+	if ((wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) ||
+		!staIdle || !apIdle || !bleIdle) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: radio not ready after %u ms "
+			"(wifi=%u sta=%u ap=%u ble=%u); aborting",
+			waitedMS,
+			(unsigned int)wifiStatus,
+			(unsigned int)staIdle,
+			(unsigned int)apIdle,
+			(unsigned int)bleIdle);
+		g_ecr6600DeepSleepPending = false;
+		os_task_delete(os_task_get_running_handle());
+		return;
+	}
+
+	// Allow the final disconnect event and DHCP/WPA cleanup to drain before
+	// the SDK idle hook closes RF.
+	os_msleep(ECR6600_DEEPSLEEP_SETTLE_MS);
+
+	ADDLOG_INFO(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep: WiFi/PSM ready after %u ms; arming %u seconds",
+		waitedMS, sleepSeconds);
+
+	// Keep OpenBeken's watchdog active. A valid hardware deep sleep gates it;
+	// if the SDK faults before final entry, the watchdog recovers the device.
+	if (!psm_set_deep_sleep(sleepSeconds)) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 SDK rejected DeepSleep duration %u seconds",
+			sleepSeconds);
+		g_ecr6600DeepSleepPending = false;
+		os_task_delete(os_task_get_running_handle());
+		return;
+	}
+
+	// psm_set_deep_sleep() arms the scheduler idle hook and returns. Deleting
+	// this helper task removes the final activity introduced by this command.
+	g_ecr6600DeepSleepPending = false;
+	os_task_delete(os_task_get_running_handle());
+}
+#endif
 
 #if defined(PLATFORM_LN882H) || PLATFORM_LN8825
 // this will be applied after WiFi connect
@@ -424,50 +524,40 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 	};
 	HBN_Mode_Enter(&cfg);
 #elif PLATFORM_ECR6600
-	WDT_RET_CODE wdtResult;
+	int taskHandle;
 
-	// psm_set_deep_sleep() is the public API supplied by the exact
-	// ECR6600F_v2.1.23.16 SDK. Its argument is seconds; the SDK converts it
-	// to native 32.768 kHz RTC ticks and performs the RF/peripheral shutdown
-	// from the scheduler idle path.
+	// The SDK public API accepts seconds and rejects values above one day.
 	if (timeMS <= 0 || timeMS > 86400) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
 			"ECR6600 DeepSleep requires 1..86400 seconds");
 		return CMD_RES_BAD_ARGUMENT;
 	}
 
-	// OpenBeken enables the ECR6600 hardware watchdog with an effective
-	// timeout of about 4.5 seconds. The watchdog uses its own external clock
-	// and is not stopped by psm_set_deep_sleep(), so it can reset the chip
-	// before the RTC alarm expires. A deep-sleep wake performs a full boot,
-	// which configures the watchdog again normally.
-	wdtResult = hal_wdt_stop();
-	if (wdtResult == WDT_RET_OK) {
-		ADDLOG_INFO(LOG_FEATURE_CMD,
-			"ECR6600 watchdog stopped before deep sleep");
-	}
-	else {
-		ADDLOG_WARN(LOG_FEATURE_CMD,
-			"ECR6600 watchdog was not active before deep sleep");
-	}
-
-	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep requested for %d seconds via SDK PSM",
-		timeMS);
-
-	if (!psm_set_deep_sleep((unsigned int)timeMS)) {
+	if (g_ecr6600DeepSleepPending) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 SDK rejected DeepSleep duration %d seconds",
-			timeMS);
-
-		// The request was rejected, so normal execution will continue.
-		// Restore the watchdog if this command stopped it.
-		if (wdtResult == WDT_RET_OK) {
-			HAL_Configure_WDT();
-		}
+			"ECR6600 deep sleep is already pending");
 		return CMD_RES_ERROR;
 	}
 
+	g_ecr6600DeepSleepSeconds = (unsigned int)timeMS;
+	g_ecr6600DeepSleepPending = true;
+
+	taskHandle = os_task_create("obk_deepsleep",
+		ECR6600_DEEPSLEEP_TASK_PRIORITY,
+		ECR6600_DEEPSLEEP_TASK_STACK_SIZE,
+		ECR6600_DeepSleepTask,
+		NULL);
+
+	if (taskHandle < 0) {
+		g_ecr6600DeepSleepPending = false;
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: failed to create preparation task");
+		return CMD_RES_ERROR;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep scheduled for %u seconds",
+		g_ecr6600DeepSleepSeconds);
 	return CMD_RES_OK;
 #elif PLATFORM_GD32VW553
 	delay_ms(50);
