@@ -110,11 +110,11 @@ bool g_powersave;
 
 #if PLATFORM_ECR6600
 #define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS       500U
-#define ECR6600_DEEPSLEEP_READY_TIMEOUT_MS      3000U
-#define ECR6600_DEEPSLEEP_READY_POLL_MS           20U
-#define ECR6600_DEEPSLEEP_SETTLE_MS              100U
-#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE       4096
-#define ECR6600_DEEPSLEEP_TASK_PRIORITY            4
+#define ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS 3000U
+#define ECR6600_DEEPSLEEP_POLL_MS                  20U
+#define ECR6600_DEEPSLEEP_SETTLE_MS               100U
+#define ECR6600_DEEPSLEEP_TASK_STACK_SIZE        4096
+#define ECR6600_DEEPSLEEP_TASK_PRIORITY             4
 
 static volatile bool g_ecr6600DeepSleepPending = false;
 static unsigned int g_ecr6600DeepSleepSeconds = 0;
@@ -129,7 +129,8 @@ static void ECR6600_DeepSleepTask(void* arg) {
 
 	(void)arg;
 
-	// Let HTTP/UART finish returning the command result before Wi-Fi is stopped.
+	// Let HTTP/UART finish returning the command result before intentionally
+	// dropping the network transport that delivered it.
 	os_msleep(ECR6600_DEEPSLEEP_PREPARE_DELAY_MS);
 
 	wifiStatus = wifi_get_sta_status();
@@ -148,31 +149,46 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		}
 	}
 
-	// rf_idle2sleep(), which the SDK PSM path calls internally, explicitly
-	// requires the station to be disconnected. Also wait for the three
-	// PSM-tracked radio users checked by the SDK's own RF-state wrapper.
+	// Wait for the real WPA/DHCP disconnect to complete. The exact SDK leaves
+	// its PSM WiFi-STA device flag active after SYSTEM_EVENT_STA_DISCONNECTED,
+	// so waiting for that flag to clear by itself can never succeed.
 	do {
 		wifiStatus = wifi_get_sta_status();
-		staIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_STA);
-		apIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_AP);
-		bleIdle = psm_check_single_device_idle(PSM_DEVICE_BLE);
-
-		if ((wifiStatus == STA_STATUS_STOP || wifiStatus == STA_STATUS_DISCON) &&
-			staIdle && apIdle && bleIdle) {
+		if (wifiStatus == STA_STATUS_STOP || wifiStatus == STA_STATUS_DISCON) {
 			break;
 		}
 
-		os_msleep(ECR6600_DEEPSLEEP_READY_POLL_MS);
-		waitedMS += ECR6600_DEEPSLEEP_READY_POLL_MS;
-	} while (waitedMS < ECR6600_DEEPSLEEP_READY_TIMEOUT_MS);
+		os_msleep(ECR6600_DEEPSLEEP_POLL_MS);
+		waitedMS += ECR6600_DEEPSLEEP_POLL_MS;
+	} while (waitedMS < ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS);
 
-	if ((wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) ||
-		!staIdle || !apIdle || !bleIdle) {
+	if (wifiStatus != STA_STATUS_STOP && wifiStatus != STA_STATUS_DISCON) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
-			"ECR6600 deep sleep: radio not ready after %u ms "
-			"(wifi=%u sta=%u ap=%u ble=%u); aborting",
-			waitedMS,
-			(unsigned int)wifiStatus,
+			"ECR6600 deep sleep: WiFi did not disconnect after %u ms "
+			"(status=%u); aborting",
+			waitedMS, (unsigned int)wifiStatus);
+		g_ecr6600DeepSleepPending = false;
+		os_task_delete(os_task_get_running_handle());
+		return;
+	}
+
+	// Allow the disconnect event, DHCP release and WPA cleanup to drain.
+	os_msleep(ECR6600_DEEPSLEEP_SETTLE_MS);
+
+	// Complete the PSM bookkeeping omitted by the normal disconnect path.
+	// Tuya's ECR6600 low-power adapter performs this same explicit STA-IDLE
+	// transition before enabling PSM.
+	psm_set_wifi_status(PSM_OFF_LINE);
+	psm_set_device_status(PSM_DEVICE_WIFI_STA, PSM_DEVICE_STATUS_IDLE);
+
+	staIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_STA);
+	apIdle = psm_check_single_device_idle(PSM_DEVICE_WIFI_AP);
+	bleIdle = psm_check_single_device_idle(PSM_DEVICE_BLE);
+
+	if (!staIdle || !apIdle || !bleIdle) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: PSM radio users still busy "
+			"(sta=%u ap=%u ble=%u); aborting",
 			(unsigned int)staIdle,
 			(unsigned int)apIdle,
 			(unsigned int)bleIdle);
@@ -181,16 +197,13 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		return;
 	}
 
-	// Allow the final disconnect event and DHCP/WPA cleanup to drain before
-	// the SDK idle hook closes RF.
-	os_msleep(ECR6600_DEEPSLEEP_SETTLE_MS);
-
 	ADDLOG_INFO(LOG_FEATURE_CMD,
-		"ECR6600 deep sleep: WiFi/PSM ready after %u ms; arming %u seconds",
+		"ECR6600 deep sleep: disconnected and PSM-idle after %u ms; "
+		"arming %u seconds",
 		waitedMS, sleepSeconds);
 
-	// Keep OpenBeken's watchdog active. A valid hardware deep sleep gates it;
-	// if the SDK faults before final entry, the watchdog recovers the device.
+	// Keep OpenBeken's watchdog enabled. A valid hardware deep sleep gates it;
+	// a failed transition is recovered by the watchdog instead of hanging.
 	if (!psm_set_deep_sleep(sleepSeconds)) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
 			"ECR6600 SDK rejected DeepSleep duration %u seconds",
@@ -200,8 +213,8 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		return;
 	}
 
-	// psm_set_deep_sleep() arms the scheduler idle hook and returns. Deleting
-	// this helper task removes the final activity introduced by this command.
+	// psm_set_deep_sleep() arms the scheduler idle hook and returns. Delete
+	// this temporary task so it cannot itself remain a PSM activity source.
 	g_ecr6600DeepSleepPending = false;
 	os_task_delete(os_task_get_running_handle());
 }
@@ -526,7 +539,7 @@ static commandResult_t CMD_DeepSleep(const void* context, const char* cmd, const
 #elif PLATFORM_ECR6600
 	int taskHandle;
 
-	// The SDK public API accepts seconds and rejects values above one day.
+	// The exact SDK public API accepts seconds and rejects values above one day.
 	if (timeMS <= 0 || timeMS > 86400) {
 		ADDLOG_ERROR(LOG_FEATURE_CMD,
 			"ECR6600 DeepSleep requires 1..86400 seconds");
