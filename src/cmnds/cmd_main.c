@@ -114,7 +114,9 @@ bool g_powersave;
 #define ECR6600_DEEPSLEEP_PREPARE_DELAY_MS       500U
 #define ECR6600_DEEPSLEEP_DISCONNECT_TIMEOUT_MS 3000U
 #define ECR6600_DEEPSLEEP_POLL_MS                  20U
-#define ECR6600_DEEPSLEEP_SETTLE_MS               100U
+#define ECR6600_DEEPSLEEP_PSM_SYNC_TIMEOUT_MS    1000U
+#define ECR6600_DEEPSLEEP_PSM_SYNC_POLL_MS         10U
+#define ECR6600_DEEPSLEEP_PSM_SYNC_SETTLE_MS       50U
 #define ECR6600_DEEPSLEEP_TASK_STACK_SIZE        4096
 #define ECR6600_DEEPSLEEP_TASK_PRIORITY             4
 
@@ -136,7 +138,8 @@ static unsigned int ECR6600_ReadRegister(unsigned int address) {
 static void ECR6600_LogSleepRegisters(const char* stage) {
 	ADDLOG_INFO(LOG_FEATURE_CMD,
 		"ECRSLPREG:%s wake=%08X ena=%08X status=%08X fsm=%08X "
-		"rtc_cnt=%08X rtc_alarm=%08X rtc_ctrl=%08X rtc_st=%08X rf=%u",
+		"rtc_cnt=%08X rtc_alarm=%08X rtc_ctrl=%08X rtc_st=%08X "
+		"rf=%u dev=%08X sta=%u ap=%u ble=%u",
 		stage,
 		ECR6600_ReadRegister(PCU_WAKEUP_CTRL_REG),
 		ECR6600_ReadRegister(PCU_INT_ENA_CTRL_REG),
@@ -146,13 +149,19 @@ static void ECR6600_LogSleepRegisters(const char* stage) {
 		ECR6600_ReadRegister(ECR6600_RTC_ALARM_REG),
 		ECR6600_ReadRegister(ECR6600_RTC_CTRL_REG),
 		ECR6600_ReadRegister(ECR6600_RTC_STATUS_REG),
-		(unsigned int)psm_infs.rf_open_enable);
+		(unsigned int)psm_infs.rf_open_enable,
+		psm_infs.device_status,
+		(unsigned int)psm_check_single_device_idle(PSM_DEVICE_WIFI_STA),
+		(unsigned int)psm_check_single_device_idle(PSM_DEVICE_WIFI_AP),
+		(unsigned int)psm_check_single_device_idle(PSM_DEVICE_BLE));
 }
 
 static void ECR6600_DeepSleepTask(void* arg) {
 	unsigned int waitedMS = 0;
+	unsigned int psmSyncMS = 0;
 	unsigned int sleepSeconds = g_ecr6600DeepSleepSeconds;
 	wifi_status_e wifiStatus;
+	bool sawStaActive = false;
 	bool staIdle;
 	bool apIdle;
 	bool bleIdle;
@@ -202,12 +211,31 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		return;
 	}
 
-	// Allow the disconnect event, DHCP release and WPA cleanup to drain.
-	os_msleep(ECR6600_DEEPSLEEP_SETTLE_MS);
+	// The exact Wi-Fi library finishes its disconnection indication by setting
+	// PSM_DEVICE_WIFI_STA ACTIVE. STA_STATUS_DISCON is visible before that late
+	// callback has necessarily completed, which is why V12 could observe idle
+	// and then have psm_switch_rf_state() reject RF shutdown moments later.
+	// Wait until that ACTIVE transition has happened, then allow the callback
+	// tail to finish before overriding the final offline state.
+	do {
+		if (!psm_check_single_device_idle(PSM_DEVICE_WIFI_STA)) {
+			sawStaActive = true;
+			break;
+		}
+
+		os_msleep(ECR6600_DEEPSLEEP_PSM_SYNC_POLL_MS);
+		psmSyncMS += ECR6600_DEEPSLEEP_PSM_SYNC_POLL_MS;
+	} while (psmSyncMS < ECR6600_DEEPSLEEP_PSM_SYNC_TIMEOUT_MS);
+
+	os_msleep(ECR6600_DEEPSLEEP_PSM_SYNC_SETTLE_MS);
+
+	ADDLOG_INFO(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep: disconnect PSM sync active=%u after %u ms",
+		(unsigned int)sawStaActive, psmSyncMS);
 
 	// Complete the PSM bookkeeping omitted by the normal disconnect path.
-	// Tuya's ECR6600 low-power adapter performs this same explicit STA-IDLE
-	// transition before enabling PSM.
+	// Tuya's ECR6600 low-power adapter performs this explicit STA-IDLE
+	// transition before enabling low power.
 	psm_set_wifi_status(PSM_OFF_LINE);
 	psm_set_device_status(PSM_DEVICE_WIFI_STA, PSM_DEVICE_STATUS_IDLE);
 
@@ -261,58 +289,37 @@ static void ECR6600_DeepSleepTask(void* arg) {
 			"direct GSLP for %u seconds (%u RTC ticks)",
 			waitedMS, sleepSeconds, rtcTicks);
 
-		// Let the final UART diagnostic leave the FIFO before clocks are changed.
-		os_msleep(50);
+		ECR6600_LogSleepRegisters("pre-final");
 
-		ECR6600_LogSleepRegisters("pre-pcu-clear");
 		psm_clear_pcu_isr();
-		ECR6600_LogSleepRegisters("post-pcu-clear");
-
 		rtcAlarm = drv_rtc_set_alarm_relative(rtcTicks);
 		ADDLOG_INFO(LOG_FEATURE_CMD,
-			"ECR6600 deep sleep: RTC alarm armed (0x%08X)",
+			"ECR6600 deep sleep: RTC alarm armed (0x%08X); "
+			"finalising RF and PMU transition",
 			rtcAlarm);
 		ECR6600_LogSleepRegisters("post-rtc-arm");
 
-		// The exact Tuya door-contact PSM path closes RF before calling
-		// psm_enter_sleep(). V4 called rf_idle2sleep() while WiFi was still
-		// active and crashed. Here WPA/DHCP are disconnected and all three
-		// PSM radio users have already been verified idle, so use the current
-		// SDK's public checked wrapper instead of the raw RF function.
+		// Flush all diagnostic output before the critical final sequence.
+		os_msleep(50);
+
+		// The Wi-Fi disconnection handler sets WIFI_STA ACTIVE at its very end.
+		// Reassert the intended offline/idle state immediately before the SDK's
+		// checked RF-close wrapper, with no logging or delay in between.
+		psm_set_wifi_status(PSM_OFF_LINE);
+		psm_set_device_status(PSM_DEVICE_WIFI_STA, PSM_DEVICE_STATUS_IDLE);
 		psm_clear_pcu_isr();
-		if (psm_infs.rf_open_enable) {
-			if (!psm_switch_rf_state(false)) {
-				ADDLOG_ERROR(LOG_FEATURE_CMD,
-					"ECR6600 deep sleep: SDK refused RF close");
-				ECR6600_LogSleepRegisters("rf-close-failed");
-				g_ecr6600DeepSleepPending = false;
-				os_task_delete(os_task_get_running_handle());
-				return;
-			}
-			ADDLOG_INFO(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: RF closed through SDK PSM");
-		}
-		else {
-			ADDLOG_INFO(LOG_FEATURE_CMD,
-				"ECR6600 deep sleep: RF was already closed");
+
+		if (psm_infs.rf_open_enable && !psm_switch_rf_state(false)) {
+			ADDLOG_ERROR(LOG_FEATURE_CMD,
+				"ECR6600 deep sleep: SDK refused final RF close");
+			ECR6600_LogSleepRegisters("rf-close-failed");
+			g_ecr6600DeepSleepPending = false;
+			os_task_delete(os_task_get_running_handle());
+			return;
 		}
 
-		// RF shutdown can itself leave a latched PCU edge/status. Clear it
-		// before the final PMU transition, while preserving the programmed RTC
-		// alarm. This is the missing step from V11's direct GSLP sequence.
-		psm_clear_pcu_isr();
-		ECR6600_LogSleepRegisters("post-rf-clear");
-
-		ADDLOG_INFO(LOG_FEATURE_CMD,
-			"ECR6600 deep sleep: entering SDK DEEP_SLEEP");
-
-		// Keep OpenBeken's watchdog enabled. If the full SDK wrapper stalls
-		// before the final PMU transition, the module recovers in about
-		// 4.5 seconds instead of becoming permanently inaccessible.
-		os_msleep(20);
-
-		// Last-moment clear: do not log after this call, so no UART or other
-		// activity can re-latch a wake source before sleep entry.
+		// Do not log after RF closes. Clear any status produced by the RF
+		// transition and enter the full SDK deep-sleep wrapper immediately.
 		psm_clear_pcu_isr();
 		psm_enter_sleep(DEEP_SLEEP);
 	}
