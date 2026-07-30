@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ecr6600-raw-sleep-test
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
