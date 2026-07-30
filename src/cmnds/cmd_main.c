@@ -197,6 +197,23 @@ static void ECR6600_DeepSleepTask(void* arg) {
 		return;
 	}
 
+	// The exact v2.1.23.16 libpsm calls psm_set_wakeup_mode() once from
+	// psm_wifi_ble_init() during boot. Its built-in default unconditionally
+	// enables GPIO17 as an external wake source. The SDK's own WAKEUPGPIO
+	// disable command clears the external edge triggers and then disables the
+	// selected GPIO. Do the same here so DeepSleep is RTC-only.
+	psm_wake_clear_trigger_level();
+	if (!psm_wakeup_gpio_conf(GPIO_NUM_17, 0)) {
+		ADDLOG_ERROR(LOG_FEATURE_CMD,
+			"ECR6600 deep sleep: failed to disable default GPIO17 wake");
+		g_ecr6600DeepSleepPending = false;
+		os_task_delete(os_task_get_running_handle());
+		return;
+	}
+
+	ADDLOG_INFO(LOG_FEATURE_CMD,
+		"ECR6600 deep sleep: GPIO17/external-edge wake disabled; "
+		"RTC-only sleep");
 	ADDLOG_INFO(LOG_FEATURE_CMD,
 		"ECR6600 deep sleep: disconnected and PSM-idle after %u ms; "
 		"arming %u seconds",
