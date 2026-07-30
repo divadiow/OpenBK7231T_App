@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - ecr6600-raw-sleep-test
-  pull_request:
-    branches:
-      - main
+    paths-ignore:
+      - .ci/ecr6600_raw_sleep_run.txt
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -16,6 +18,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ecr6600-raw-sleep-test
 
       - name: Checkout OpenECR6600 submodule
         run: git submodule update --init --recursive --depth=1 sdk/OpenECR6600
@@ -39,3 +43,21 @@ jobs:
           path: raw_sleep_artifacts/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish run ID for retrieval
+        if: always()
+        run: |
+          mkdir -p .ci
+          {
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "head_sha=${GITHUB_SHA}"
+            echo "completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > .ci/ecr6600_raw_sleep_run.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci/ecr6600_raw_sleep_run.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: publish ECR6600 sleep-test run ${GITHUB_RUN_ID} [skip ci]"
+            git push origin HEAD:ecr6600-raw-sleep-test
+          fi
