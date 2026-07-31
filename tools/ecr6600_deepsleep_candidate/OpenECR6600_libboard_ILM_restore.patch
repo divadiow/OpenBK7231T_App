@@ -1,0 +1,21 @@
+--- a/Boards/ecr6600/common/ld_xip.script.S
++++ b/Boards/ecr6600/common/ld_xip.script.S
+@@ -24,6 +24,7 @@
+   .text : 
+     {
+ 	KEEP(*(.vector_init ));
++	*libboard.a:(.text .text.*)
+ 	*libpsm.a:(.text .text.*)
+ 
+ 	TEXT_BEGIN_DRV = .;
+
+--- a/Boards/ecr6600/common/ld_xip_yy.script.S
++++ b/Boards/ecr6600/common/ld_xip_yy.script.S
+@@ -24,6 +24,7 @@
+   .text : 
+     {
+ 	KEEP(*(.vector_init ));
++	*libboard.a:(.text .text.*)
+ 	*libpsm.a:(.text .text.*)
+ 
+ 	TEXT_BEGIN_DRV = .;
