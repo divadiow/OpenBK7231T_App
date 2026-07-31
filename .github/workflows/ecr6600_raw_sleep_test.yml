@@ -1,12 +1,9 @@
-name: ECR6600 Minimal SDK Sleep Tests
+name: ECR6600 Minimal SDK RF-Close Sleep Test
 
 on:
   push:
     branches:
-      - ecr6600-raw-sleep-test
-  pull_request:
-    branches:
-      - main
+      - ecr6600-raw-sleep-rfclose-test
   workflow_dispatch:
 
 jobs:
@@ -29,13 +26,16 @@ jobs:
         run: |
           base64 -d tools/ecr6600_raw_sleep_test_bundle.tar.gz.b64 | tar -xzf -
 
+      - name: Patch minimal tests to close RF before deep sleep
+        run: python3 tools/ecr6600_raw_sleep_test/patch_rfclose_variant.py
+
       - name: Build isolation variants
         run: bash tools/ecr6600_raw_sleep_test/build_raw_sleep_tests.sh
 
       - name: Upload compiled firmware and diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: ECR6600F_v2.1.23.16_minimal_sleep_test_firmware
+          name: ECR6600F_v2.1.23.16_minimal_sleep_rfclose_firmware
           path: raw_sleep_artifacts/
           if-no-files-found: error
           retention-days: 30
