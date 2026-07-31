@@ -29,6 +29,15 @@ jobs:
         run: |
           base64 -d tools/ecr6600_raw_sleep_test_bundle.tar.gz.b64 | tar -xzf -
 
+      - name: Show restored build inputs
+        run: |
+          echo '=== restored files ==='
+          find tools/ecr6600_raw_sleep_test -maxdepth 4 -type f -print | sort
+          echo '=== build script ==='
+          sed -n '1,260p' tools/ecr6600_raw_sleep_test/build_raw_sleep_tests.sh
+          echo '=== defconfig ==='
+          sed -n '1,320p' tools/ecr6600_raw_sleep_test/board/defconfig
+
       - name: Patch minimal tests to close RF before deep sleep
         run: python3 tools/ecr6600_raw_sleep_test/patch_rfclose_variant.py
 
@@ -36,9 +45,12 @@ jobs:
         run: bash tools/ecr6600_raw_sleep_test/build_raw_sleep_tests.sh
 
       - name: Upload compiled firmware and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ECR6600F_v2.1.23.16_minimal_sleep_rfclose_firmware
-          path: raw_sleep_artifacts/
+          path: |
+            raw_sleep_artifacts/
+            tools/ecr6600_raw_sleep_test/
           if-no-files-found: error
           retention-days: 30
