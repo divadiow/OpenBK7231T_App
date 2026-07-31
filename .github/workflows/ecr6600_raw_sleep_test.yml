@@ -1,11 +1,11 @@
-name: ECR6600 Minimal SDK Sleep Tests
+name: ECR6600 Minimal SDK Sleep Linker-Fix Test
 
 on:
   push:
     branches:
-      - ecr6600-raw-sleep-test
+      - ecr6600-raw-sleep-linker-fix-test
     paths-ignore:
-      - .ci/ecr6600_raw_sleep_run.txt
+      - .ci/ecr6600_raw_sleep_linker_fix_run.txt
   workflow_dispatch:
 
 permissions:
@@ -19,10 +19,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ecr6600-raw-sleep-test
+          ref: ecr6600-raw-sleep-linker-fix-test
 
       - name: Checkout OpenECR6600 submodule
         run: git submodule update --init --recursive --depth=1 sdk/OpenECR6600
+
+      - name: Restore raw vendor libboard placement in ILM
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          scripts = (
+              Path('sdk/OpenECR6600/Boards/ecr6600/common/ld_xip.script.S'),
+              Path('sdk/OpenECR6600/Boards/ecr6600/common/ld_xip_yy.script.S'),
+          )
+          needle = '\tKEEP(*(.vector_init ));\n\t*libpsm.a:(.text .text.*)'
+          replacement = (
+              '\tKEEP(*(.vector_init ));\n'
+              '\t*libboard.a:(.text .text.*)\n'
+              '\t*libpsm.a:(.text .text.*)'
+          )
+
+          for path in scripts:
+              source = path.read_text(encoding='utf-8')
+              if source.count(needle) != 1:
+                  raise SystemExit(f'Unexpected linker-script layout in {path}')
+              path.write_text(
+                  source.replace(needle, replacement, 1),
+                  encoding='utf-8',
+                  newline='\n',
+              )
+              print(f'Patched {path}')
+          PY
+
+          git -C sdk/OpenECR6600 diff -- \
+            Boards/ecr6600/common/ld_xip.script.S \
+            Boards/ecr6600/common/ld_xip_yy.script.S
 
       - name: Install 32-bit runtime support
         run: |
@@ -49,10 +81,64 @@ jobs:
       - name: Build isolation variants
         run: bash tools/ecr6600_raw_sleep_test/build_raw_sleep_tests.sh
 
+      - name: Verify wake-critical clock code is resident in ILM
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          nm_path = Path('raw_sleep_artifacts/B_WIFI_INIT_UNASSOCIATED/RawSleepB.nm')
+          symbols = {}
+          wanted = {
+              'psm_enter_sleep',
+              'drv_spiflash_restore',
+              'chip_clk_init',
+              'chip_clk_config_40M_26M',
+          }
+
+          for line in nm_path.read_text(encoding='utf-8', errors='replace').splitlines():
+              fields = line.split()
+              if len(fields) >= 4 and fields[-1] in wanted:
+                  symbols[fields[-1]] = int(fields[0], 16)
+
+          missing = wanted.difference(symbols)
+          if missing:
+              raise SystemExit(f'Missing expected symbols: {sorted(missing)}')
+
+          for name in sorted(symbols):
+              print(f'{name}=0x{symbols[name]:08X}')
+
+          for name in ('chip_clk_init', 'chip_clk_config_40M_26M'):
+              address = symbols[name]
+              if not (0x00010000 <= address < 0x00040000):
+                  raise SystemExit(
+                      f'{name} remains outside ILM at 0x{address:08X}'
+                  )
+
+          provenance = Path('raw_sleep_artifacts/LINKER_FIX_PROVENANCE.txt')
+          provenance.write_text(
+              'ECR6600 v2.1.23.16 minimal deep-sleep linker-fix test\n'
+              'Restored vendor linker placement:\n'
+              '  *libboard.a:(.text .text.*)\n\n'
+              + ''.join(
+                  f'{name}=0x{symbols[name]:08X}\n'
+                  for name in sorted(symbols)
+              ),
+              encoding='utf-8',
+              newline='\n',
+          )
+
+          for source in (
+              Path('sdk/OpenECR6600/Boards/ecr6600/common/ld_xip.script.S'),
+              Path('sdk/OpenECR6600/Boards/ecr6600/common/ld_xip_yy.script.S'),
+          ):
+              target = Path('raw_sleep_artifacts') / source.name
+              target.write_bytes(source.read_bytes())
+          PY
+
       - name: Upload compiled firmware and diagnostics
         uses: actions/upload-artifact@v4
         with:
-          name: ECR6600F_v2.1.23.16_minimal_sleep_test_firmware
+          name: ECR6600F_v2.1.23.16_minimal_sleep_linker_fixed
           path: raw_sleep_artifacts/
           if-no-files-found: error
           retention-days: 30
@@ -66,11 +152,11 @@ jobs:
             echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
             echo "head_sha=${GITHUB_SHA}"
             echo "completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          } > .ci/ecr6600_raw_sleep_run.txt
+          } > .ci/ecr6600_raw_sleep_linker_fix_run.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .ci/ecr6600_raw_sleep_run.txt
+          git add .ci/ecr6600_raw_sleep_linker_fix_run.txt
           if ! git diff --cached --quiet; then
-            git commit -m "ci: publish ECR6600 sleep-test run ${GITHUB_RUN_ID} [skip ci]"
-            git push origin HEAD:ecr6600-raw-sleep-test
+            git commit -m "ci: publish ECR6600 linker-fix test run ${GITHUB_RUN_ID} [skip ci]"
+            git push origin HEAD:ecr6600-raw-sleep-linker-fix-test
           fi
