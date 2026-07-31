@@ -6,6 +6,9 @@ on:
       - ecr6600-raw-sleep-linker-fix-test
     paths-ignore:
       - .ci/ecr6600_raw_sleep_linker_fix_run.txt
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
