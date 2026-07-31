@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SOURCE = Path("sdk/OpenECR6600/Boards/ecr6600/raw_sleep_test/main.c")
+candidates = sorted(Path(".").rglob("raw_sleep_test/main.c"))
+if len(candidates) != 1:
+    print("Candidate raw-sleep source files:")
+    for candidate in candidates:
+        print(f"  {candidate}")
+    raise RuntimeError(f"Expected exactly one raw_sleep_test/main.c, found {len(candidates)}")
 
+SOURCE = candidates[0]
 text = SOURCE.read_text(encoding="utf-8")
 
 extern_decl = "extern bool psm_config_rf_state(bool rf_state);\n"
@@ -21,12 +27,8 @@ if rtc_pos < 0:
     raise RuntimeError("Could not find drv_rtc_set_alarm_relative()")
 
 line_start = text.rfind("\n", 0, rtc_pos) + 1
-indent = text[line_start:rtc_pos]
-if indent.strip():
-    # The call may be on the RHS of an assignment. Use the line's leading
-    # whitespace, not the complete prefix before the function name.
-    indent = text[line_start:]
-    indent = indent[: len(indent) - len(indent.lstrip(" \t"))]
+indent = text[line_start:]
+indent = indent[: len(indent) - len(indent.lstrip(" \t"))]
 
 insertion = (
     f'{indent}os_printf(LM_OS, LL_INFO, '
