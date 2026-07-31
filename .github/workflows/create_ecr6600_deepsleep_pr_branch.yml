@@ -1,0 +1,44 @@
+name: Create clean ECR6600 DeepSleep PR branch
+
+on:
+  push:
+    branches:
+      - ecr6600-deepsleep-linker-candidate
+
+permissions:
+  contents: write
+
+jobs:
+  create:
+    name: Create clean branch from current upstream main
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@v4
+        with:
+          ref: ecr6600-deepsleep-linker-candidate
+          fetch-depth: 0
+
+      - name: Build one-commit PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --heads origin ecr6600-deepsleep-pr >/dev/null 2>&1; then
+            echo "ecr6600-deepsleep-pr already exists; nothing to do"
+            exit 0
+          fi
+
+          cp tools/ecr6600_deepsleep_candidate/cmd_main.patch /tmp/ecr6600_deepsleep.patch
+          git remote add upstream https://github.com/openshwprojects/OpenBK7231T_App.git
+          git fetch upstream main
+          git checkout -B ecr6600-deepsleep-pr upstream/main
+          git apply --check /tmp/ecr6600_deepsleep.patch
+          git apply /tmp/ecr6600_deepsleep.patch
+          git diff --check
+
+          git config user.name "divadiow"
+          git config user.email "62958974+divadiow@users.noreply.github.com"
+          git add src/cmnds/cmd_main.c
+          git commit -m "feat(ecr6600): implement reliable timed deep sleep"
+          git push origin HEAD:ecr6600-deepsleep-pr
