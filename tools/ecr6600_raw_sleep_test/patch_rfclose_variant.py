@@ -2,12 +2,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-candidates = sorted(Path(".").rglob("raw_sleep_test/main.c"))
+candidates: list[Path] = []
+for path in Path(".").rglob("*.c"):
+    try:
+        candidate_text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        continue
+    if "RAWTEST:" in candidate_text and "SLEEP_ARMED" in candidate_text:
+        candidates.append(path)
+
 if len(candidates) != 1:
     print("Candidate raw-sleep source files:")
-    for candidate in candidates:
+    for candidate in sorted(candidates):
         print(f"  {candidate}")
-    raise RuntimeError(f"Expected exactly one raw_sleep_test/main.c, found {len(candidates)}")
+    print("All restored C files:")
+    for path in sorted(Path(".").rglob("*.c")):
+        print(f"  {path}")
+    raise RuntimeError(f"Expected exactly one raw sleep source, found {len(candidates)}")
 
 SOURCE = candidates[0]
 text = SOURCE.read_text(encoding="utf-8")
