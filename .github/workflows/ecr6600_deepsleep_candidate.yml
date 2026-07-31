@@ -1,0 +1,153 @@
+name: ECR6600 DeepSleep Linker Candidate
+
+on:
+  push:
+    branches:
+      - ecr6600-deepsleep-linker-candidate
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and verify ECR6600 candidate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply candidate OpenBeken deep-sleep patch
+        run: |
+          set -euo pipefail
+          git apply --check tools/ecr6600_deepsleep_candidate/cmd_main.patch
+          git apply tools/ecr6600_deepsleep_candidate/cmd_main.patch
+
+      - name: Checkout required submodules
+        run: |
+          git submodule update --init --recursive --depth=1 \
+            libraries/berry sdk/OpenECR6600
+
+      - name: Restore vendor libboard ILM placement
+        run: |
+          set -euo pipefail
+          git -C sdk/OpenECR6600 apply --check \
+            ../../tools/ecr6600_deepsleep_candidate/OpenECR6600_libboard_ILM_restore.patch
+          git -C sdk/OpenECR6600 apply \
+            ../../tools/ecr6600_deepsleep_candidate/OpenECR6600_libboard_ILM_restore.patch
+          git -C sdk/OpenECR6600 diff -- \
+            Boards/ecr6600/common/ld_xip.script.S \
+            Boards/ecr6600/common/ld_xip_yy.script.S
+
+      - name: Install 32-bit runtime support
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6-i386
+
+      - name: Build OpenECR6600 candidate
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="ecrds_linkfix_$(git rev-parse --short=12 HEAD)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          make APP_VERSION="${VERSION}" APP_NAME=OpenECR6600 OpenECR6600
+
+      - name: Verify wake-critical code placement and collect artifact
+        shell: bash
+        env:
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          BUILD_DIR="sdk/OpenECR6600/build/OpenBeken"
+          TOOL="sdk/OpenECR6600/tool/nds32le-elf-mculib-v3s/bin/nds32le-elf-nm"
+          ELF="$(find "$BUILD_DIR" -type f -name '*.elf' -print -quit)"
+          MAP="$(find "$BUILD_DIR" -type f -name '*.map' -print -quit || true)"
+
+          test -n "$ELF"
+          test -x "$TOOL"
+
+          rm -rf ecr6600_candidate_artifact
+          mkdir -p ecr6600_candidate_artifact
+
+          "$TOOL" -n "$ELF" > ecr6600_candidate_artifact/OpenECR6600_candidate.nm
+          cp "$ELF" ecr6600_candidate_artifact/
+          if [ -n "$MAP" ]; then
+            cp "$MAP" ecr6600_candidate_artifact/
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          nm_path = Path('ecr6600_candidate_artifact/OpenECR6600_candidate.nm')
+          wanted = {
+              'chip_clk_init',
+              'chip_clk_config_40M_26M',
+              'psm_enter_sleep',
+              'drv_spiflash_restore',
+          }
+          symbols = {}
+
+          for line in nm_path.read_text(encoding='utf-8', errors='replace').splitlines():
+              fields = line.split()
+              if len(fields) >= 3 and fields[-1] in wanted:
+                  symbols[fields[-1]] = int(fields[0], 16)
+
+          missing = wanted.difference(symbols)
+          if missing:
+              raise SystemExit(f'Missing expected symbols: {sorted(missing)}')
+
+          for name in sorted(symbols):
+              print(f'{name}=0x{symbols[name]:08X}')
+
+          for name in ('chip_clk_init', 'chip_clk_config_40M_26M'):
+              address = symbols[name]
+              if not (0x00010000 <= address < 0x00040000):
+                  raise SystemExit(
+                      f'{name} remains outside ILM at 0x{address:08X}'
+                  )
+
+          Path('ecr6600_candidate_artifact/SYMBOL_PLACEMENT.txt').write_text(
+              ''.join(f'{name}=0x{symbols[name]:08X}\n' for name in sorted(symbols)),
+              encoding='utf-8',
+              newline='\n',
+          )
+          PY
+
+          cp "output/${VERSION}/OpenECR6600_${VERSION}.bin" \
+            ecr6600_candidate_artifact/
+          cp "output/${VERSION}/OpenECR6600_${VERSION}_ota.img" \
+            ecr6600_candidate_artifact/
+          cp src/cmnds/cmd_main.c ecr6600_candidate_artifact/
+          cp tools/ecr6600_deepsleep_candidate/*.patch \
+            ecr6600_candidate_artifact/
+          cp sdk/OpenECR6600/Boards/ecr6600/common/ld_xip.script.S \
+            ecr6600_candidate_artifact/
+          cp sdk/OpenECR6600/Boards/ecr6600/common/ld_xip_yy.script.S \
+            ecr6600_candidate_artifact/
+
+          {
+            echo "OpenBeken ECR6600 deep-sleep linker candidate"
+            echo "app_commit=$(git rev-parse HEAD)"
+            echo "app_version=${VERSION}"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git submodule status sdk/OpenECR6600 libraries/berry
+            echo
+            cat ecr6600_candidate_artifact/SYMBOL_PLACEMENT.txt
+          } > ecr6600_candidate_artifact/PROVENANCE.txt
+
+          (
+            cd ecr6600_candidate_artifact
+            sha256sum ./* > SHA256SUMS.txt
+          )
+
+      - name: Upload ECR6600 candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: ECR6600_deepsleep_linker_candidate
+          path: ecr6600_candidate_artifact/
+          if-no-files-found: error
+          retention-days: 30
