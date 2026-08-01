@@ -3,6 +3,8 @@ name: Build ConnectPlus Enhanced APK
 on:
   push:
     branches: ["connectplus-enhanced-builder"]
+  pull_request:
+    branches: ["connectplus-enhanced-builder"]
   workflow_dispatch:
 
 permissions:
