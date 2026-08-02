@@ -9,28 +9,22 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Report build start
-        id: report
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          NUMBER=$(gh api "repos/${GITHUB_REPOSITORY}/issues" \
-            -f title="ConnectPlus Enhanced build ${GITHUB_RUN_ID}" \
-            -f body="Temporary automated APK build.\n\nrun_id=${GITHUB_RUN_ID}\ncommit=${GITHUB_SHA}\nstatus=in_progress" \
-            --jq .number)
-          echo "issue_number=${NUMBER}" >> "$GITHUB_OUTPUT"
       - name: Check out app source
         uses: actions/checkout@v4
         with:
           repository: divadiow/Misc
           ref: connectplus-enhanced-build
           path: source
+      - name: Apply Charge 3/4 test2 patch
+        run: |
+          base64 -d source/ConnectPlusEnhanced/test2.patch.gz.b64 | gzip -d > /tmp/connectplus-test2.patch
+          patch -p1 -d source < /tmp/connectplus-test2.patch
+          grep -R "0.1.1-test2" source/ConnectPlusEnhanced/app/build.gradle
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -51,18 +45,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ConnectPlusEnhanced-v0.1.0-test1-debug-apk
+          name: ConnectPlusEnhanced-v0.1.1-test2-debug-apk
           path: source/ConnectPlusEnhanced/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
-      - name: Report final status
-        if: always() && steps.report.outputs.issue_number != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ steps.report.outputs.issue_number }}
-          JOB_STATUS: ${{ job.status }}
-        run: |
-          CHECKSUM="not-generated"
-          if test -f apk.sha256; then CHECKSUM=$(cat apk.sha256); fi
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}" \
-            -f body="Temporary automated APK build.\n\nrun_id=${GITHUB_RUN_ID}\ncommit=${GITHUB_SHA}\nstatus=${JOB_STATUS}\nchecksum=${CHECKSUM}"
