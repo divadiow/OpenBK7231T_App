@@ -1,0 +1,26 @@
+name: Remove temporary workflow history
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'temporary-history-cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove temporary workflow runs and self
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          for RUN_ID in 30722693569 30722734310 30735126198 30735206186; do
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" || true
+          done
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" -f state=closed
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${GITHUB_HEAD_REF}" || true
