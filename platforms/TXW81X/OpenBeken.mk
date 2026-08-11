@@ -3,10 +3,23 @@ OBK_DIR = ../../..
 CFLAGS +=  -DPLATFORM_TXW81X
 
 # The precompiled Taixin OTA library rejects the SDK's own unencrypted
-# APP_compress.bin before touching flash. Redirect only that check to the
-# guarded wrapper in hal_ota_txw81x.c; encrypted images still use the vendor
-# customer-ID validation through __real_fwinfo_check_customer_id().
+# APP_compress.bin before touching flash. Redirect the customer-ID check to
+# the guarded wrapper in hal_ota_txw81x.c.
 LDFLAGS += -Wl,--wrap=fwinfo_check_customer_id
+
+# libcommon.a contains its own weak ota_fwinfo_get() fallback returning -1.
+# Bind every reference, including references originating inside that archive
+# member, directly to the known-good TXW81X implementation in the HAL.
+LDFLAGS += -Wl,--defsym=ota_fwinfo_get=txw81x_ota_fwinfo_get
+
+# Non-invasive trace wrappers for the otherwise opaque first-call setup path.
+# They record state only while an OTA SDK call is active and log afterwards.
+LDFLAGS += -Wl,--wrap=_os_malloc
+LDFLAGS += -Wl,--wrap=get_loader_mark
+LDFLAGS += -Wl,--wrap=spi_nor_open
+LDFLAGS += -Wl,--wrap=spi_nor_read
+LDFLAGS += -Wl,--wrap=spi_nor_close
+LDFLAGS += -Wl,--wrap=get_current_loader_addr
 
 INCLUDES += -I$(OBK_DIR)/libraries/easyflash/inc
 
