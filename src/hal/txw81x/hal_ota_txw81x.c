@@ -9,6 +9,10 @@
 #include "hal/spi_nor.h"
 #include "lib/ota/fw.h"
 #include "lib/ota/fwinfo.h"
+#include "sys_config.h"
+#include "dev.h"
+#include "devid.h"
+#include "hal/dvp.h"
 
 /*
  * The TXW81X SDK OTA API takes a uint16 length. Keep every write small even
@@ -17,9 +21,11 @@
  */
 #define TXW81X_OTA_IO_CHUNK       1460
 #define TXW81X_OTA_PROGRESS_STEP  (64 * 1024)
+#define TXW81X_OTA_FLASH_STACK     "FPV-v2.5.3.7-40416"
 
 extern struct spi_nor_flash flash0;
 extern uint32 get_flash_cap(void);
+extern void mcu_watchdog_feed(void);
 
 /*
  * libotaV2_write_fw() is supplied only inside Taixin's precompiled
@@ -53,6 +59,13 @@ typedef struct txw81x_ota_sdk_diag_s
 	uint32 spi_read_addr;
 	uint32 spi_read_len;
 	int spi_close_count;
+	int sector_erase_count;
+	uint32 sector_erase_addr;
+	int block_erase_count;
+	uint32 block_erase_addr;
+	int spi_write_count;
+	uint32 spi_write_addr;
+	uint32 spi_write_len;
 	int current_loader_seen;
 	uint32 current_loader_addr;
 } txw81x_ota_sdk_diag_t;
@@ -98,6 +111,16 @@ static void TXW81X_OTA_LogSdkDiag(void)
 		g_txw81x_ota_diag.spi_read_addr,
 		g_txw81x_ota_diag.spi_read_len,
 		g_txw81x_ota_diag.spi_close_count);
+
+	ADDLOG_ERROR(LOG_FEATURE_OTA,
+		"TXW81X SDK trace: sector-erase=%d/0x%08x block-erase=%d/0x%08x write=%d addr=0x%08x len=%u",
+		g_txw81x_ota_diag.sector_erase_count,
+		g_txw81x_ota_diag.sector_erase_addr,
+		g_txw81x_ota_diag.block_erase_count,
+		g_txw81x_ota_diag.block_erase_addr,
+		g_txw81x_ota_diag.spi_write_count,
+		g_txw81x_ota_diag.spi_write_addr,
+		g_txw81x_ota_diag.spi_write_len);
 
 	ADDLOG_ERROR(LOG_FEATURE_OTA,
 		"TXW81X SDK trace: current-loader=%d/0x%08x free-heap=%u",
@@ -230,6 +253,48 @@ void __wrap_spi_nor_close(struct spi_nor_flash *flash)
 	}
 }
 
+extern void __real_spi_nor_sector_erase(struct spi_nor_flash *flash, uint32 addr);
+void __wrap_spi_nor_sector_erase(struct spi_nor_flash *flash, uint32 addr)
+{
+	if(g_txw81x_ota_trace_active)
+	{
+		g_txw81x_ota_diag.sector_erase_count++;
+		g_txw81x_ota_diag.sector_erase_addr = addr;
+	}
+	mcu_watchdog_feed();
+	__real_spi_nor_sector_erase(flash, addr);
+	mcu_watchdog_feed();
+}
+
+extern void __real_spi_nor_block_erase(struct spi_nor_flash *flash, uint32 addr);
+void __wrap_spi_nor_block_erase(struct spi_nor_flash *flash, uint32 addr)
+{
+	if(g_txw81x_ota_trace_active)
+	{
+		g_txw81x_ota_diag.block_erase_count++;
+		g_txw81x_ota_diag.block_erase_addr = addr;
+	}
+	mcu_watchdog_feed();
+	__real_spi_nor_block_erase(flash, addr);
+	mcu_watchdog_feed();
+}
+
+extern void __real_spi_nor_write(struct spi_nor_flash *flash,
+	uint32 addr, uint8 *data, uint32 len);
+void __wrap_spi_nor_write(struct spi_nor_flash *flash,
+	uint32 addr, uint8 *data, uint32 len)
+{
+	if(g_txw81x_ota_trace_active)
+	{
+		g_txw81x_ota_diag.spi_write_count++;
+		g_txw81x_ota_diag.spi_write_addr = addr;
+		g_txw81x_ota_diag.spi_write_len = len;
+	}
+	mcu_watchdog_feed();
+	__real_spi_nor_write(flash, addr, data, len);
+	mcu_watchdog_feed();
+}
+
 extern uint32 __real_get_current_loader_addr(void);
 uint32 __wrap_get_current_loader_addr(void)
 {
@@ -243,10 +308,10 @@ uint32 __wrap_get_current_loader_addr(void)
 }
 
 /*
- * The precompiled Taixin OTA library rejects the SDK's own unencrypted
- * APP_compress.bin in fwinfo_check_customer_id(). The image is deliberately
- * unencrypted (AesEnable=0), so accept only a structurally valid unencrypted
- * header. Encrypted images still use the original customer-ID check.
+ * Taixin's helper emits "Not encrypt firmware" for the SDK's own
+ * APP_compress.bin when AesEnable=0. Validate the firmware header, explicitly
+ * accept that normal unencrypted format, and preserve the original customer-ID
+ * check for genuinely encrypted images.
  */
 extern int32 __real_fwinfo_check_customer_id(const uint8 *data);
 
@@ -282,6 +347,20 @@ int32 __wrap_fwinfo_check_customer_id(const uint8 *data)
 	}
 
 	return __real_fwinfo_check_customer_id(data);
+}
+
+static void TXW81X_OTA_QuiesceCamera(void)
+{
+#if DVP_EN
+	struct dvp_device *dvp = (struct dvp_device*)dev_get(HG_DVP_DEVID);
+	if(dvp != NULL)
+	{
+		ADDLOG_INFO(LOG_FEATURE_OTA,
+			"TXW81X OTA: stopping DVP before flash erase/write");
+		dvp_close(dvp);
+		rtos_delay_milliseconds(5);
+	}
+#endif
 }
 
 static int TXW81X_OTA_GetStagingLimit(uint32 *start, uint32 *limit)
@@ -342,8 +421,8 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_OTA,
-		"TXW81X OTA: flash=0x%08x staging-start=0x%08x staging-limit=%u free-heap=%u",
-		flash0.size, staging_start, staging_limit,
+		"TXW81X OTA: flash-stack=%s flash=0x%08x staging-start=0x%08x staging-limit=%u free-heap=%u",
+		TXW81X_OTA_FLASH_STACK, flash0.size, staging_start, staging_limit,
 		(unsigned int)xPortGetFreeHeapSize());
 
 	if((uint32)request->contentLength > staging_limit)
@@ -367,6 +446,8 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	}
 
 	TXW81X_OTA_ResetSdkDiag();
+	TXW81X_OTA_QuiesceCamera();
+	mcu_watchdog_feed();
 
 	while(towrite > 0)
 	{
@@ -386,7 +467,9 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			}
 
 			writebuf = request->received;
+			mcu_watchdog_feed();
 			buffered = recv(request->fd, writebuf, recvmax, 0);
+			mcu_watchdog_feed();
 			if(buffered <= 0)
 			{
 				ADDLOG_ERROR(LOG_FEATURE_OTA,
@@ -407,10 +490,12 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			writelen = towrite;
 		}
 
+		mcu_watchdog_feed();
 		g_txw81x_ota_trace_active = 1;
 		res = libota_write_fw(request->contentLength, startaddr,
 			(uint8*)writebuf, (uint16)writelen);
 		g_txw81x_ota_trace_active = 0;
+		mcu_watchdog_feed();
 
 		if(res != 0)
 		{
@@ -422,10 +507,19 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			goto update_ota_exit;
 		}
 
-		if(startaddr == 0 && g_txw81x_ota_diag.customer_bypass_seen)
+		if(startaddr == 0)
 		{
+			if(g_txw81x_ota_diag.customer_bypass_seen)
+			{
+				ADDLOG_INFO(LOG_FEATURE_OTA,
+					"TXW81X OTA: accepted valid unencrypted image");
+			}
 			ADDLOG_INFO(LOG_FEATURE_OTA,
-				"TXW81X OTA: accepted valid unencrypted image");
+				"TXW81X OTA first block: sector-erase=%d block-erase=%d write=%d target=0x%08x",
+				g_txw81x_ota_diag.sector_erase_count,
+				g_txw81x_ota_diag.block_erase_count,
+				g_txw81x_ota_diag.spi_write_count,
+				g_txw81x_ota_diag.spi_write_addr);
 		}
 
 		total += writelen;
@@ -445,6 +539,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			}
 		}
 
+		mcu_watchdog_feed();
 		rtos_delay_milliseconds(10);
 	}
 

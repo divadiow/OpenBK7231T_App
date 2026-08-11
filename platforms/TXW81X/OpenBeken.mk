@@ -2,9 +2,13 @@ OBK_DIR = ../../..
 
 CFLAGS +=  -DPLATFORM_TXW81X
 
-# The precompiled Taixin OTA library rejects the SDK's own unencrypted
-# APP_compress.bin before touching flash. Redirect the customer-ID check to
-# the guarded wrapper in hal_ota_txw81x.c.
+# This build must use sdk/OpenTXW81X/libs/libFLASH.a from TXW81x FPV v2.5.3.7-40416.
+# That vendor release fixes the hgspi_xip protection bug that prevented OTA
+# from erasing/writing the second code location.
+
+# The SDK generates APP_compress.bin with AesEnable=0. Route the customer-ID
+# helper through a guarded wrapper that validates and accepts that normal
+# unencrypted format while preserving the vendor check for encrypted images.
 LDFLAGS += -Wl,--wrap=fwinfo_check_customer_id
 
 # libcommon.a contains its own weak ota_fwinfo_get() fallback returning -1.
@@ -19,6 +23,9 @@ LDFLAGS += -Wl,--wrap=get_loader_mark
 LDFLAGS += -Wl,--wrap=spi_nor_open
 LDFLAGS += -Wl,--wrap=spi_nor_read
 LDFLAGS += -Wl,--wrap=spi_nor_close
+LDFLAGS += -Wl,--wrap=spi_nor_sector_erase
+LDFLAGS += -Wl,--wrap=spi_nor_block_erase
+LDFLAGS += -Wl,--wrap=spi_nor_write
 LDFLAGS += -Wl,--wrap=get_current_loader_addr
 
 INCLUDES += -I$(OBK_DIR)/libraries/easyflash/inc
