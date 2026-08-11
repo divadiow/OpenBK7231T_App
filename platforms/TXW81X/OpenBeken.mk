@@ -2,6 +2,12 @@ OBK_DIR = ../../..
 
 CFLAGS +=  -DPLATFORM_TXW81X
 
+# The precompiled Taixin OTA library rejects the SDK's own unencrypted
+# APP_compress.bin before touching flash. Redirect only that check to the
+# guarded wrapper in hal_ota_txw81x.c; encrypted images still use the vendor
+# customer-ID validation through __real_fwinfo_check_customer_id().
+LDFLAGS += -Wl,--wrap=fwinfo_check_customer_id
+
 INCLUDES += -I$(OBK_DIR)/libraries/easyflash/inc
 
 SRC_C  += $(OBK_DIR)/src/hal/txw81x/hal_flashVars_txw81x.c
