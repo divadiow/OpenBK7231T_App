@@ -2,9 +2,9 @@ OBK_DIR = ../../..
 
 CFLAGS +=  -DPLATFORM_TXW81X
 
-# This build must use sdk/OpenTXW81X/libs/libFLASH.a from TXW81x FPV v2.5.3.7-40416.
-# That vendor release fixes the hgspi_xip protection bug that prevented OTA
-# from erasing/writing the second code location.
+# Keep sdk/OpenTXW81X/libs/libFLASH.a from TXW81x FPV v2.5.3.7-40416.
+# The HAL uses the vendor OTA API in sector-erase mode because the 1 MiB
+# OpenBeken EasyFlash area begins at 0xEF000, inside the final 64 KiB block.
 
 # The SDK generates APP_compress.bin with AesEnable=0. Route the customer-ID
 # helper through a guarded wrapper that validates and accepts that normal

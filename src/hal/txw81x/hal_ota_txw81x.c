@@ -13,6 +13,7 @@
 #include "dev.h"
 #include "devid.h"
 #include "hal/dvp.h"
+#include "ef_cfg.h"
 
 /*
  * The TXW81X SDK OTA API takes a uint16 length. Keep every write small even
@@ -21,7 +22,8 @@
  */
 #define TXW81X_OTA_IO_CHUNK       1460
 #define TXW81X_OTA_PROGRESS_STEP  (64 * 1024)
-#define TXW81X_OTA_FLASH_STACK     "FPV-v2.5.3.7-40416"
+#define TXW81X_OTA_TRACE_BYTES      8
+#define TXW81X_OTA_FLASH_STACK     "FPV-v2.5.3.7-40416-v5-marker-stable"
 
 extern struct spi_nor_flash flash0;
 extern uint32 get_flash_cap(void);
@@ -68,10 +70,45 @@ typedef struct txw81x_ota_sdk_diag_s
 	uint32 spi_write_len;
 	int current_loader_seen;
 	uint32 current_loader_addr;
+	uint32 source_data_ptr;
+	uint32 sdk_data_ptr;
+	uint8 sdk_before[TXW81X_OTA_TRACE_BYTES];
+	uint8 customer_before[TXW81X_OTA_TRACE_BYTES];
+	uint8 customer_after[TXW81X_OTA_TRACE_BYTES];
+	uint8 erase_before[TXW81X_OTA_TRACE_BYTES];
+	uint8 erase_after[TXW81X_OTA_TRACE_BYTES];
+	uint8 sdk_after[TXW81X_OTA_TRACE_BYTES];
 } txw81x_ota_sdk_diag_t;
 
 static volatile int g_txw81x_ota_trace_active;
+static volatile int g_txw81x_ota_first_call_active;
+static volatile uint8 *g_txw81x_ota_trace_data;
 static volatile txw81x_ota_sdk_diag_t g_txw81x_ota_diag;
+static uint8 g_txw81x_ota_chunk[TXW81X_OTA_IO_CHUNK] __attribute__((aligned(4)));
+static uint8 g_txw81x_ota_saved_marker[2];
+
+static void TXW81X_OTA_Snapshot(volatile uint8 *dst, const uint8 *src)
+{
+	int i;
+	if(dst == NULL)
+	{
+		return;
+	}
+	for(i = 0; i < TXW81X_OTA_TRACE_BYTES; i++)
+	{
+		dst[i] = src != NULL ? src[i] : 0;
+	}
+}
+
+static void TXW81X_OTA_RestoreFirstMarker(void)
+{
+	if(g_txw81x_ota_trace_active && g_txw81x_ota_first_call_active &&
+		g_txw81x_ota_trace_data != NULL)
+	{
+		g_txw81x_ota_trace_data[0] = g_txw81x_ota_saved_marker[0];
+		g_txw81x_ota_trace_data[1] = g_txw81x_ota_saved_marker[1];
+	}
+}
 
 static void TXW81X_OTA_ResetSdkDiag(void)
 {
@@ -127,6 +164,22 @@ static void TXW81X_OTA_LogSdkDiag(void)
 		g_txw81x_ota_diag.current_loader_seen,
 		g_txw81x_ota_diag.current_loader_addr,
 		(unsigned int)xPortGetFreeHeapSize());
+
+	ADDLOG_ERROR(LOG_FEATURE_OTA,
+		"TXW81X SDK bytes: source=0x%08x sdk=0x%08x before=%02x %02x %02x %02x customer=%02x %02x/%02x %02x",
+		g_txw81x_ota_diag.source_data_ptr,
+		g_txw81x_ota_diag.sdk_data_ptr,
+		g_txw81x_ota_diag.sdk_before[0], g_txw81x_ota_diag.sdk_before[1],
+		g_txw81x_ota_diag.sdk_before[2], g_txw81x_ota_diag.sdk_before[3],
+		g_txw81x_ota_diag.customer_before[0], g_txw81x_ota_diag.customer_before[1],
+		g_txw81x_ota_diag.customer_after[0], g_txw81x_ota_diag.customer_after[1]);
+
+	ADDLOG_ERROR(LOG_FEATURE_OTA,
+		"TXW81X SDK bytes: erase=%02x %02x/%02x %02x after=%02x %02x %02x %02x",
+		g_txw81x_ota_diag.erase_before[0], g_txw81x_ota_diag.erase_before[1],
+		g_txw81x_ota_diag.erase_after[0], g_txw81x_ota_diag.erase_after[1],
+		g_txw81x_ota_diag.sdk_after[0], g_txw81x_ota_diag.sdk_after[1],
+		g_txw81x_ota_diag.sdk_after[2], g_txw81x_ota_diag.sdk_after[3]);
 }
 
 int32 txw81x_ota_fwinfo_get(struct ota_fwinfo *pinfo)
@@ -260,10 +313,18 @@ void __wrap_spi_nor_sector_erase(struct spi_nor_flash *flash, uint32 addr)
 	{
 		g_txw81x_ota_diag.sector_erase_count++;
 		g_txw81x_ota_diag.sector_erase_addr = addr;
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.erase_before,
+			(const uint8*)g_txw81x_ota_trace_data);
 	}
 	mcu_watchdog_feed();
 	__real_spi_nor_sector_erase(flash, addr);
 	mcu_watchdog_feed();
+	TXW81X_OTA_RestoreFirstMarker();
+	if(g_txw81x_ota_trace_active)
+	{
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.erase_after,
+			(const uint8*)g_txw81x_ota_trace_data);
+	}
 }
 
 extern void __real_spi_nor_block_erase(struct spi_nor_flash *flash, uint32 addr);
@@ -273,10 +334,18 @@ void __wrap_spi_nor_block_erase(struct spi_nor_flash *flash, uint32 addr)
 	{
 		g_txw81x_ota_diag.block_erase_count++;
 		g_txw81x_ota_diag.block_erase_addr = addr;
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.erase_before,
+			(const uint8*)g_txw81x_ota_trace_data);
 	}
 	mcu_watchdog_feed();
 	__real_spi_nor_block_erase(flash, addr);
 	mcu_watchdog_feed();
+	TXW81X_OTA_RestoreFirstMarker();
+	if(g_txw81x_ota_trace_active)
+	{
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.erase_after,
+			(const uint8*)g_txw81x_ota_trace_data);
+	}
 }
 
 extern void __real_spi_nor_write(struct spi_nor_flash *flash,
@@ -327,7 +396,15 @@ int32 __wrap_fwinfo_check_customer_id(const uint8 *data)
 		return -1;
 	}
 
+	if(g_txw81x_ota_trace_active)
+	{
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.customer_before, data);
+	}
 	aes_enabled = fwinfo_get_fw_aes_en(data, &err);
+	if(g_txw81x_ota_trace_active)
+	{
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.customer_after, data);
+	}
 	if(err != 0)
 	{
 		ADDLOG_ERROR(LOG_FEATURE_OTA,
@@ -379,6 +456,15 @@ static int TXW81X_OTA_GetStagingLimit(uint32 *start, uint32 *limit)
 
 	*start = flash0.size / 2;
 	reserved_end = flash0.size - (2 * flash0.sector_size);
+
+	/* OpenBeken EasyFlash begins at 0xEF000 on TXW81X. A 64 KiB block
+	 * erase at 0xE0000 would destroy it, so cap OTA staging at the
+	 * beginning of EasyFlash and force the SDK into sector-erase mode. */
+	if((uint32)EF_START_ADDR < reserved_end)
+	{
+		reserved_end = (uint32)EF_START_ADDR;
+	}
+
 	if(reserved_end <= *start)
 	{
 		return -1;
@@ -396,6 +482,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	int ret = 0;
 	int res = 0;
 	int next_progress = TXW81X_OTA_PROGRESS_STEP;
+	int camera_quiesced = 0;
 	uint32 staging_start = 0;
 	uint32 staging_limit = 0;
 
@@ -421,8 +508,9 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	}
 
 	ADDLOG_INFO(LOG_FEATURE_OTA,
-		"TXW81X OTA: flash-stack=%s flash=0x%08x staging-start=0x%08x staging-limit=%u free-heap=%u",
-		TXW81X_OTA_FLASH_STACK, flash0.size, staging_start, staging_limit,
+		"TXW81X OTA: flash-stack=%s flash=0x%08x staging-start=0x%08x staging-end=0x%08x staging-limit=%u free-heap=%u",
+		TXW81X_OTA_FLASH_STACK, flash0.size, staging_start,
+		staging_start + staging_limit, staging_limit,
 		(unsigned int)xPortGetFreeHeapSize());
 
 	if((uint32)request->contentLength > staging_limit)
@@ -446,12 +534,12 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	}
 
 	TXW81X_OTA_ResetSdkDiag();
-	TXW81X_OTA_QuiesceCamera();
 	mcu_watchdog_feed();
 
 	while(towrite > 0)
 	{
 		int writelen;
+		uint16 marker;
 
 		if(buffered <= 0)
 		{
@@ -490,17 +578,97 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 			writelen = towrite;
 		}
 
+		/* The vendor OTA routine deliberately changes the first two input
+		 * bytes to 0xFF while staging the image. Never give it OpenBeken's
+		 * live HTTP receive buffer. A private aligned copy also guarantees
+		 * that the marker survives flash-driver activity before validation. */
+		memcpy(g_txw81x_ota_chunk, writebuf, writelen);
+
+		if(startaddr == 0)
+		{
+			int marker_at = -1;
+			int i;
+
+			if(writelen < 2)
+			{
+				ADDLOG_ERROR(LOG_FEATURE_OTA,
+					"TXW81X OTA: first packet is only %d byte(s)", writelen);
+				ret = -1;
+				goto update_ota_exit;
+			}
+
+			marker = (uint16)g_txw81x_ota_chunk[0] |
+				((uint16)g_txw81x_ota_chunk[1] << 8);
+
+			ADDLOG_INFO(LOG_FEATURE_OTA,
+				"TXW81X OTA first bytes: src=0x%08x copy=0x%08x %02x %02x %02x %02x %02x %02x %02x %02x",
+				(uint32)(uintptr_t)writebuf,
+				(uint32)(uintptr_t)g_txw81x_ota_chunk,
+				g_txw81x_ota_chunk[0], g_txw81x_ota_chunk[1],
+				writelen > 2 ? g_txw81x_ota_chunk[2] : 0,
+				writelen > 3 ? g_txw81x_ota_chunk[3] : 0,
+				writelen > 4 ? g_txw81x_ota_chunk[4] : 0,
+				writelen > 5 ? g_txw81x_ota_chunk[5] : 0,
+				writelen > 6 ? g_txw81x_ota_chunk[6] : 0,
+				writelen > 7 ? g_txw81x_ota_chunk[7] : 0);
+
+			if(marker != OTA_FLASH_MARKER)
+			{
+				for(i = 1; i + 1 < writelen && i < 64; i++)
+				{
+					uint16 candidate = (uint16)g_txw81x_ota_chunk[i] |
+						((uint16)g_txw81x_ota_chunk[i + 1] << 8);
+					if(candidate == OTA_FLASH_MARKER)
+					{
+						marker_at = i;
+						break;
+					}
+				}
+				ADDLOG_ERROR(LOG_FEATURE_OTA,
+					"TXW81X OTA: invalid first marker 0x%04x; expected 0x%04x; marker found at offset %d",
+					marker, OTA_FLASH_MARKER, marker_at);
+				ADDLOG_ERROR(LOG_FEATURE_OTA,
+					"TXW81X OTA: refusing to erase flash; upload the generated OpenTXW81X_*_ota.img unchanged");
+				ret = -1;
+				goto update_ota_exit;
+			}
+
+			g_txw81x_ota_saved_marker[0] = g_txw81x_ota_chunk[0];
+			g_txw81x_ota_saved_marker[1] = g_txw81x_ota_chunk[1];
+
+			if(!camera_quiesced)
+			{
+				TXW81X_OTA_QuiesceCamera();
+				camera_quiesced = 1;
+			}
+		}
+
+		g_txw81x_ota_diag.source_data_ptr = (uint32)(uintptr_t)writebuf;
+		g_txw81x_ota_diag.sdk_data_ptr = (uint32)(uintptr_t)g_txw81x_ota_chunk;
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.sdk_before,
+			g_txw81x_ota_chunk);
+		g_txw81x_ota_trace_data = g_txw81x_ota_chunk;
+		g_txw81x_ota_first_call_active = (startaddr == 0);
+
 		mcu_watchdog_feed();
 		g_txw81x_ota_trace_active = 1;
-		res = libota_write_fw(request->contentLength, startaddr,
-			(uint8*)writebuf, (uint16)writelen);
+		/* Sector mode is mandatory on the 1 MiB OpenBeken layout. The final
+		 * 64 KiB OTA block overlaps EasyFlash at 0xEF000 if block erase is
+		 * used. is_once_earse remains false so the SDK erases on demand. */
+		res = libotaV2_write_fw(request->contentLength,
+			0, 1, 0, (uint32)startaddr,
+			g_txw81x_ota_chunk, (uint16)writelen);
+		TXW81X_OTA_Snapshot(g_txw81x_ota_diag.sdk_after,
+			g_txw81x_ota_chunk);
 		g_txw81x_ota_trace_active = 0;
+		g_txw81x_ota_first_call_active = 0;
+		g_txw81x_ota_trace_data = NULL;
 		mcu_watchdog_feed();
 
 		if(res != 0)
 		{
 			ADDLOG_ERROR(LOG_FEATURE_OTA,
-				"libota_write_fw failed at offset %d, len %d, res %d",
+				"libotaV2_write_fw failed at offset %d, len %d, res %d",
 				startaddr, writelen, res);
 			TXW81X_OTA_LogSdkDiag();
 			ret = -1;
@@ -545,6 +713,8 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 
 update_ota_exit:
 	g_txw81x_ota_trace_active = 0;
+	g_txw81x_ota_first_call_active = 0;
+	g_txw81x_ota_trace_data = NULL;
 	if(ret != -1)
 	{
 		ADDLOG_INFO(LOG_FEATURE_OTA, "OTA is successful: %d bytes written", total);
