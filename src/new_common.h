@@ -226,6 +226,10 @@ typedef long BaseType_t;
 #define PLATFORM_MCU_NAME "TXW81X"
 #define MANUFACTURER "Taixin"
 #define DEF_MQTT_GROUP "txw81x"
+/* OpenTXW81X_<version>_ota.img generated from APP_compress.bin. */
+#define OBK_OTA_EXTENSION          ".img"
+#define OBK_OTA_NAME_EXTENSION     "_ota"
+
 #elif PLATFORM_RDA5981
 #define DEVICENAME_PREFIX_FULL "OpenRDA5981"
 #define DEVICENAME_PREFIX_SHORT "rda5981"

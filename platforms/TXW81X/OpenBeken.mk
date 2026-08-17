@@ -2,6 +2,11 @@ OBK_DIR = ../../..
 
 CFLAGS +=  -DPLATFORM_TXW81X
 
+# The SDK packages APP_compress.bin with AesEnable=0, but its OTA helper
+# rejects unencrypted images. The HAL wrapper keeps the vendor check for
+# encrypted images while accepting a structurally valid unencrypted header.
+LDFLAGS += -Wl,--wrap=fwinfo_check_customer_id
+
 INCLUDES += -I$(OBK_DIR)/libraries/easyflash/inc
 
 SRC_C  += $(OBK_DIR)/src/hal/txw81x/hal_flashVars_txw81x.c
