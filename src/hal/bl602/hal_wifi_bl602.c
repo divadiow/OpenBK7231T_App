@@ -45,6 +45,28 @@ extern bool g_powersave;
 __attribute__((aligned(32))) static obkFastConnectData_t fcdata = { 0 };
 extern uint16_t phy_channel_to_freq(uint8_t band, int channel);
 
+#if PLATFORM_BL602 && !PLATFORM_BL_NEW
+static bool g_bl602RfDiagnosticsLogged = false;
+
+static void BL602_LogRfDiagnostics(void)
+{
+	uint8_t activeCapcode;
+
+	if(g_bl602RfDiagnosticsLogged)
+	{
+		return;
+	}
+	g_bl602RfDiagnosticsLogged = true;
+
+	activeCapcode = hal_sys_capcode_get();
+	ADDLOG_INFO(LOG_FEATURE_GENERAL,
+		"BL602 RF diagnostics: active XTAL capcode %u",
+		(unsigned int)activeCapcode);
+}
+#else
+#define BL602_LogRfDiagnostics() do { } while(0)
+#endif
+
 #if PLATFORM_BL_NEW
 static bool g_wifi_init = false;
 static bool wifi_init_done = 0;
@@ -335,6 +357,7 @@ void HAL_ConnectToWiFi(const char* ssid, const char* psk, obkStaticIP_t* ip)
 	if(g_powersave) wifi_mgmr_sta_ps_exit();
 
 	wifi_interface_t wifi_interface = wifi_mgmr_sta_enable();
+	BL602_LogRfDiagnostics();
 	wifi_mgmr_sta_connect_mid(wifi_interface,
 		(char*)ssid,
 		(char*)psk,
@@ -372,6 +395,7 @@ int HAL_SetupWiFiOpenAccessPoint(const char* ssid)
 
 #if PLATFORM_BL602
 	wifi_interface_t wifi_if = wifi_mgmr_ap_enable();
+	BL602_LogRfDiagnostics();
 	wifi_mgmr_ap_start(wifi_if, (char*)ssid, 0, NULL, 1);
 #else
 	wifi_mgmr_ap_params_t config = { 0 };
@@ -428,6 +452,7 @@ void HAL_FastConnectToWiFi(const char* oob_ssid, const char* connect_key, obkSta
 		if(g_powersave) wifi_mgmr_sta_ps_exit();
 		wifi_interface_t wifi_interface;
 		wifi_interface = wifi_mgmr_sta_enable();
+		BL602_LogRfDiagnostics();
 		wifi_mgmr_sta_connect_ext(wifi_interface, (char*)oob_ssid, (char*)connect_key, &ext_param);
 		g_bAccessPointMode = 0;
 		return;
