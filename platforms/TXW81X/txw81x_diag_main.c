@@ -9,10 +9,6 @@
 #include "osal/sleep.h"
 
 extern void system_goto_boot(void);
-extern uint32 sysctrl_get_chip_id(void);
-extern uint32 get_chip_pack(void);
-extern uint32 get_bios_id(void);
-extern uint32 sysctrl_efuse_get_module_type(void);
 
 #define MODE_REG (*(volatile uint32 *)0x400200C4u)
 
@@ -84,10 +80,10 @@ static void snapshot(void)
     txs("TXWDIAG SNAP mode=0x"); txhex(mode);
     txs(" cp="); txc((uint8)('0' + ((mode >> 0) & 1u)));
     txs(" ft="); txc((uint8)('0' + ((mode >> 1) & 1u)));
-    txs(" chip=0x"); txhex(sysctrl_get_chip_id());
-    txs(" pack=0x"); txhex(get_chip_pack());
-    txs(" bios=0x"); txhex(get_bios_id());
-    txs(" module=0x"); txhex(sysctrl_efuse_get_module_type());
+    txs(" chip=0x"); txhex((uint32)sysctrl_get_chip_id());
+    txs(" pack=0x"); txhex((uint32)get_chip_pack());
+    txs(" bios=0x"); txhex((uint32)get_bios_id());
+    txs(" module=0x"); txhex((uint32)sysctrl_efuse_get_module_type());
     txnl();
 }
 
