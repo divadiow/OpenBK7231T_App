@@ -39,20 +39,27 @@ jobs:
           fi
 
       - name: Build through the known-working OpenTXW81X pipeline
+        id: firmware_build
+        continue-on-error: true
         shell: bash
         run: |
-          set -euxo pipefail
-          cd sdk/OpenTXW81X/project
-          make clean || true
-          make APP_VERSION=diag_v03 -j2
-          ./BinScript.exe BinScript.BinScript
-          ./makecode.exe
-          test -s APP.bin
-          grep -a -q 'TXWDIAG READY v=0.3' APP.bin
-          grep -a -q 'TXWDIAG PONG v=0.3' APP.bin
-          ls -l APP.bin APP_compress.bin || true
+          set -o pipefail
+          mkdir -p "$GITHUB_WORKSPACE/published"
+          {
+            set -x
+            cd sdk/OpenTXW81X/project
+            make clean || true
+            make APP_VERSION=diag_v03 -j2
+            ./BinScript.exe BinScript.BinScript
+            ./makecode.exe
+            test -s APP.bin
+            grep -a -q 'TXWDIAG READY v=0.3' APP.bin
+            grep -a -q 'TXWDIAG PONG v=0.3' APP.bin
+            ls -l APP.bin APP_compress.bin || true
+          } 2>&1 | tee "$GITHUB_WORKSPACE/published/TXW817_810_DIAG_MINIMAL_v03_build.log"
 
-      - name: Prepare minimal test files
+      - name: Prepare minimal test files if build succeeded
+        if: steps.firmware_build.outcome == 'success'
         shell: bash
         run: |
           set -euxo pipefail
@@ -62,7 +69,9 @@ jobs:
           cp tools/txw81x_diag_capture.ps1 _txwdiag/txw81x_diag_capture.ps1
           printf '@echo off\r\npowershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%%~dp0txw81x_diag_capture.ps1" %%*\r\npause\r\n' > _txwdiag/2_CAPTURE_TXW817_810.cmd
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload minimal test files
+        if: steps.firmware_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
         with:
           name: TXW817_810_DIAG_MINIMAL_v03
           path: _txwdiag
@@ -70,16 +79,25 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Publish successful firmware back to test branch
+      - name: Publish result back to test branch
+        if: always()
         shell: bash
         run: |
           set -euxo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -f published/TXW817_810_DIAG_MINIMAL_v03.bin
+          git add -f published/TXW817_810_DIAG_MINIMAL_v03_build.log
+          if [ -f published/TXW817_810_DIAG_MINIMAL_v03.bin ]; then
+            git add -f published/TXW817_810_DIAG_MINIMAL_v03.bin
+          fi
           if git diff --cached --quiet; then
-            echo 'Binary already published.'
+            echo 'No result change to publish.'
           else
-            git commit -m 'Publish TXW817 minimal diagnostic v0.3 binary'
+            git commit -m 'Publish TXW817 minimal diagnostic v0.3 build result'
             git push origin HEAD:txw81x-minimal-diag
           fi
+
+      - name: Fail job if firmware build failed
+        if: steps.firmware_build.outcome != 'success'
+        shell: bash
+        run: exit 1
