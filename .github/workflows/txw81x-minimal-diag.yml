@@ -1,0 +1,65 @@
+name: TXW81X minimal diagnostic
+
+on:
+  push:
+    branches:
+      - txw81x-minimal-diag
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: txw81x-minimal-diag
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Checkout only OpenTXW81X
+        shell: bash
+        run: git submodule update --init --depth=1 sdk/OpenTXW81X
+
+      - name: Extract C-SKY toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd sdk/OpenTXW81X/tools/gcc
+          if [ ! -e csky-elfabiv2 ]; then
+            tar -xf *.tar.gz
+          fi
+
+      - name: Build through the known-working OpenTXW81X pipeline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd sdk/OpenTXW81X/project
+          make clean || true
+          make APP_VERSION=diag_v03 -j2
+          ./BinScript.exe BinScript.BinScript
+          ./makecode.exe
+          test -s APP.bin
+          grep -a -q 'TXWDIAG READY v=0.3' APP.bin
+          grep -a -q 'TXWDIAG PONG v=0.3' APP.bin
+          ls -l APP.bin APP_compress.bin || true
+
+      - name: Prepare minimal test files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p _txwdiag
+          cp sdk/OpenTXW81X/project/APP.bin _txwdiag/TXW817_810_DIAG_MINIMAL_v03.bin
+          cp tools/txw81x_diag_capture.ps1 _txwdiag/txw81x_diag_capture.ps1
+          printf '@echo off\r\npowershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%%~dp0txw81x_diag_capture.ps1" %%*\r\npause\r\n' > _txwdiag/2_CAPTURE_TXW817_810.cmd
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TXW817_810_DIAG_MINIMAL_v03
+          path: _txwdiag
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
