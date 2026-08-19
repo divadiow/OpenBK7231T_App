@@ -228,6 +228,7 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_ov2640.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_ov7670.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_ov7725.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_xcg532.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                      ^~~~~~~~~~~~~~~~
@@ -237,8 +238,8 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                                                         ^~~~~~~~~~~~~
-build_c ../sdk/lib/bus/iic/sensor/sensor_xcg532.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
                      ^~~~~~~~~~~~~~~~
@@ -248,7 +249,6 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
                                                         ^~~~~~~~~~~~~~~~~~~~~
-build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
@@ -519,7 +519,6 @@ In file included from ../sdk/include/osal/csky/string.h:6:0,
  extern void * memcpy( void *, const void *, size_t );
                ^~~~~~
 build_c ../sdk/app/audio_app/audio_usbspk.o
-build_c ../sdk/app/decode/jpg_decode_stream.o
 In file included from ../sdk/include/osal/string.h:6:0,
                  from ../sdk/app/audio_app/audio_usbspk.c:1:
 ../sdk/app/audio_app/audio_usbspk.c: In function ‘send_usbspk_audio’:
@@ -535,6 +534,7 @@ In file included from ../sdk/include/osal/csky/string.h:6:0,
 /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/OpenTXW81X/tools/gcc/csky-elfabiv2/sys-include/string.h:25:15: note: expected ‘const void *’ but argument is of type ‘volatile int16 * {aka volatile short int *}’
  extern void * memcpy( void *, const void *, size_t );
                ^~~~~~
+build_c ../sdk/app/decode/jpg_decode_stream.o
 build_c ../sdk/app/decode/read_jpg_file_demo.o
 build_c ../sdk/app/decode/recv_jpg_yuv_demo.o
 build_c ../sdk/app/decode/yuv_stream.o
@@ -583,42 +583,10 @@ build_c device.o
 build_c syscfg.o
 build_c ../../../platforms/TXW81X/txw81x_diag_main.o
 build_S ../csky/csi_kernel/rhino/arch/csky/ck803/port_s.O
-../../../platforms/TXW81X/txw81x_diag_main.c:12:15: error: conflicting types for ‘sysctrl_get_chip_id’
- extern uint32 sysctrl_get_chip_id(void);
-               ^~~~~~~~~~~~~~~~~~~
-In file included from ../sdk/include/chip/tx_platform.h:44:0,
-                 from ../sdk/include/typesdef.h:62,
-                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
-../sdk/include/chip/txw81x/sysctrl.h:802:8: note: previous declaration of ‘sysctrl_get_chip_id’ was here
- uint16 sysctrl_get_chip_id(void);
-        ^~~~~~~~~~~~~~~~~~~
-../../../platforms/TXW81X/txw81x_diag_main.c:13:15: error: conflicting types for ‘get_chip_pack’
- extern uint32 get_chip_pack(void);
-               ^~~~~~~~~~~~~
-In file included from ../sdk/include/chip/tx_platform.h:44:0,
-                 from ../sdk/include/typesdef.h:62,
-                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
-../sdk/include/chip/txw81x/sysctrl.h:840:7: note: previous declaration of ‘get_chip_pack’ was here
- uint8 get_chip_pack(void);
-       ^~~~~~~~~~~~~
-../../../platforms/TXW81X/txw81x_diag_main.c:14:15: error: conflicting types for ‘get_bios_id’
- extern uint32 get_bios_id(void);
-               ^~~~~~~~~~~
-In file included from ../sdk/include/chip/tx_platform.h:44:0,
-                 from ../sdk/include/typesdef.h:62,
-                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
-../sdk/include/chip/txw81x/sysctrl.h:841:7: note: previous declaration of ‘get_bios_id’ was here
- uint8 get_bios_id(void);
-       ^~~~~~~~~~~
-../../../platforms/TXW81X/txw81x_diag_main.c:15:15: error: conflicting types for ‘sysctrl_efuse_get_module_type’
- extern uint32 sysctrl_efuse_get_module_type(void);
-               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-In file included from ../sdk/include/chip/tx_platform.h:44:0,
-                 from ../sdk/include/typesdef.h:62,
-                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
-../sdk/include/chip/txw81x/sysctrl.h:831:7: note: previous declaration of ‘sysctrl_efuse_get_module_type’ was here
- uint8 sysctrl_efuse_get_module_type(void);
-       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 build_S ../sdk/chip/txw81x/vectors.O
-make: *** [Makefile:1483: ../../../platforms/TXW81X/txw81x_diag_main.o] Error 1
-make: *** Waiting for unfinished jobs....
+../sdk/chip/txw81x/pin_function.o: In function `$d':
+(.text.pin_func+0x658): undefined reference to `dvp_scl'
+../sdk/chip/txw81x/pin_function.o: In function `$d':
+(.text.pin_func+0x65c): undefined reference to `dvp_sda'
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:1466: application] Error 1
