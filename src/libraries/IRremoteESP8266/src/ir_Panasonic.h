@@ -20,9 +20,11 @@
 //   Brand: Panasonic,  Model: CS-Z9RKR A/C (PANASONIC_AC RKR/6)
 //   Brand: Panasonic,  Model: CS-Z24RKR A/C (PANASONIC_AC RKR/6)
 //   Brand: Panasonic,  Model: CS-YW9MKD A/C (PANASONIC_AC JKE/4)
+//   Brand: Panasonic,  Model: CS-E12QKEW A/C (PANASONIC_AC DKE/3)
 //   Brand: Panasonic,  Model: A75C2311 remote (PANASONIC_AC CKP/5)
 //   Brand: Panasonic,  Model: A75C2616-1 remote (PANASONIC_AC DKE/3)
 //   Brand: Panasonic,  Model: A75C3704 remote (PANASONIC_AC DKE/3)
+//   Brand: Panasonic,  Model: PN1122V remote (PANASONIC_AC DKE/3)
 //   Brand: Panasonic,  Model: A75C3747 remote (PANASONIC_AC JKE/4)
 //   Brand: Panasonic,  Model: CS-E9CKP series A/C (PANASONIC_AC32)
 //   Brand: Panasonic,  Model: A75C2295 remote (PANASONIC_AC32)
@@ -255,7 +257,7 @@ class IRPanasonicAc32 {
   static stdAc::fanspeed_t toCommonFanSpeed(const uint8_t speed);
   static stdAc::swingv_t toCommonSwingV(const uint8_t pos);
   stdAc::state_t toCommon(const stdAc::state_t *prev = NULL) const;
-  String toString(void) const;
+  arduino::String toString(void) const;
 #ifndef UNIT_TEST
 
  private:

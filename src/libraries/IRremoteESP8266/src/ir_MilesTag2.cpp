@@ -63,7 +63,6 @@ void IRsend::sendMilestag2(const uint64_t data, const uint16_t nbits,
 bool IRrecv::decodeMilestag2(decode_results *results, uint16_t offset,
                         const uint16_t nbits, const bool strict) {
   uint64_t data = 0;
-  char tmp[24];//DEBUG
   // Header + Data + Optional Footer
   if (!matchGeneric(results->rawbuf + offset, &data,
                   results->rawlen - offset, nbits,
@@ -87,7 +86,7 @@ bool IRrecv::decodeMilestag2(decode_results *results, uint16_t offset,
         break;
       default:
         DPRINT("incorrect nbits:");
-        DPRINTLN(itoa(nbits,tmp,10));
+        DPRINTLN(nbits);
         return false;  // The request doesn't strictly match the protocol defn.
     }
   }

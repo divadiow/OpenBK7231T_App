@@ -8,6 +8,7 @@
 #include "IRtext.h"
 #include "IRutils.h"
 #include "minmax.h"
+// #include <algorithm>
 
 using irutils::addBoolToString;
 using irutils::addModeToString;

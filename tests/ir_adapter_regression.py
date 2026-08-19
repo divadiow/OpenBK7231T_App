@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""Focused behavioural and source-contract tests for OpenBeken's IR adapter."""
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+FILES = {
+    "driver": ROOT / "src/driver/drv_ir_new.cpp",
+    "recv": ROOT / "src/libraries/IRremoteESP8266/src/IRrecv.cpp",
+    "digital": ROOT / "src/libraries/IRremoteESP8266/src/digitalWriteFast.cpp",
+    "tiny": ROOT / "src/driver/drv_tinyir_nec.c",
+    "bl602": ROOT / "src/hal/bl602/hal_pins_bl602.c",
+    "ln": ROOT / "src/hal/ln882h/hal_pins_ln882h.c",
+    "realtek": ROOT / "src/hal/realtek/hal_pins_realtek.c",
+    "rtl8720e": ROOT / "src/hal/realtek/rtl8720e/hal_pins_rtl8720e.c",
+    "main": ROOT / "src/driver/drv_main.c",
+    "workflow": ROOT / ".github/workflows/workflow.yaml",
+}
+
+
+def require(ok: bool, message: str) -> None:
+    if not ok:
+        raise AssertionError(message)
+
+
+def block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    require(start >= 0, f"missing function: {signature}")
+    brace = source.find("{", start)
+    require(brace >= 0, f"missing function body: {signature}")
+    depth = 0
+    for index in range(brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:index + 1]
+    raise AssertionError(f"unterminated function: {signature}")
+
+
+def flat(source: str) -> str:
+    return re.sub(r"\s+", " ", source)
+
+
+def contains(source: str, *tokens: str) -> None:
+    for token in tokens:
+        require(token in source, f"missing contract token: {token}")
+
+
+def parser_tests(driver: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    functions = "\n\n".join(block(driver, signature) for signature in (
+        "static int hexNibbleValue",
+        "static bool parseBoundedDecimal",
+        "static bool parseBoundedHex",
+        "static bool parseHexStateBytes",
+    ))
+    harness = f'''#include <cassert>\n#include <cstdint>\n#include <cstring>\n{functions}\n
+int main() {{
+  uint32_t value = 0;
+  assert(parseBoundedDecimal("1", 1, 512, &value) && value == 1);
+  assert(parseBoundedDecimal("512", 1, 512, &value) && value == 512);
+  assert(parseBoundedDecimal("10", 0, 10, &value) && value == 10);
+  assert(!parseBoundedDecimal("-1", 0, 10, &value));
+  assert(!parseBoundedDecimal("32junk", 1, 512, &value));
+  assert(parseBoundedHex("0xA", 0, 10, &value) && value == 10);
+  assert(!parseBoundedHex("0x", 0, 10, &value));
+  assert(!parseBoundedHex("10", 0, 10, &value));
+  uint8_t bytes[64] = {{0}};
+  uint16_t count = 0;
+  const char *end = nullptr;
+  assert(parseHexStateBytes("F", 4, bytes, sizeof(bytes), &count, &end));
+  assert(count == 1 && bytes[0] == 0x0F && *end == '\\0');
+  assert(!parseHexStateBytes("F0", 4, bytes, sizeof(bytes), &count, &end));
+  std::memset(bytes, 0, sizeof(bytes));
+  assert(parseHexStateBytes("ABC", 12, bytes, sizeof(bytes), &count, &end));
+  assert(count == 2 && bytes[0] == 0x0A && bytes[1] == 0xBC);
+  assert(!parseHexStateBytes("FABC", 12, bytes, sizeof(bytes), &count, &end));
+  std::memset(bytes, 0, sizeof(bytes));
+  assert(parseHexStateBytes("0011223344556677", 56, bytes, sizeof(bytes), &count, &end));
+  const uint8_t expected[] = {{0x11,0x22,0x33,0x44,0x55,0x66,0x77}};
+  assert(count == sizeof(expected));
+  assert(std::memcmp(bytes, expected, sizeof(expected)) == 0);
+  assert(!parseHexStateBytes("12G4", 16, bytes, sizeof(bytes), &count, &end));
+  assert(!parseHexStateBytes("0", 513, bytes, sizeof(bytes), &count, &end));
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-test-") as directory:
+        src = Path(directory) / "parser.cpp"
+        exe = Path(directory) / "parser"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def receive_clock_tests(recv: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    functions = "\n\n".join(block(recv, signature) for signature in (
+        "static uint32_t IR_PeriodToQ16",
+        "static uint32_t IR_NextSample",
+        "static uint32_t IR_ElapsedSamples",
+        "static uint16_t IR_SamplesToRawTicks",
+    ))
+    harness = f'''#include <cassert>\n#include <cstdint>\n
+static const uint16_t kRawTick = 2;\n
+{functions}\n
+int main() {{
+  const uint32_t period_q16 = IR_PeriodToQ16(50.0f);
+  assert(period_q16 == 50U * 65536U);
+  assert(IR_SamplesToRawTicks(1, period_q16) == 25);
+
+  // Execute 30 minutes of the 20 kHz polling clock. Unlike the former float
+  // accumulator, every sample must continue to advance by exactly one tick.
+  volatile uint32_t now = 0;
+  const uint32_t thirty_minutes = 30U * 60U * 20000U;
+  for (uint32_t tick = 0; tick < thirty_minutes; tick++)
+    now = IR_NextSample(now);
+  assert(now == thirty_minutes);
+  assert(IR_ElapsedSamples(now, now - 123U) == 123U);
+  assert(IR_SamplesToRawTicks(
+      IR_ElapsedSamples(now, now - 123U), period_q16) == 3075U);
+
+  // Unsigned subtraction must remain correct as the sample clock wraps.
+  const uint32_t edge = UINT32_MAX - 2U;
+  now = edge;
+  for (uint32_t tick = 0; tick < 10U; tick++)
+    now = IR_NextSample(now);
+  assert(now == 7U);
+  assert(IR_ElapsedSamples(now, edge) == 10U);
+  assert(IR_SamplesToRawTicks(
+      IR_ElapsedSamples(now, edge), period_q16) == 250U);
+
+  assert(IR_SamplesToRawTicks(0, period_q16) == 1U);
+  assert(IR_SamplesToRawTicks(UINT32_MAX, period_q16) == UINT16_MAX);
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-clock-test-") as directory:
+        src = Path(directory) / "receive_clock.cpp"
+        exe = Path(directory) / "receive_clock"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def protocol_boundary_tests(driver: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    validator = block(driver, "static bool IR_ValidateClassicFields")
+    harness = f'''#include <cassert>\n#include <cstdint>\n
+enum decode_type_t {{
+  UNKNOWN = -1, RC5 = 1, RC6, NEC, PANASONIC, JVC, SAMSUNG, LG, RC5X
+}};\n
+{validator}\n
+int main() {{
+  assert(IR_ValidateClassicFields(decode_type_t::NEC, 0xFFFFU, 0xFFU));
+  assert(!IR_ValidateClassicFields(decode_type_t::NEC, 0xFFFFU, 0x100U));
+  assert(IR_ValidateClassicFields(decode_type_t::LG, 0xFFU, 0xFFFFU));
+  assert(!IR_ValidateClassicFields(decode_type_t::LG, 0x100U, 0xFFFFU));
+  assert(IR_ValidateClassicFields(decode_type_t::RC5, 0x1FU, 0x3FU));
+  assert(!IR_ValidateClassicFields(decode_type_t::RC5, 0x20U, 0x3FU));
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-protocol-test-") as directory:
+        src = Path(directory) / "protocol.cpp"
+        exe = Path(directory) / "protocol"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def pwm_policy_tests(realtek: str, rtl8720e: str) -> None:
+    compiler = shutil.which("c++") or shutil.which("g++")
+    require(compiler is not None, "C++ compiler unavailable")
+    allocator = block(realtek, "static int HAL_RTK_GetFreeChannel")
+    shared_timer = block(realtek, "static bool Realtek_SharesPWMPeriodTimer")
+    class_mask = block(rtl8720e, "static uint32_t RTL8720E_PWMClassToChannelMask")
+    harness = f'''#include <cassert>\n#include <cstdint>\n
+#define OBK_REALTEK_PWM_CHANNEL_COUNT 8
+static int g_active_pwm = 0;\n
+{allocator}\n
+{shared_timer}\n
+{class_mask}\n
+int main() {{
+  assert(RTL8720E_PWMClassToChannelMask(0U) == 0xFFU);
+  assert(RTL8720E_PWMClassToChannelMask(1U) == 0x0FU);
+  assert(RTL8720E_PWMClassToChannelMask(2U) == 0xF0U);
+  assert(RTL8720E_PWMClassToChannelMask(0xFFFFFFFFU) == 0U);
+
+  assert(HAL_RTK_GetFreeChannel(0xF0U) == 4);
+  assert(HAL_RTK_GetFreeChannel(0x0FU) == 0);
+  g_active_pwm = 0xFF;
+  assert(HAL_RTK_GetFreeChannel(0xFFU) == -1);
+  assert(HAL_RTK_GetFreeChannel(0U) == -1);
+
+  // RTL8720D's SDK shares one global prescaler across both timer pointers.
+  assert(Realtek_SharesPWMPeriodTimer(0, 1));
+  assert(Realtek_SharesPWMPeriodTimer(0, 100));
+}}\n'''
+    with tempfile.TemporaryDirectory(prefix="obk-ir-pwm-test-") as directory:
+        src = Path(directory) / "pwm.cpp"
+        exe = Path(directory) / "pwm"
+        src.write_text(harness)
+        subprocess.run([compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        str(src), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+
+
+def source_contracts(s: dict[str, str]) -> None:
+    d = s["driver"]
+    contains(block(d, "bool beginSendTransaction()"),
+             "if (isBusy())", "transactionInverted = pwmInverted",
+             "gIRUseVirtualMicros = true")
+    commit = block(d, "bool commitSendTransaction()")
+    contains(commit, "IR_PlatformPWMReserve(sendPin)",
+             "IR_PlatformPWMIsActive(sendPin)", "applyCarrierState(false, true)",
+             "IR_COMPILER_BARRIER()", "transactionReady = 1")
+    require(commit.index("IR_COMPILER_BARRIER()") < commit.index("transactionReady = 1"),
+            "queue ready is published before the barrier")
+    contains(block(d, "bool isBusy() const"), "carrierReleasePending")
+    carrier = block(d, "void applyCarrierState")
+    contains(carrier, "pwmInverted ? 100 - (int)pwmduty",
+             "pwmInverted ? 100 : 0", "lastCarrierMark", "lastCarrierDuty",
+             "IR_PlatformPWMUpdate")
+    contains(block(d, "void serviceCarrier()"),
+             "HAL_PIN_PWM_Stop(sendPin)", "IR_PlatformPWMRelease(sendPin)")
+    isr = block(d, 'extern "C" void DRV_IR_ISR(void* arg)\n{')
+    contains(isr, "applyCarrierState")
+    require("HAL_PIN_PWM_Update" not in isr, "ISR bypasses IR PWM abstraction")
+
+    validator = flat(block(d, "static bool isValidStatePayloadLength"))
+    contains(validator, "CARRIER_AC84", "ARGO", "CORONA_AC", "DAIKIN",
+             "FUJITSU_AC", "HITACHI_AC3", "PANASONIC_AC", "SAMSUNG_AC",
+             "TOSHIBA_AC", "MWM", "IRsend::defaultBits")
+    contains(validator, "bits == 16U || bits == 32U || bits == 48U",
+             "bits == 56U || bits == 72U || bits == 80U",
+             "bits >= 24U && bits <= kIRSendMaxBits")
+
+    contains(d, "kIRArgoWrem3Preamble = 0x0BU")
+    require("kArgoWrem3Preamble" not in d,
+            "driver depends on a private ir_Argo.cpp constant")
+
+    comma = block(d, "static commandResult_t IR_SendCommaCommand")
+    contains(comma, "parseBoundedDecimal(bitsText, 1, kIRSendMaxBits",
+             "parseBoundedDecimal(payloadEnd + 1, 0, kIRSendMaxRepeats",
+             "IR_IsValidArgoPayload", "sendArgoWREM3",
+             "getStagedItemCount() > stagedBefore", "setTransactionRepeats")
+    classic = block(d, "static commandResult_t IR_SendClassicCommand")
+    contains(classic, "IR_ParseProtocol(fields[0])", "IR_ValidateClassicFields",
+             "parseBoundedHex(fields[1]",
+             "parseBoundedHex(fields[2]", "sendRC5", "sendRC6", "sendNEC",
+             "sendPanasonic", "sendJVC", "sendSAMSUNG", "sendLG")
+    contains(comma, "IR_ParseProtocol(args)")
+    protocol_parser = block(d, "static decode_type_t IR_ParseProtocol")
+    contains(protocol_parser, "parseBoundedDecimal", "kLastDecodeType",
+             "IR_EqualsIgnoreCase", "typeToString")
+    require("strToDecodeType" not in classic + comma,
+            "adapter commands still use the permissive upstream protocol parser")
+    contains(block(d, "static bool IR_ProtocolTxTimingSupported"), "RCMM", "LEGOPF")
+
+    init = block(d, 'extern "C" void DRV_IR_Init')
+    contains(init, "IR_RegisterCommands()", "transmitPin >= 0",
+             "new IRrecv", "new myIRsend",
+             "IR_ReceiverStorageReady()", "IR_SyncReceiverInput(false)",
+             "gIRDriverReady = true")
+    deinit = block(d, 'extern "C" void DRV_IR_Deinit')
+    contains(deinit, "gIRDriverReady = false", "sender->stopAndReleaseResources()", "delete sender",
+             "delete receiver", "HAL_HWTimerDeinit(ir_chan)", "ir_chan = -1")
+    run = block(d, 'extern "C" void DRV_IR_RunFrame')
+    contains(run, "char logText[256] = { 0 }", "const bool stateResult",
+             "const bool acStateResult", "IR_ProtocolUsesACState",
+             "if (eventType)", "IR_SyncReceiverInput(true)", "* ir_periodus")
+    contains(block(d, 'extern "C" commandResult_t IR_Enable'),
+             "parseBoundedDecimal(words[1], 0, 1", "protocol masks are not implemented")
+    contains(block(d, 'extern "C" commandResult_t IR_Param'),
+             "parseBoundedDecimal(words[1], 0, 100")
+    contains(block(d, 'extern "C" commandResult_t IR_AC_Cmd'), "return CMD_RES_ERROR;")
+
+    recv = s["recv"]
+    require("static float        ir_now" not in recv, "floating absolute RX clock returned")
+    contains(recv, "ir_sample_count", "ir_edge_sample", "ir_period_us_q16",
+             "ir_timeout_samples", "IR_NextSample", "IR_ElapsedSamples",
+             "IR_SamplesToRawTicks")
+
+    pinmode = flat(block(s["digital"], "void pinModeFast"))
+    contains(pinmode, "INPUT_PULLUP: HAL_PIN_Setup_Input_Pullup",
+             "INPUT_PULLDOWN: HAL_PIN_Setup_Input_Pulldown")
+    contains(s["tiny"], "TinyIR_NEC_IsReady", "DRV_IR_IsReady()",
+             "gTinyIRDeferredStart", "if(ir_chan < 0)")
+    contains(s["bl602"], "g_bl602_active_pwm", "g_bl602_ir_pwm_pin",
+             "HAL_IR_PWM_Reserve", "HAL_IR_PWM_Release",
+             "PWM_SW_Force_Value", "PWM_SW_Mode", "HAL_IR_PWM_IsActive")
+    require("g_bl602_pwm_owner" not in s["bl602"],
+            "ordinary BL602 PWM remains subject to the removed owner lock")
+    contains(s["ln"], "const uint8_t channel", "BIT_CLEAR(g_active_pwm, channel)",
+             "if(freecha >= PWM_CH_MAX)",
+             "LL_PWM_Compare_Set(pin->pwm_cha, g_pwm_load[pin->pwm_cha])",
+             "LL_PWM_Compare_Set(pin->pwm_cha, 0)")
+    allocator = block(s["realtek"], "static int HAL_RTK_GetFreeChannel")
+    contains(allocator, "OBK_REALTEK_PWM_CHANNEL_COUNT", "allowedChannels",
+             "return -1")
+    contains(s["realtek"], "if(pin->gpio == NULL)", "if(pin->pwm == NULL)",
+             "HAL_IR_PWM_Reserve", "Realtek_SharesPWMPeriodTimer",
+             "Realtek_HasOtherPWMOwner", "g_realtek_ir_pwm_pin",
+             "RTL8720E_GetPWMChannelMask")
+    require("pwmout_pin2chan(g_pins[left].pin)" not in s["realtek"],
+            "RTL8720D cross-bank coexistence returned")
+    contains(s["rtl8720e"], "RTL8720E_PWMClassToChannelMask",
+             "RTL8720E_GetPWMChannelMask", "pwmout_pin2chan",
+             "return RTL8720E_GetPWMChannelMask(index) != 0U")
+    require("Realtek IRQ allocation failed" not in s["realtek"],
+            "unrelated Realtek IRQ hardening returned")
+    contains(s["main"], "DRV_IR_IsReady()", "DRV_IR_IsDeferred()",
+             "Drv IR failed to start.")
+    contains(s["workflow"], "IR Adapter Regression Tests",
+             "python3 tests/ir_adapter_regression.py")
+
+
+def main() -> None:
+    sources = {name: path.read_text() for name, path in FILES.items()}
+    parser_tests(sources["driver"])
+    receive_clock_tests(sources["recv"])
+    protocol_boundary_tests(sources["driver"])
+    pwm_policy_tests(sources["realtek"], sources["rtl8720e"])
+    source_contracts(sources)
+    print("IR adapter regression tests passed")
+
+
+if __name__ == "__main__":
+    main()

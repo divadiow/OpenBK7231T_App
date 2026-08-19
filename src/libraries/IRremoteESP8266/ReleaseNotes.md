@@ -1,5 +1,108 @@
 # Release Notes
 
+## _v2.9.0 (20260103)_
+
+**[Bug Fixes]**
+- Bosch: Fixed the bug where the wind speed was always set to auto. (#2237)
+- Update IRsend sendHaierAC to include SEND_HAIER_AC160 (#2172)
+- Gree: Fix reporting vertical swing (#2125)
+- Fix `decodeYork()` parameter names & defaults. (#2121)
+- Fix the Coolix fan-only mode in IRac class. (#2104)
+- Fix missing quiet parameter of haier176 (#2102)
+- ESP32-C3: Fix compilation error when USB CDC on Boot is enabled (#2080)
+
+**[Features]**
+- Add Fahrenheit support for the BOSCH144 protocol (#2224)
+- Build: Add compatibility with C++20 (#2040)
+- Add initial detailed support for Kelon168 (Kelon/Hisense) (#1949)
+- Add support for the Eurom A/C protocol (#2208)
+- Add Fahrenheit support for Coolix (#2214)
+- ESP32: Esp32 Core version 3 support (#2144)
+- auto_analyse_raw_data: Add kXxMsbFirst to easy change MSBFirst for the full protocol (#2143)
+- change kAirtonMaxTemp from 25C to 31C (#2124)
+- Added support for Bluestar Heavy AC (#2120)
+- Add support of Toshiba Remote Control B (#2094)
+- Update haier160 & HaierYRWO2 to use quiet in the common class. (#2115)
+- Internationalisation: Solvakian translation (#2091)
+- Daikin: Support setting temperature in 0.5 C unit (#2036)
+- Quiet/Silent Mode for Electra_AC (#1990)
+
+**[Misc]**
+- Document Fischer R51L1/BGE remote support (#2231)
+- CI: pin python v3.13
+- CI: Attempt to fix intelhex failures
+- IRMQTTServer: Fixes for ArduinoJson v7 to remove depreicated calls
+- docs: updated contributing section for clarity (by Prerna Utage) (#2221)
+- Fix typo in Russian language support (#2210)
+- Build: Update CodeQL actions plugin to use v3 as v2 will be deprecated soon
+- Build: Fix soon to be deprecated set-output command
+- Build: Update build scripts to use non-deprecated actions tooling
+- Fix linter issues (#2173)
+- pylint fix raw_to_pronto_code.py (#2150)
+- Document support for Comfee model (#2147)
+- DAIKIN: ARC443A5 Remote supported note (#2138)
+- library.json specifies libCompatMode strict (#2111)
+- Added Electrolux EACM CL/N3 series remote to TCL protocol (#2100)
+- Add AR-JW19 to supported devices (#2069)
+- Remove unused constant `kRcmmExcess` (#2033)
+- Panasonic AC: Document support for PV1122V remote (#2029)
+- Document support for Panasonic CS-E12QKEW A/C (#2028)
+
+
+## _v2.8.6 (20230727)_
+
+**[Bug Fixes]**
+- Ensure `IRCoolixAC::toCommon()` returns `kNoTempValue` when no sensor temp is detected. (#2015 #2012)
+- Fix compilation dependency of LG on Samsung send protocol (#2011 #2010)
+- Fix missing parameter in call to `IRac::gree()` (#2008 #2007)
+
+**[Features]**
+- IRac: Ensure the `sleep` parameter is used for the `FUJITSU_AC` protocol. (#1992 #1991)
+
+**[Misc]**
+- Allow the BlynkIRRemote.ino code to compile again. (#2016)
+- do not list WHIRLPOOL_AC unconditionally as supported protocol (#2003)
+- IRUtils:typeToString() — simplify (#2002)
+- Fix brand Green -> Gree (#1994)
+- Fix undefined `std::round` compilation error (#1989)
+
+
+## _v2.8.5 (20230508)_
+
+**[Bug Fixes]**
+- Fix a bug where we never detached the timer interrupt on ESP32s. (#1984 #1983)
+- Missing argument in use of midea function (#1959 #1958)
+- IRMQTTServer: Improve HA MQTT climate handling. (#1911)
+- SEND_SANYO_AC88: Fix poor cut-n-paste error (#1905 #1897)
+
+**[Features]**
+- Add support for a 40bit variant of the standard Panasonic protocol (#1977 @1976)
+- Initial support for York AC protocol (#1889)
+- IRMQTTServer: SHT-3x Temperature Sensor Support (#1951)
+- IRMQTTServer: HA multi output discovery (#1947)
+- IRMQTTServer: extended with new A/C common fields (#1940)
+- IRMQTTServer: Sync the on state to power from mode for HA (#1946)
+- Experimental basic support for Carrier 84-bit protocol. (#1945 #1943)
+- Add support the WowWee 11-Bit RoboRaptor-X protocol. (#1939 #1938)
+- Added 'sensorTemperature' and 'iFeel' to IRac (common) (#1928)
+- Added extra 'mid' option for Fan & SwingV to IRac (#1929)
+- Added "commandType" to IRAc (#1921)
+- Added support for Argo WREM-3 A/C remote protocol [part1] (#1920)
+- Added Dutch (nl-NL) translation (#1907)
+- ARGO: Improve code & add support for decoding 32bit sensor msgs. (#1906 #1859)
+- Added support for Gorenje cooker hood IR protocol (#1888 #1887)
+
+**[Misc]**
+- Add Electrolux YKR-H/531E as a supported device (#1981 #1980)
+- Update `XMP` status to Stable (#1944)
+- upgrade to a later version of `googletest` (#1936)
+- MITSUBISHI128: Added model to supported protocol (#1924)
+- Added Dutch (nl-NL) README (#1908)
+- Added GMock to UT Makefile (#1902)
+- Update HA example config for HA 2022.6+ (#1901 #1900)
+- Add a `d1_mini_noMDNS` build option to `IRMQTTServer`. (#1985)
+
+
 ## _v2.8.4 (20220918)_
 
 **[Bug Fixes]**

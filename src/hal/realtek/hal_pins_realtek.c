@@ -18,21 +18,56 @@
 #include "pwmout_ex_api.h"
 static int g_active_pwm = 0b0;
 
-uint8_t HAL_RTK_GetFreeChannel()
+// RTL8720E/RTL8721DA currently expose eight application-selectable PWM
+// channels. Return a signed result so exhaustion cannot wrap to channel 255.
+#define OBK_REALTEK_PWM_CHANNEL_COUNT 8
+#if PLATFORM_RTL8720E
+extern uint32_t RTL8720E_GetPWMChannelMask(int index);
+#endif
+
+static int HAL_RTK_GetFreeChannel(uint32_t allowedChannels)
 {
-	uint8_t freech;
-	for(freech = 0; freech <= 9; freech++) if((g_active_pwm >> freech & 1) == 0) break;
-	if(freech == 9) return -1;
-	g_active_pwm |= 1 << freech;
-	return freech;
+	for (int channel = 0; channel < OBK_REALTEK_PWM_CHANNEL_COUNT; channel++) {
+		if ((allowedChannels & (1U << channel)) &&
+			((g_active_pwm >> channel) & 1) == 0) {
+			g_active_pwm |= 1 << channel;
+			return channel;
+		}
+	}
+	return -1;
 }
 
-void HAL_RTK_FreeChannel(uint8_t channel)
+static void HAL_RTK_FreeChannel(int channel)
 {
-	g_active_pwm &= ~(1 << channel);
+	if (channel >= 0 && channel < OBK_REALTEK_PWM_CHANNEL_COUNT)
+		g_active_pwm &= ~(1 << channel);
 }
 
 #endif
+
+#if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
+// Realtek-new drives all PWM compare channels from one period timer. RTL8720D
+// exposes two timer pointers, but its SDK uses one global prescaler for both.
+// IR must therefore not coexist with any ordinary PWM on these targets.
+static int g_realtek_ir_pwm_pin = -1;
+
+static bool Realtek_SharesPWMPeriodTimer(const int left, const int right)
+{
+	(void)left;
+	(void)right;
+	return true;
+}
+
+static bool Realtek_HasOtherPWMOwner(const int index)
+{
+	for (int pinIndex = 0; pinIndex < g_numPins; pinIndex++) {
+		if (pinIndex != index && g_pins[pinIndex].pwm != NULL &&
+			Realtek_SharesPWMPeriodTimer(index, pinIndex)) return true;
+	}
+	return false;
+}
+#endif
+
 
 int PIN_GetPWMIndexForPinIndex(int index)
 {
@@ -57,6 +92,11 @@ void RTL_GPIO_Init(rtlPinMapping_t* pin)
 		return;
 	}
 	pin->gpio = os_malloc(sizeof(gpio_t));
+	if(pin->gpio == NULL)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_DRV, "Realtek GPIO allocation failed");
+		return;
+	}
 	memset(pin->gpio, 0, sizeof(gpio_t));
 	gpio_init(pin->gpio, pin->pin);
 }
@@ -138,12 +178,24 @@ void HAL_PIN_PWM_Stop(int index)
 	pwmout_free(pin->pwm);
 	os_free(pin->pwm);
 	pin->pwm = NULL;
+#if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
+	if (g_realtek_ir_pwm_pin == index) g_realtek_ir_pwm_pin = -1;
+#endif
 }
 
 void HAL_PIN_PWM_Start(int index, int freq)
 {
 	if(index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
 		return;
+#if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
+	if (g_realtek_ir_pwm_pin >= 0 && g_realtek_ir_pwm_pin != index &&
+		Realtek_SharesPWMPeriodTimer(index, g_realtek_ir_pwm_pin)) {
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"Realtek PWM pin %d rejected while IR owns the shared period timer",
+			index);
+		return;
+	}
+#endif
 	rtlPinMapping_t* pin = g_pins + index;
 	if(pin->pwm != NULL)
 	{
@@ -157,16 +209,28 @@ void HAL_PIN_PWM_Start(int index, int freq)
 		pin->gpio = NULL;
 	}
 	pin->pwm = os_malloc(sizeof(pwmout_t));
+	if(pin->pwm == NULL)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"Realtek PWM allocation failed on pin %d", index);
+		return;
+	}
 	memset(pin->pwm, 0, sizeof(pwmout_t));
 #if PLATFORM_REALTEK_NEW
-	int ch = HAL_RTK_GetFreeChannel();
-	if(ch == -1)
+	uint32_t allowedChannels = (1U << OBK_REALTEK_PWM_CHANNEL_COUNT) - 1U;
+#if PLATFORM_RTL8720E
+	allowedChannels = RTL8720E_GetPWMChannelMask(index);
+#endif
+	const int channel = HAL_RTK_GetFreeChannel(allowedChannels);
+	if(channel < 0)
 	{
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"Realtek PWM has no compatible free channel on pin %d", index);
 		os_free(pin->pwm);
 		pin->pwm = NULL;
 		return;
 	}
-	pin->pwm->pwm_idx = ch;
+	pin->pwm->pwm_idx = (uint8_t)channel;
 #endif
 	pwmout_init(pin->pwm, pin->pin);
 	pwmout_period_us(pin->pwm, 1000000 / freq);
@@ -186,6 +250,49 @@ void HAL_PIN_PWM_Update(int index, float value)
 	if(pin->pwm == NULL) return;
 #endif
 	pwmout_write(pin->pwm, value / 100);
+}
+
+bool HAL_IR_PWM_Reserve(int index)
+{
+	if (index < 0 || index >= g_numPins || !HAL_PIN_CanThisPinBePWM(index))
+		return false;
+#if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
+	if (g_realtek_ir_pwm_pin >= 0) return g_realtek_ir_pwm_pin == index;
+	if (g_pins[index].pwm != NULL || Realtek_HasOtherPWMOwner(index)) {
+		ADDLOG_ERROR(LOG_FEATURE_DRV,
+			"IR PWM pin %d cannot claim the Realtek shared period timer while another PWM is active",
+			index);
+		return false;
+	}
+	g_realtek_ir_pwm_pin = index;
+#endif
+	return true;
+}
+
+void HAL_IR_PWM_Release(int index)
+{
+#if PLATFORM_RTL8720D || PLATFORM_REALTEK_NEW
+	if (g_realtek_ir_pwm_pin == index) g_realtek_ir_pwm_pin = -1;
+#else
+	(void)index;
+#endif
+}
+
+void HAL_IR_PWM_Update(int index, float value)
+{
+	HAL_PIN_PWM_Update(index, value);
+}
+
+bool HAL_IR_PWM_IsActive(int index)
+{
+	if(index < 0 || index >= g_numPins) return false;
+	rtlPinMapping_t* pin = g_pins + index;
+	if(pin->pwm == NULL) return false;
+#ifdef PLATFORM_RTL87X0C
+	return pin->pwm->is_init;
+#else
+	return true;
+#endif
 }
 
 unsigned int HAL_GetGPIOPin(int index)

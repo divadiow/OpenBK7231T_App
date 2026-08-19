@@ -1,18 +1,12 @@
 // Copyright 2017 David Conran
 
 #include "IRtimer.h"
+
+extern unsigned long micros(void);
+extern unsigned long millis(void);
 #ifndef UNIT_TEST
 #include "String.h"
 #endif
-
-
-//#if PLATFORM_BEKEN || PLATFORM_REALTEK || PLATFORM_BL602 || PLATFORM_LN882H
-//TODO
-extern unsigned long micros(void);
-extern unsigned long millis(void);
-
-//#endif
-
 
 #ifdef UNIT_TEST
 // Used to help simulate elapsed time in unit tests.

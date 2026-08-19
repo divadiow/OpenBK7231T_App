@@ -16,10 +16,10 @@
 #include "IRremoteESP8266.h"
 #include "IRtext.h"
 #include "IRutils.h"
+#include "minmax.h"
 #ifndef ARDUINO
 //#include <string>
 #endif
-#include "minmax.h"
 
 // Constants
 const uint16_t kMitsubishiHeavyHdrMark = 3140;
