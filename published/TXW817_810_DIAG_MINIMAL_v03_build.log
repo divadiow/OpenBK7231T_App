@@ -249,7 +249,6 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
                                                         ^~~~~~~~~~~~~~~~~~~~~
-build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                      ^~~~~~~~~~~~~~~~
@@ -259,6 +258,7 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                                                         ^~~~~~~~~~~~~~~~~~
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_gc0329.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_gc0312.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_bf3720.o
@@ -519,6 +519,7 @@ In file included from ../sdk/include/osal/csky/string.h:6:0,
  extern void * memcpy( void *, const void *, size_t );
                ^~~~~~
 build_c ../sdk/app/audio_app/audio_usbspk.o
+build_c ../sdk/app/decode/jpg_decode_stream.o
 In file included from ../sdk/include/osal/string.h:6:0,
                  from ../sdk/app/audio_app/audio_usbspk.c:1:
 ../sdk/app/audio_app/audio_usbspk.c: In function ‘send_usbspk_audio’:
@@ -534,7 +535,6 @@ In file included from ../sdk/include/osal/csky/string.h:6:0,
 /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/OpenTXW81X/tools/gcc/csky-elfabiv2/sys-include/string.h:25:15: note: expected ‘const void *’ but argument is of type ‘volatile int16 * {aka volatile short int *}’
  extern void * memcpy( void *, const void *, size_t );
                ^~~~~~
-build_c ../sdk/app/decode/jpg_decode_stream.o
 build_c ../sdk/app/decode/read_jpg_file_demo.o
 build_c ../sdk/app/decode/recv_jpg_yuv_demo.o
 build_c ../sdk/app/decode/yuv_stream.o
@@ -584,9 +584,5 @@ build_c syscfg.o
 build_c ../../../platforms/TXW81X/txw81x_diag_main.o
 build_S ../csky/csi_kernel/rhino/arch/csky/ck803/port_s.O
 build_S ../sdk/chip/txw81x/vectors.O
-../sdk/chip/txw81x/pin_function.o: In function `$d':
-(.text.pin_func+0x658): undefined reference to `dvp_scl'
-../sdk/chip/txw81x/pin_function.o: In function `$d':
-(.text.pin_func+0x65c): undefined reference to `dvp_sda'
-collect2: error: ld returned 1 exit status
-make: *** [Makefile:1466: application] Error 1
++ ./BinScript.exe BinScript.BinScript
+run-detectors: unable to find an interpreter for ./BinScript.exe
