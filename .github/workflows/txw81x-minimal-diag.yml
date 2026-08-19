@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - txw81x-minimal-diag
+    paths:
+      - '.github/workflows/txw81x-minimal-diag.yml'
+      - 'platforms/TXW81X/OpenBeken.mk'
+      - 'platforms/TXW81X/txw81x_diag_main.c'
+      - 'tools/txw81x_diag_capture.ps1'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: txw81x-minimal-diag
@@ -51,8 +56,9 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p _txwdiag
+          mkdir -p _txwdiag published
           cp sdk/OpenTXW81X/project/APP.bin _txwdiag/TXW817_810_DIAG_MINIMAL_v03.bin
+          cp _txwdiag/TXW817_810_DIAG_MINIMAL_v03.bin published/TXW817_810_DIAG_MINIMAL_v03.bin
           cp tools/txw81x_diag_capture.ps1 _txwdiag/txw81x_diag_capture.ps1
           printf '@echo off\r\npowershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%%~dp0txw81x_diag_capture.ps1" %%*\r\npause\r\n' > _txwdiag/2_CAPTURE_TXW817_810.cmd
 
@@ -63,3 +69,17 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish successful firmware back to test branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f published/TXW817_810_DIAG_MINIMAL_v03.bin
+          if git diff --cached --quiet; then
+            echo 'Binary already published.'
+          else
+            git commit -m 'Publish TXW817 minimal diagnostic v0.3 binary'
+            git push origin HEAD:txw81x-minimal-diag
+          fi
