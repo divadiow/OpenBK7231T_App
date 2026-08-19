@@ -273,7 +273,7 @@
 //#define ENABLE_DRIVER_DCF77					1
 
 #elif PLATFORM_BEKEN
-
+#define ENABLE_DRIVER_RN8209						1
 //#define ENABLE_LFS_SPI						1
 //#define ENABLE_DRIVER_TESTSPIFLASH			1
 
