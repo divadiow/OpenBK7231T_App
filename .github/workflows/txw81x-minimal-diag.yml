@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
 
       - name: Checkout only OpenTXW81X
         shell: bash
@@ -38,7 +40,15 @@ jobs:
             tar -xf *.tar.gz
           fi
 
-      - name: Build through the known-working OpenTXW81X pipeline
+      - name: Obtain previously byte-validated native TXW81X packer
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch --depth=1 origin txw81x-python-packaging-research
+          git show FETCH_HEAD:tools/txw81x_pack/txw81x_pack.py > /tmp/txw81x_pack.py
+          python3 -m py_compile /tmp/txw81x_pack.py
+
+      - name: Build through the known-working OpenTXW81X compile/link path
         id: firmware_build
         continue-on-error: true
         shell: bash
@@ -50,12 +60,24 @@ jobs:
             cd sdk/OpenTXW81X/project
             make clean || true
             make APP_VERSION=diag_v03 -j2
-            ./BinScript.exe BinScript.BinScript
-            ./makecode.exe
+            test -s project.hex
+            test -s project.bin
+
+            python3 /tmp/txw81x_pack.py pack-app \
+              --input project.hex \
+              --parameter-cfg parameter.bincfg \
+              --makecode-ini makecode.ini \
+              --sdk-version 02050307 \
+              --svn-version 8EB5 \
+              --app-version 0 \
+              --date 2026-08-19 \
+              --output APP.bin
+
+            python3 /tmp/txw81x_pack.py inspect APP.bin
             test -s APP.bin
             grep -a -q 'TXWDIAG READY v=0.3' APP.bin
             grep -a -q 'TXWDIAG PONG v=0.3' APP.bin
-            ls -l APP.bin APP_compress.bin || true
+            ls -l project.elf project.hex project.bin APP.bin
           } 2>&1 | tee "$GITHUB_WORKSPACE/published/TXW817_810_DIAG_MINIMAL_v03_build.log"
 
       - name: Prepare minimal test files if build succeeded
