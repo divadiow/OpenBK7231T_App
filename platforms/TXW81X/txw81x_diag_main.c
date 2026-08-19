@@ -10,6 +10,12 @@
 
 extern void system_goto_boot(void);
 
+/* pin_function.c references these runtime DVP I2C selections. OpenBeken normally
+   supplies them from its camera wrapper; the minimal diagnostic does not use the
+   camera, so retain the OpenTXW81X project defaults only. */
+int dvp_scl = PC_2;
+int dvp_sda = PC_3;
+
 #define MODE_REG (*(volatile uint32 *)0x400200C4u)
 
 static struct uart_device *g_uart;
