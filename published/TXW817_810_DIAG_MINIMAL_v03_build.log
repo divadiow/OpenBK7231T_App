@@ -228,6 +228,7 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_ov2640.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_ov7670.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_ov7725.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_xcg532.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                      ^~~~~~~~~~~~~~~~
@@ -237,19 +238,8 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                                                         ^~~~~~~~~~~~~
-build_c ../sdk/lib/bus/iic/sensor/sensor_xcg532.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.o
-../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
-  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
-                     ^~~~~~~~~~~~~~~~
-../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:38: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
-  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
-                                      ^~~~~~~~~~~~~~~~~
-../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
-  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
-                                                        ^~~~~~~~~~~~~~~~~~~~~
 build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.o
-build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                      ^~~~~~~~~~~~~~~~
@@ -259,6 +249,16 @@ build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
   .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
                                                         ^~~~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
+                     ^~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:38: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
+                                      ^~~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
+                                                        ^~~~~~~~~~~~~~~~~~~~~
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_gc0329.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_gc0312.o
 build_c ../sdk/lib/bus/iic/sensor/sensor_bf3720.o
@@ -519,7 +519,6 @@ In file included from ../sdk/include/osal/csky/string.h:6:0,
  extern void * memcpy( void *, const void *, size_t );
                ^~~~~~
 build_c ../sdk/app/audio_app/audio_usbspk.o
-build_c ../sdk/app/decode/jpg_decode_stream.o
 In file included from ../sdk/include/osal/string.h:6:0,
                  from ../sdk/app/audio_app/audio_usbspk.c:1:
 ../sdk/app/audio_app/audio_usbspk.c: In function ‘send_usbspk_audio’:
@@ -535,6 +534,7 @@ In file included from ../sdk/include/osal/csky/string.h:6:0,
 /home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/OpenTXW81X/tools/gcc/csky-elfabiv2/sys-include/string.h:25:15: note: expected ‘const void *’ but argument is of type ‘volatile int16 * {aka volatile short int *}’
  extern void * memcpy( void *, const void *, size_t );
                ^~~~~~
+build_c ../sdk/app/decode/jpg_decode_stream.o
 build_c ../sdk/app/decode/read_jpg_file_demo.o
 build_c ../sdk/app/decode/recv_jpg_yuv_demo.o
 build_c ../sdk/app/decode/yuv_stream.o
@@ -590,13 +590,13 @@ build_S ../sdk/chip/txw81x/vectors.O
 {
   "application_version": 0,
   "boot": {
-    "code_crc16": 64455,
+    "code_crc16": 8397,
     "code_length": 112510,
     "code_offset": 3072,
     "execute_address": 402653184,
     "flag": 23145,
     "flash_blocks_64k": 16,
-    "header_crc16": 36263,
+    "header_crc16": 22633,
     "header_size": 32,
     "load_address": 402653184,
     "mode": 2344,
@@ -648,20 +648,20 @@ build_S ../sdk/chip/txw81x/vectors.O
   "input_base_address": 402653184,
   "parameter_length": 2048,
   "parameter_offset": 512,
-  "sha256": "3aaa2de1776ddc1608b9e7c9b95f3f33d91a58e561339a4b324be9cf1121c510",
+  "sha256": "f6c68144499268e3dd8aa39c8b231b3b062c5d64ead1a6f3a5b6b28140e9890e",
   "size": 115582
 }
 + python3 /tmp/txw81x_pack.py inspect APP.bin
 {
   "application_version": 0,
   "boot": {
-    "code_crc16": 64455,
+    "code_crc16": 8397,
     "code_length": 112510,
     "code_offset": 3072,
     "execute_address": 402653184,
     "flag": 23145,
     "flash_blocks_64k": 16,
-    "header_crc16": 36263,
+    "header_crc16": 22633,
     "header_size": 32,
     "load_address": 402653184,
     "mode": 2344,
@@ -712,7 +712,7 @@ build_S ../sdk/chip/txw81x/vectors.O
   ],
   "parameter_length": 2048,
   "parameter_offset": 512,
-  "sha256": "3aaa2de1776ddc1608b9e7c9b95f3f33d91a58e561339a4b324be9cf1121c510",
+  "sha256": "f6c68144499268e3dd8aa39c8b231b3b062c5d64ead1a6f3a5b6b28140e9890e",
   "size": 115582,
   "type": "app"
 }
@@ -720,7 +720,7 @@ build_S ../sdk/chip/txw81x/vectors.O
 + grep -a -q 'TXWDIAG READY v=0.3' APP.bin
 + grep -a -q 'TXWDIAG PONG v=0.3' APP.bin
 + ls -l project.elf project.hex project.bin APP.bin
--rw-r--r-- 1 runner runner 115582 Aug 19 20:45 APP.bin
--rwxr-xr-x 1 runner runner 112510 Aug 19 20:45 project.bin
--rwxr-xr-x 1 runner runner 535776 Aug 19 20:45 project.elf
--rw-r--r-- 1 runner runner 316517 Aug 19 20:45 project.hex
+-rw-r--r-- 1 runner runner 115582 Aug 19 20:53 APP.bin
+-rwxr-xr-x 1 runner runner 112510 Aug 19 20:53 project.bin
+-rwxr-xr-x 1 runner runner 535776 Aug 19 20:53 project.elf
+-rw-r--r-- 1 runner runner 316517 Aug 19 20:53 project.hex
