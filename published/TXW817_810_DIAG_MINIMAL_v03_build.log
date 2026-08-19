@@ -1,0 +1,624 @@
++ cd sdk/OpenTXW81X/project
++ make clean
+rm -f ../csky/csi_kernel/rhino/adapter/csi_rhino.o ../csky/csi_kernel/rhino/arch/csky/cpu_impl.o ../csky/csi_kernel/rhino/arch/csky/csky_sched.o ../csky/csi_kernel/rhino/arch/csky/ck803/port_c.o ../csky/csi_kernel/rhino/common/k_atomic.o ../csky/csi_kernel/rhino/common/k_ffs.o ../csky/csi_kernel/rhino/common/k_fifo.o ../csky/csi_kernel/rhino/common/k_trace.o ../csky/csi_kernel/rhino/core/k_buf_queue.o ../csky/csi_kernel/rhino/core/k_dyn_mem_proc.o ../csky/csi_kernel/rhino/core/k_err.o ../csky/csi_kernel/rhino/core/k_event.o ../csky/csi_kernel/rhino/core/k_idle.o ../csky/csi_kernel/rhino/core/k_mm.o ../csky/csi_kernel/rhino/core/k_mm_blk.o ../csky/csi_kernel/rhino/core/k_mm_debug.o ../csky/csi_kernel/rhino/core/k_mutex.o ../csky/csi_kernel/rhino/core/k_obj.o ../csky/csi_kernel/rhino/core/k_pend.o ../csky/csi_kernel/rhino/core/k_queue.o ../csky/csi_kernel/rhino/core/k_ringbuf.o ../csky/csi_kernel/rhino/core/k_sched.o ../csky/csi_kernel/rhino/core/k_sem.o ../csky/csi_kernel/rhino/core/k_stats.o ../csky/csi_kernel/rhino/core/k_sys.o ../csky/csi_kernel/rhino/core/k_task.o ../csky/csi_kernel/rhino/core/k_task_sem.o ../csky/csi_kernel/rhino/core/k_tick.o ../csky/csi_kernel/rhino/core/k_time.o ../csky/csi_kernel/rhino/core/k_timer.o ../csky/csi_kernel/rhino/core/k_workqueue.o ../csky/csi_kernel/rhino/driver/hook_impl.o ../csky/csi_kernel/rhino/driver/systick.o ../csky/csi_kernel/rhino/driver/yoc_impl.o ../csky/csi_kernel/rhino/driver/hook_weak.o ../csky/hgic/usart.o ../csky/hgic/malloc.o ../csky/hgic/assert.o ../csky/libs/libc/malloc.o ../csky/libs/libc/minilibc_port.o ../sdk/chip/txw81x/isr.o ../sdk/chip/txw81x/pin_function.o ../sdk/chip/txw81x/system.o ../sdk/chip/txw81x/ticker_api.o ../sdk/chip/txw81x/trap_c.o ../sdk/driver/dma/dw_dmac.o ../sdk/driver/dma/hg_m2m_dma.o ../sdk/driver/gpio/hggpio_v4.o ../sdk/driver/i2c/hgi2c_v1.o ../sdk/driver/i2s/hgi2s_v0.o ../sdk/driver/spi/hgspi_v3.o ../sdk/driver/timer/hgtimer_v6.o ../sdk/driver/timer/hgtimer_v4.o ../sdk/driver/timer/hgtimer_v5.o ../sdk/driver/timer/hgtimer_v7.o ../sdk/driver/uart/hguart_v4.o ../sdk/driver/uart/hguart_v2.o ../sdk/driver/crc/hg_crc.o ../sdk/driver/sdhost/hgsdh_dev.o ../sdk/driver/sysaes/hg_sysaes_v3.o ../sdk/driver/pdm/hgpdm_v0.o ../sdk/driver/led/hgled_v0.o ../sdk/driver/pwm/hgpwm_v0.o ../sdk/driver/capture/hgcapture_v0.o ../sdk/driver/csi/hgdvp_v2.o ../sdk/driver/adc/hgadc_v0.o ../sdk/driver/lcdc/hglcdc.o ../sdk/driver/prc/hgprc.o ../sdk/driver/scale/hgscale.o ../sdk/driver/vpp/hgvpp.o ../sdk/driver/of/hgof.o ../sdk/hal/dev.o ../sdk/hal/gpio.o ../sdk/hal/i2c.o ../sdk/hal/sdio_slave.o ../sdk/hal/timer.o ../sdk/hal/usb_device.o ../sdk/hal/spi.o ../sdk/hal/spi_nor.o ../sdk/hal/sysaes.o ../sdk/hal/uart.o ../sdk/hal/i2s.o ../sdk/hal/pdm.o ../sdk/hal/led.o ../sdk/hal/pwm.o ../sdk/hal/capture.o ../sdk/hal/adc.o ../sdk/hal/netdev.o ../sdk/hal/dvp.o ../sdk/hal/dma.o ../sdk/hal/jpeg.o ../sdk/hal/tk.o ../sdk/hal/lcdc.o ../sdk/hal/prc.o ../sdk/hal/scale.o ../sdk/hal/vpp.o ../sdk/hal/audac.o ../sdk/hal/auadc.o ../sdk/hal/of.o ../sdk/hal/sha.o ../sdk/lib/heap/alloc.o ../sdk/lib/heap/user_heap.o ../sdk/lib/common/common.o ../sdk/lib/common/string.o ../sdk/lib/common/us_ticker.o ../sdk/lib/common/dsleepdata.o ../sdk/lib/common/rbuffer.o ../sdk/lib/net/lwip/src/api/api_lib.o ../sdk/lib/net/lwip/src/api/api_msg.o ../sdk/lib/net/lwip/src/api/err.o ../sdk/lib/net/lwip/src/api/if_api.o ../sdk/lib/net/lwip/src/api/netbuf.o ../sdk/lib/net/lwip/src/api/netdb.o ../sdk/lib/net/lwip/src/api/netifapi.o ../sdk/lib/net/lwip/src/api/sockets.o ../sdk/lib/net/lwip/src/api/tcpip.o ../sdk/lib/net/lwip/src/api/ping.o ../sdk/lib/net/lwip/src/core/altcp.o ../sdk/lib/net/lwip/src/core/altcp_alloc.o ../sdk/lib/net/lwip/src/core/altcp_tcp.o ../sdk/lib/net/lwip/src/core/def.o ../sdk/lib/net/lwip/src/core/dns.o ../sdk/lib/net/lwip/src/core/inet_chksum.o ../sdk/lib/net/lwip/src/core/init.o ../sdk/lib/net/lwip/src/core/ip.o ../sdk/lib/net/lwip/src/core/ipv4/autoip.o ../sdk/lib/net/lwip/src/core/ipv4/dhcp.o ../sdk/lib/net/lwip/src/core/ipv4/etharp.o ../sdk/lib/net/lwip/src/core/ipv4/icmp.o ../sdk/lib/net/lwip/src/core/ipv4/igmp.o ../sdk/lib/net/lwip/src/core/ipv4/ip4.o ../sdk/lib/net/lwip/src/core/ipv4/ip4_addr.o ../sdk/lib/net/lwip/src/core/ipv4/ip4_frag.o ../sdk/lib/net/lwip/src/core/ipv6/dhcp6.o ../sdk/lib/net/lwip/src/core/ipv6/ethip6.o ../sdk/lib/net/lwip/src/core/ipv6/icmp6.o ../sdk/lib/net/lwip/src/core/ipv6/inet6.o ../sdk/lib/net/lwip/src/core/ipv6/ip6.o ../sdk/lib/net/lwip/src/core/ipv6/ip6_addr.o ../sdk/lib/net/lwip/src/core/ipv6/ip6_frag.o ../sdk/lib/net/lwip/src/core/ipv6/mld6.o ../sdk/lib/net/lwip/src/core/ipv6/nd6.o ../sdk/lib/net/lwip/src/core/mem.o ../sdk/lib/net/lwip/src/core/memp.o ../sdk/lib/net/lwip/src/core/netif.o ../sdk/lib/net/lwip/src/core/pbuf.o ../sdk/lib/net/lwip/src/core/raw.o ../sdk/lib/net/lwip/src/core/stats.o ../sdk/lib/net/lwip/src/core/sys.o ../sdk/lib/net/lwip/src/core/tcp.o ../sdk/lib/net/lwip/src/core/tcp_in.o ../sdk/lib/net/lwip/src/core/tcp_out.o ../sdk/lib/net/lwip/src/core/timeouts.o ../sdk/lib/net/lwip/src/core/udp.o ../sdk/lib/net/lwip/src/netif/bridgeif.o ../sdk/lib/net/lwip/src/netif/bridgeif_fdb.o ../sdk/lib/net/lwip/src/netif/ethernet.o ../sdk/lib/net/lwip/src/netif/ethernetif.o ../sdk/lib/net/lwip/src/netif/lowpan6.o ../sdk/lib/net/lwip/src/netif/lowpan6_ble.o ../sdk/lib/net/lwip/src/netif/lowpan6_common.o ../sdk/lib/net/lwip/src/netif/ppp/auth.o ../sdk/lib/net/lwip/src/netif/ppp/ccp.o ../sdk/lib/net/lwip/src/netif/ppp/chap-md5.o ../sdk/lib/net/lwip/src/netif/ppp/chap-new.o ../sdk/lib/net/lwip/src/netif/ppp/chap_ms.o ../sdk/lib/net/lwip/src/netif/ppp/demand.o ../sdk/lib/net/lwip/src/netif/ppp/eap.o ../sdk/lib/net/lwip/src/netif/ppp/ecp.o ../sdk/lib/net/lwip/src/netif/ppp/eui64.o ../sdk/lib/net/lwip/src/netif/ppp/fsm.o ../sdk/lib/net/lwip/src/netif/ppp/ipcp.o ../sdk/lib/net/lwip/src/netif/ppp/ipv6cp.o ../sdk/lib/net/lwip/src/netif/ppp/lcp.o ../sdk/lib/net/lwip/src/netif/ppp/magic.o ../sdk/lib/net/lwip/src/netif/ppp/mppe.o ../sdk/lib/net/lwip/src/netif/ppp/multilink.o ../sdk/lib/net/lwip/src/netif/ppp/polarssl/arc4.o ../sdk/lib/net/lwip/src/netif/ppp/polarssl/des.o ../sdk/lib/net/lwip/src/netif/ppp/polarssl/md4.o ../sdk/lib/net/lwip/src/netif/ppp/polarssl/md5.o ../sdk/lib/net/lwip/src/netif/ppp/polarssl/sha1.o ../sdk/lib/net/lwip/src/netif/ppp/ppp.o ../sdk/lib/net/lwip/src/netif/ppp/pppapi.o ../sdk/lib/net/lwip/src/netif/ppp/pppcrypt.o ../sdk/lib/net/lwip/src/netif/ppp/pppoe.o ../sdk/lib/net/lwip/src/netif/ppp/pppol2tp.o ../sdk/lib/net/lwip/src/netif/ppp/pppos.o ../sdk/lib/net/lwip/src/netif/ppp/upap.o ../sdk/lib/net/lwip/src/netif/ppp/utils.o ../sdk/lib/net/lwip/src/netif/ppp/vj.o ../sdk/lib/net/lwip/src/netif/slipif.o ../sdk/lib/net/lwip/src/netif/zepif.o ../sdk/lib/net/lwip/arch/sys_arch.o ../sdk/lib/net/eloop/eloop.o ../sdk/lib/net/wifi/wifi_dev.o ../sdk/lib/net/ethphy/eth_mdio_bus.o ../sdk/lib/net/ethphy/eth_phy.o ../sdk/lib/net/ethphy/eth_phy_device.o ../sdk/lib/net/ethphy/phy/auto_phy.o ../sdk/lib/net/ethphy/phy/ip101g.o ../sdk/lib/net/ethphy/phy/rtl8201f.o ../sdk/lib/net/ethphy/phy/sz18201.o ../sdk/lib/net/skmonitor/skmonitor.o ../sdk/lib/fs/fatfs/diskio.o ../sdk/lib/fs/fatfs/fatfs_test.o ../sdk/lib/fs/fatfs/ff.o ../sdk/lib/fs/fatfs/ffunicode.o ../sdk/lib/fs/fatfs/syscall.o ../sdk/lib/fs/fatfs/osal_file.o ../sdk/lib/sdhost/sdhost.o ../sdk/lib/bus/spi/spi_nor/spi_nor_bus.o ../sdk/lib/bus/iic/sensor/sensor_bf2013.o ../sdk/lib/bus/iic/sensor/sensor_bf3703.o ../sdk/lib/bus/iic/sensor/sensor_bf3a03.o ../sdk/lib/bus/iic/sensor/sensor_gc0308.o ../sdk/lib/bus/iic/sensor/sensor_gc0309.o ../sdk/lib/bus/iic/sensor/sensor_gc0328.o ../sdk/lib/bus/iic/sensor/sensor_ov2640.o ../sdk/lib/bus/iic/sensor/sensor_ov7670.o ../sdk/lib/bus/iic/sensor/sensor_ov7725.o ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.o ../sdk/lib/bus/iic/sensor/sensor_xcg532.o ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.o ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.o ../sdk/lib/bus/iic/sensor/sensor_gc0311.o ../sdk/lib/bus/iic/sensor/sensor_gc0329.o ../sdk/lib/bus/iic/sensor/sensor_gc0312.o ../sdk/lib/bus/iic/sensor/sensor_bf3720.o ../sdk/lib/bus/iic/sensor/sensor_sp0a19.o ../sdk/lib/bus/iic/sensor/sensor_sp0718.o ../sdk/lib/bus/iic/sensor/sensor_bf30a2.o ../sdk/lib/bus/iic/sensor/sensor_ov7660.o ../sdk/lib/bus/iic/sensor/sensor_hi704.o ../sdk/lib/bus/iic/sensor/sensor_sp0828.o ../sdk/lib/bus/iic/sensor/sensor_sp0a20.o ../sdk/lib/bus/iic/gsensor/da280.o ../sdk/lib/bus/iic/gsensor/qma7981.o ../sdk/lib/bus/iic/gsensor/sc7a20.o ../sdk/lib/video/dvp/cmos_sensor/csi_v2.o ../sdk/lib/video/dvp/jpeg/jpg_table.o ../sdk/lib/video/dvp/jpeg/jpg_v2.o ../sdk/lib/video/de_avi/avidemux.o ../sdk/lib/video/en_avi/openDML.o ../sdk/lib/video/spi_sensor/spi_sensor.o ../sdk/lib/crypto/mbedtls/library/aes.o ../sdk/lib/crypto/mbedtls/library/aesce.o ../sdk/lib/crypto/mbedtls/library/aesni.o ../sdk/lib/crypto/mbedtls/library/aria.o ../sdk/lib/crypto/mbedtls/library/asn1parse.o ../sdk/lib/crypto/mbedtls/library/asn1write.o ../sdk/lib/crypto/mbedtls/library/base64.o ../sdk/lib/crypto/mbedtls/library/bignum.o ../sdk/lib/crypto/mbedtls/library/bignum_core.o ../sdk/lib/crypto/mbedtls/library/bignum_mod.o ../sdk/lib/crypto/mbedtls/library/bignum_mod_raw.o ../sdk/lib/crypto/mbedtls/library/camellia.o ../sdk/lib/crypto/mbedtls/library/ccm.o ../sdk/lib/crypto/mbedtls/library/chacha20.o ../sdk/lib/crypto/mbedtls/library/chachapoly.o ../sdk/lib/crypto/mbedtls/library/cipher.o ../sdk/lib/crypto/mbedtls/library/cipher_wrap.o ../sdk/lib/crypto/mbedtls/library/cmac.o ../sdk/lib/crypto/mbedtls/library/constant_time.o ../sdk/lib/crypto/mbedtls/library/ctr_drbg.o ../sdk/lib/crypto/mbedtls/library/debug.o ../sdk/lib/crypto/mbedtls/library/des.o ../sdk/lib/crypto/mbedtls/library/dhm.o ../sdk/lib/crypto/mbedtls/library/ecdh.o ../sdk/lib/crypto/mbedtls/library/ecdsa.o ../sdk/lib/crypto/mbedtls/library/ecjpake.o ../sdk/lib/crypto/mbedtls/library/ecp.o ../sdk/lib/crypto/mbedtls/library/ecp_curves.o ../sdk/lib/crypto/mbedtls/library/entropy.o ../sdk/lib/crypto/mbedtls/library/entropy_hwpoll.o ../sdk/lib/crypto/mbedtls/library/entropy_poll.o ../sdk/lib/crypto/mbedtls/library/gcm.o ../sdk/lib/crypto/mbedtls/library/hash_info.o ../sdk/lib/crypto/mbedtls/library/hkdf.o ../sdk/lib/crypto/mbedtls/library/hmac_drbg.o ../sdk/lib/crypto/mbedtls/library/lmots.o ../sdk/lib/crypto/mbedtls/library/lms.o ../sdk/lib/crypto/mbedtls/library/md.o ../sdk/lib/crypto/mbedtls/library/md5.o ../sdk/lib/crypto/mbedtls/library/memory_buffer_alloc.o ../sdk/lib/crypto/mbedtls/library/mps_reader.o ../sdk/lib/crypto/mbedtls/library/mps_trace.o ../sdk/lib/crypto/mbedtls/library/net_sockets.o ../sdk/lib/crypto/mbedtls/library/nist_kw.o ../sdk/lib/crypto/mbedtls/library/oid.o ../sdk/lib/crypto/mbedtls/library/padlock.o ../sdk/lib/crypto/mbedtls/library/pem.o ../sdk/lib/crypto/mbedtls/library/pk.o ../sdk/lib/crypto/mbedtls/library/pkcs12.o ../sdk/lib/crypto/mbedtls/library/pkcs5.o ../sdk/lib/crypto/mbedtls/library/pkcs7.o ../sdk/lib/crypto/mbedtls/library/pkparse.o ../sdk/lib/crypto/mbedtls/library/pkwrite.o ../sdk/lib/crypto/mbedtls/library/pk_wrap.o ../sdk/lib/crypto/mbedtls/library/platform.o ../sdk/lib/crypto/mbedtls/library/platform_util.o ../sdk/lib/crypto/mbedtls/library/poly1305.o ../sdk/lib/crypto/mbedtls/library/psa_crypto.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_aead.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_cipher.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_client.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_ecp.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_hash.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_mac.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_pake.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_rsa.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_se.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_slot_management.o ../sdk/lib/crypto/mbedtls/library/psa_crypto_storage.o ../sdk/lib/crypto/mbedtls/library/psa_its_file.o ../sdk/lib/crypto/mbedtls/library/psa_util.o ../sdk/lib/crypto/mbedtls/library/ripemd160.o ../sdk/lib/crypto/mbedtls/library/rsa.o ../sdk/lib/crypto/mbedtls/library/rsa_alt_helpers.o ../sdk/lib/crypto/mbedtls/library/sha1.o ../sdk/lib/crypto/mbedtls/library/sha256.o ../sdk/lib/crypto/mbedtls/library/sha512.o ../sdk/lib/crypto/mbedtls/library/ssl_cache.o ../sdk/lib/crypto/mbedtls/library/ssl_ciphersuites.o ../sdk/lib/crypto/mbedtls/library/ssl_client.o ../sdk/lib/crypto/mbedtls/library/ssl_cookie.o ../sdk/lib/crypto/mbedtls/library/ssl_msg.o ../sdk/lib/crypto/mbedtls/library/ssl_ticket.o ../sdk/lib/crypto/mbedtls/library/ssl_tls.o ../sdk/lib/crypto/mbedtls/library/ssl_tls12_client.o ../sdk/lib/crypto/mbedtls/library/ssl_tls12_server.o ../sdk/lib/crypto/mbedtls/library/ssl_tls13_client.o ../sdk/lib/crypto/mbedtls/library/ssl_tls13_generic.o ../sdk/lib/crypto/mbedtls/library/ssl_tls13_keys.o ../sdk/lib/crypto/mbedtls/library/ssl_tls13_server.o ../sdk/lib/crypto/mbedtls/library/threading.o ../sdk/lib/crypto/mbedtls/library/timing.o ../sdk/lib/crypto/mbedtls/library/version.o ../sdk/lib/crypto/mbedtls/library/x509.o ../sdk/lib/crypto/mbedtls/library/x509write_crt.o ../sdk/lib/crypto/mbedtls/library/x509write_csr.o ../sdk/lib/crypto/mbedtls/library/x509_create.o ../sdk/lib/crypto/mbedtls/library/x509_crl.o ../sdk/lib/crypto/mbedtls/library/x509_crt.o ../sdk/lib/crypto/mbedtls/library/x509_csr.o ../sdk/lib/crypto/mbedtls/library/hw_alt/aes_alt.o ../sdk/lib/crypto/mbedtls/library/hw_alt/sha256_alt.o ../sdk/lib/posix/mqueue.o ../sdk/lib/posix/posix_test.o ../sdk/lib/posix/pthread.o ../sdk/lib/posix/pthread_attr.o ../sdk/lib/posix/pthread_barrier.o ../sdk/lib/posix/pthread_cond.o ../sdk/lib/posix/pthread_mutex.o ../sdk/lib/posix/pthread_rwlock.o ../sdk/lib/posix/sched.o ../sdk/lib/posix/semaphore.o ../sdk/lib/posix/timer.o ../sdk/lib/posix/pthread_tls.o ../sdk/lib/posix/sockets.o ../sdk/lib/posix/stdio.o ../sdk/lib/key/adkey.o ../sdk/lib/key/keyScan.o ../sdk/lib/key/keyWork.o ../sdk/lib/key/power_checkkey.o ../sdk/lib/key/adkey2.o ../sdk/lib/flashdisk/flashdisk.o ../sdk/lib/vef/video_ef.o ../sdk/lib/third_audio/amrnb/interf_dec.o ../sdk/lib/third_audio/amrnb/sp_dec.o ../sdk/lib/third_audio/amrwb/dec_acelp.o ../sdk/lib/third_audio/amrwb/dec_dtx.o ../sdk/lib/third_audio/amrwb/dec_gain.o ../sdk/lib/third_audio/amrwb/dec_if.o ../sdk/lib/third_audio/amrwb/dec_lpc.o ../sdk/lib/third_audio/amrwb/dec_main.o ../sdk/lib/third_audio/amrwb/dec_rom.o ../sdk/lib/third_audio/amrwb/dec_util.o ../sdk/lib/third_audio/amrwb/if_rom.o ../sdk/lib/third_audio/libmad/bit.o ../sdk/lib/third_audio/libmad/decoder.o ../sdk/lib/third_audio/libmad/fixed.o ../sdk/lib/third_audio/libmad/frame.o ../sdk/lib/third_audio/libmad/huffman.o ../sdk/lib/third_audio/libmad/layer12.o ../sdk/lib/third_audio/libmad/layer3.o ../sdk/lib/third_audio/libmad/stream.o ../sdk/lib/third_audio/libmad/synth.o ../sdk/lib/third_audio/libmad/timer.o ../sdk/lib/third_audio/libmad/version.o ../sdk/lib/minilzo/minilzo.o ../sdk/lib/misc/rtt/rt_event.o ../sdk/lib/misc/rtt/rt_mq.o ../sdk/lib/misc/rtt/rt_rbuffer.o ../sdk/lib/misc/rtt/rt_sem.o ../sdk/lib/misc/rtt/rt_thread.o ../sdk/lib/misc/rtt/rt_timer.o ../sdk/lib/sonic/sonic.o ../sdk/lib/sonic/sonic_process.o ../sdk/osal/csky/msgqueue.o ../sdk/osal/csky/mutex.o ../sdk/osal/csky/semaphore.o ../sdk/osal/csky/task.o ../sdk/osal/csky/timer.o ../sdk/osal/csky/sleep.o ../sdk/osal/csky/time.o ../sdk/osal/csky/condv.o ../sdk/osal/csky/event.o ../sdk/app/algorithm/pdmFilter/pdmFilter.o ../sdk/app/algorithm/stream_frame/stream_frame.o ../sdk/app/algorithm/t_queue/t_queue.o ../sdk/app/avi/play_avi.o ../sdk/app/avi/newavi2_player.o ../sdk/app/custom_mem/custom_mem.o ../sdk/app/dhcpd_eloop/dhcpd_eloop.o ../sdk/app/dns_eloop/dns_eloop.o ../sdk/app/gsensor/g_sensor.o ../sdk/app/media/media.o ../sdk/app/newaudio/newaudio.o ../sdk/app/socketModule/socket_module.o ../sdk/app/speedTest/speedTest.o ../sdk/app/spook/access_log.o ../sdk/app/spook/encoder-audio.o ../sdk/app/spook/encoder-jpeg.o ../sdk/app/spook/ephoto.o ../sdk/app/spook/frame.o ../sdk/app/spook/live.o ../sdk/app/spook/log.o ../sdk/app/spook/pmsg.o ../sdk/app/spook/rtp-audio.o ../sdk/app/spook/rtp-jpeg.o ../sdk/app/spook/rtp.o ../sdk/app/spook/rtsp.o ../sdk/app/spook/rtsp_common.o ../sdk/app/spook/session.o ../sdk/app/spook/spook.o ../sdk/app/spook/stream.o ../sdk/app/spook/tcp.o ../sdk/app/spook/webfile.o ../sdk/app/sta_interface/sta_interface.o ../sdk/app/update/ota.o ../sdk/app/video_app/video_app.o ../sdk/app/video_app/video_app_usb.o ../sdk/app/video_app/video_app_bbm.o ../sdk/app/video_app/new_video_app.o ../sdk/app/video_app/video_app_usb_psram_dual.o ../sdk/app/video_app/independ_video_usb.o ../sdk/app/playback/playback.o ../sdk/app/interface_management/interface_mgnt.o ../sdk/app/audio_app/audio_ad.o ../sdk/app/audio_app/audio_da.o ../sdk/app/audio_app/hal_i2s_audio.o ../sdk/app/audio_app/pdm_audio.o ../sdk/app/audio_app/audio_usbmic.o ../sdk/app/audio_app/audio_usbspk.o ../sdk/app/decode/jpg_decode_stream.o ../sdk/app/decode/read_jpg_file_demo.o ../sdk/app/decode/recv_jpg_yuv_demo.o ../sdk/app/decode/yuv_stream.o ../sdk/app/other_jpg_show/other_jpg_show_stream.o ../sdk/app/debug_stream/debug_stream.o ../sdk/app/scale3Stream/scale3_stream.o ../sdk/app/scale3Stream/scale1Stream.o ../sdk/app/ui/preview_ui.o ../sdk/app/ui/main_ui.o ../sdk/app/ui/preview_encode_ui.o ../sdk/app/ui/preview_encode_QQVGA_ui.o ../sdk/app/ui/system_msg_ui.o ../sdk/app/ui/preview_dvp_pip_ui.o ../sdk/app/ui/preview_usb_ui.o ../sdk/app/ui/preview_usb_encode_ui.o ../sdk/app/ui/preview_dvp_usb_ui.o ../sdk/app/ui/player_ui.o ../sdk/app/ui/preview_encode_takephoto_ui.o ../sdk/app/ui/preview_encode_960p_ui.o ../sdk/app/ui/preview_encode_select_ui.o ../sdk/app/ui/preview_net_jpg_ui.o ../sdk/app/ui/zbar_ui.o ../sdk/app/ui/player2_ui.o ../sdk/app/ui/preview_usb_select_ui.o ../sdk/app/ui/photo_ui.o ../sdk/app/ui/zbar_dvp_ui.o ../sdk/app/ui/zbar_usb_ui.o ../sdk/app/new_avi/avi.o ../sdk/app/new_avi/newavi_player.o ../sdk/app/usbd_mass_speed_optimize/usbd_mass_speed_optimize.o ../sdk/app/zbar_stream/zbar_stream.o ../sdk/app/avi_save_stream/avi_save_stream.o ../sdk/app/prc_stream/prc_stream.o ../sdk/app/magicSound/magic_sound.o ../sdk/app/llm_app/voice_conversation_demo/voice_conversation_demo.o ../sdk/app/energy_spectrum/energy_spectrum.o device.o syscfg.o ../../../platforms/TXW81X/txw81x_diag_main.o
+rm -f ../csky/csi_kernel/rhino/arch/csky/ck803/port_s.O ../sdk/chip/txw81x/vectors.O
++ make APP_VERSION=diag_v03 -j2
+===========================================================
+build_c ../csky/csi_kernel/rhino/adapter/csi_rhino.o
+Build OpenTXW81X
+===========================================================
+build_c ../csky/csi_kernel/rhino/arch/csky/cpu_impl.o
+build_c ../csky/csi_kernel/rhino/arch/csky/csky_sched.o
+build_c ../csky/csi_kernel/rhino/arch/csky/ck803/port_c.o
+build_c ../csky/csi_kernel/rhino/common/k_atomic.o
+build_c ../csky/csi_kernel/rhino/common/k_ffs.o
+build_c ../csky/csi_kernel/rhino/common/k_fifo.o
+build_c ../csky/csi_kernel/rhino/common/k_trace.o
+build_c ../csky/csi_kernel/rhino/core/k_buf_queue.o
+build_c ../csky/csi_kernel/rhino/core/k_dyn_mem_proc.o
+build_c ../csky/csi_kernel/rhino/core/k_err.o
+build_c ../csky/csi_kernel/rhino/core/k_event.o
+build_c ../csky/csi_kernel/rhino/core/k_idle.o
+build_c ../csky/csi_kernel/rhino/core/k_mm.o
+build_c ../csky/csi_kernel/rhino/core/k_mm_blk.o
+build_c ../csky/csi_kernel/rhino/core/k_mm_debug.o
+build_c ../csky/csi_kernel/rhino/core/k_mutex.o
+build_c ../csky/csi_kernel/rhino/core/k_obj.o
+build_c ../csky/csi_kernel/rhino/core/k_pend.o
+build_c ../csky/csi_kernel/rhino/core/k_queue.o
+build_c ../csky/csi_kernel/rhino/core/k_ringbuf.o
+build_c ../csky/csi_kernel/rhino/core/k_sched.o
+build_c ../csky/csi_kernel/rhino/core/k_sem.o
+build_c ../csky/csi_kernel/rhino/core/k_stats.o
+build_c ../csky/csi_kernel/rhino/core/k_sys.o
+build_c ../csky/csi_kernel/rhino/core/k_task.o
+build_c ../csky/csi_kernel/rhino/core/k_task_sem.o
+build_c ../csky/csi_kernel/rhino/core/k_tick.o
+build_c ../csky/csi_kernel/rhino/core/k_time.o
+build_c ../csky/csi_kernel/rhino/core/k_timer.o
+build_c ../csky/csi_kernel/rhino/core/k_workqueue.o
+build_c ../csky/csi_kernel/rhino/driver/hook_impl.o
+build_c ../csky/csi_kernel/rhino/driver/systick.o
+build_c ../csky/csi_kernel/rhino/driver/yoc_impl.o
+build_c ../csky/csi_kernel/rhino/driver/hook_weak.o
+build_c ../csky/hgic/usart.o
+build_c ../csky/hgic/malloc.o
+build_c ../csky/hgic/assert.o
+build_c ../csky/libs/libc/malloc.o
+build_c ../csky/libs/libc/minilibc_port.o
+build_c ../sdk/chip/txw81x/isr.o
+build_c ../sdk/chip/txw81x/pin_function.o
+build_c ../sdk/chip/txw81x/system.o
+build_c ../sdk/chip/txw81x/ticker_api.o
+build_c ../sdk/chip/txw81x/trap_c.o
+build_c ../sdk/driver/dma/dw_dmac.o
+build_c ../sdk/driver/dma/hg_m2m_dma.o
+build_c ../sdk/driver/gpio/hggpio_v4.o
+build_c ../sdk/driver/i2c/hgi2c_v1.o
+build_c ../sdk/driver/i2s/hgi2s_v0.o
+build_c ../sdk/driver/spi/hgspi_v3.o
+build_c ../sdk/driver/timer/hgtimer_v6.o
+build_c ../sdk/driver/timer/hgtimer_v4.o
+build_c ../sdk/driver/timer/hgtimer_v5.o
+build_c ../sdk/driver/timer/hgtimer_v7.o
+build_c ../sdk/driver/uart/hguart_v4.o
+build_c ../sdk/driver/uart/hguart_v2.o
+build_c ../sdk/driver/crc/hg_crc.o
+build_c ../sdk/driver/sdhost/hgsdh_dev.o
+build_c ../sdk/driver/sysaes/hg_sysaes_v3.o
+build_c ../sdk/driver/pdm/hgpdm_v0.o
+build_c ../sdk/driver/led/hgled_v0.o
+build_c ../sdk/driver/pwm/hgpwm_v0.o
+build_c ../sdk/driver/capture/hgcapture_v0.o
+build_c ../sdk/driver/csi/hgdvp_v2.o
+build_c ../sdk/driver/adc/hgadc_v0.o
+build_c ../sdk/driver/lcdc/hglcdc.o
+build_c ../sdk/driver/prc/hgprc.o
+build_c ../sdk/driver/scale/hgscale.o
+build_c ../sdk/driver/vpp/hgvpp.o
+build_c ../sdk/driver/of/hgof.o
+build_c ../sdk/hal/dev.o
+build_c ../sdk/hal/gpio.o
+build_c ../sdk/hal/i2c.o
+build_c ../sdk/hal/sdio_slave.o
+build_c ../sdk/hal/timer.o
+build_c ../sdk/hal/usb_device.o
+build_c ../sdk/hal/spi.o
+build_c ../sdk/hal/spi_nor.o
+build_c ../sdk/hal/sysaes.o
+build_c ../sdk/hal/uart.o
+build_c ../sdk/hal/i2s.o
+build_c ../sdk/hal/pdm.o
+build_c ../sdk/hal/led.o
+build_c ../sdk/hal/pwm.o
+build_c ../sdk/hal/capture.o
+build_c ../sdk/hal/adc.o
+build_c ../sdk/hal/netdev.o
+build_c ../sdk/hal/dvp.o
+build_c ../sdk/hal/dma.o
+build_c ../sdk/hal/jpeg.o
+build_c ../sdk/hal/tk.o
+build_c ../sdk/hal/lcdc.o
+build_c ../sdk/hal/prc.o
+build_c ../sdk/hal/scale.o
+build_c ../sdk/hal/vpp.o
+build_c ../sdk/hal/audac.o
+build_c ../sdk/hal/auadc.o
+build_c ../sdk/hal/of.o
+build_c ../sdk/hal/sha.o
+build_c ../sdk/lib/heap/alloc.o
+build_c ../sdk/lib/heap/user_heap.o
+build_c ../sdk/lib/common/common.o
+build_c ../sdk/lib/common/string.o
+build_c ../sdk/lib/common/us_ticker.o
+build_c ../sdk/lib/common/dsleepdata.o
+build_c ../sdk/lib/common/rbuffer.o
+build_c ../sdk/lib/net/lwip/src/api/api_lib.o
+build_c ../sdk/lib/net/lwip/src/api/api_msg.o
+build_c ../sdk/lib/net/lwip/src/api/err.o
+build_c ../sdk/lib/net/lwip/src/api/if_api.o
+build_c ../sdk/lib/net/lwip/src/api/netbuf.o
+build_c ../sdk/lib/net/lwip/src/api/netdb.o
+build_c ../sdk/lib/net/lwip/src/api/netifapi.o
+build_c ../sdk/lib/net/lwip/src/api/sockets.o
+build_c ../sdk/lib/net/lwip/src/api/tcpip.o
+build_c ../sdk/lib/net/lwip/src/api/ping.o
+build_c ../sdk/lib/net/lwip/src/core/altcp.o
+build_c ../sdk/lib/net/lwip/src/core/altcp_alloc.o
+build_c ../sdk/lib/net/lwip/src/core/altcp_tcp.o
+build_c ../sdk/lib/net/lwip/src/core/def.o
+build_c ../sdk/lib/net/lwip/src/core/dns.o
+build_c ../sdk/lib/net/lwip/src/core/inet_chksum.o
+build_c ../sdk/lib/net/lwip/src/core/init.o
+build_c ../sdk/lib/net/lwip/src/core/ip.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/autoip.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/dhcp.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/etharp.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/icmp.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/igmp.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/ip4.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/ip4_addr.o
+build_c ../sdk/lib/net/lwip/src/core/ipv4/ip4_frag.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/dhcp6.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/ethip6.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/icmp6.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/inet6.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/ip6.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/ip6_addr.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/ip6_frag.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/mld6.o
+build_c ../sdk/lib/net/lwip/src/core/ipv6/nd6.o
+build_c ../sdk/lib/net/lwip/src/core/mem.o
+build_c ../sdk/lib/net/lwip/src/core/memp.o
+build_c ../sdk/lib/net/lwip/src/core/netif.o
+build_c ../sdk/lib/net/lwip/src/core/pbuf.o
+build_c ../sdk/lib/net/lwip/src/core/raw.o
+build_c ../sdk/lib/net/lwip/src/core/stats.o
+build_c ../sdk/lib/net/lwip/src/core/sys.o
+build_c ../sdk/lib/net/lwip/src/core/tcp.o
+build_c ../sdk/lib/net/lwip/src/core/tcp_in.o
+build_c ../sdk/lib/net/lwip/src/core/tcp_out.o
+build_c ../sdk/lib/net/lwip/src/core/timeouts.o
+build_c ../sdk/lib/net/lwip/src/core/udp.o
+build_c ../sdk/lib/net/lwip/src/netif/bridgeif.o
+build_c ../sdk/lib/net/lwip/src/netif/bridgeif_fdb.o
+build_c ../sdk/lib/net/lwip/src/netif/ethernet.o
+build_c ../sdk/lib/net/lwip/src/netif/ethernetif.o
+build_c ../sdk/lib/net/lwip/src/netif/lowpan6.o
+build_c ../sdk/lib/net/lwip/src/netif/lowpan6_ble.o
+build_c ../sdk/lib/net/lwip/src/netif/lowpan6_common.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/auth.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/ccp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/chap-md5.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/chap-new.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/chap_ms.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/demand.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/eap.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/ecp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/eui64.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/fsm.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/ipcp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/ipv6cp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/lcp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/magic.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/mppe.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/multilink.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/polarssl/arc4.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/polarssl/des.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/polarssl/md4.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/polarssl/md5.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/polarssl/sha1.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/ppp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/pppapi.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/pppcrypt.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/pppoe.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/pppol2tp.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/pppos.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/upap.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/utils.o
+build_c ../sdk/lib/net/lwip/src/netif/ppp/vj.o
+build_c ../sdk/lib/net/lwip/src/netif/slipif.o
+build_c ../sdk/lib/net/lwip/src/netif/zepif.o
+build_c ../sdk/lib/net/lwip/arch/sys_arch.o
+build_c ../sdk/lib/net/eloop/eloop.o
+build_c ../sdk/lib/net/wifi/wifi_dev.o
+build_c ../sdk/lib/net/ethphy/eth_mdio_bus.o
+build_c ../sdk/lib/net/ethphy/eth_phy.o
+build_c ../sdk/lib/net/ethphy/eth_phy_device.o
+build_c ../sdk/lib/net/ethphy/phy/auto_phy.o
+build_c ../sdk/lib/net/ethphy/phy/ip101g.o
+build_c ../sdk/lib/net/ethphy/phy/rtl8201f.o
+build_c ../sdk/lib/net/ethphy/phy/sz18201.o
+build_c ../sdk/lib/net/skmonitor/skmonitor.o
+build_c ../sdk/lib/fs/fatfs/diskio.o
+build_c ../sdk/lib/fs/fatfs/fatfs_test.o
+build_c ../sdk/lib/fs/fatfs/ff.o
+build_c ../sdk/lib/fs/fatfs/ffunicode.o
+build_c ../sdk/lib/fs/fatfs/syscall.o
+build_c ../sdk/lib/fs/fatfs/osal_file.o
+build_c ../sdk/lib/sdhost/sdhost.o
+build_c ../sdk/lib/bus/spi/spi_nor/spi_nor_bus.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_bf2013.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_bf3703.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_bf3a03.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0308.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0309.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0328.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_ov2640.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_ov7670.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_ov7725.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.o
+../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
+                     ^~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:38: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
+                                      ^~~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7016_h63.c:2290:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7016_bypass_on,XC7016_bypass_off,h63_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
+                                                        ^~~~~~~~~~~~~
+build_c ../sdk/lib/bus/iic/sensor/sensor_xcg532.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.o
+../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
+                     ^~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:38: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
+                                      ^~~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_gc1054.c:1667:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,gc1054_7011_Init_regs,0x54,0x42,0x43,0x01,0x01,0xf1},
+                                                        ^~~~~~~~~~~~~~~~~~~~~
+build_c ../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0311.o
+../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:21: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
+                     ^~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:38: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
+                                      ^~~~~~~~~~~~~~~~~
+../sdk/lib/bus/iic/sensor/sensor_xc7011_h63.c:2421:56: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+  .p_xc7016_adapt = {XC7011_bypass_on,XC7011_bypass_off,h63_7011_Init_regs,0x63,0x80,0x81,0x01,0x01,0x0b},
+                                                        ^~~~~~~~~~~~~~~~~~
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0329.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_gc0312.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_bf3720.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_sp0a19.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_sp0718.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_bf30a2.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_ov7660.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_hi704.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_sp0828.o
+build_c ../sdk/lib/bus/iic/sensor/sensor_sp0a20.o
+build_c ../sdk/lib/bus/iic/gsensor/da280.o
+build_c ../sdk/lib/bus/iic/gsensor/qma7981.o
+build_c ../sdk/lib/bus/iic/gsensor/sc7a20.o
+build_c ../sdk/lib/video/dvp/cmos_sensor/csi_v2.o
+build_c ../sdk/lib/video/dvp/jpeg/jpg_table.o
+build_c ../sdk/lib/video/dvp/jpeg/jpg_v2.o
+build_c ../sdk/lib/video/de_avi/avidemux.o
+build_c ../sdk/lib/video/en_avi/openDML.o
+build_c ../sdk/lib/video/spi_sensor/spi_sensor.o
+build_c ../sdk/lib/crypto/mbedtls/library/aes.o
+build_c ../sdk/lib/crypto/mbedtls/library/aesce.o
+build_c ../sdk/lib/crypto/mbedtls/library/aesni.o
+build_c ../sdk/lib/crypto/mbedtls/library/aria.o
+build_c ../sdk/lib/crypto/mbedtls/library/asn1parse.o
+build_c ../sdk/lib/crypto/mbedtls/library/asn1write.o
+build_c ../sdk/lib/crypto/mbedtls/library/base64.o
+build_c ../sdk/lib/crypto/mbedtls/library/bignum.o
+build_c ../sdk/lib/crypto/mbedtls/library/bignum_core.o
+build_c ../sdk/lib/crypto/mbedtls/library/bignum_mod.o
+build_c ../sdk/lib/crypto/mbedtls/library/bignum_mod_raw.o
+build_c ../sdk/lib/crypto/mbedtls/library/camellia.o
+build_c ../sdk/lib/crypto/mbedtls/library/ccm.o
+build_c ../sdk/lib/crypto/mbedtls/library/chacha20.o
+build_c ../sdk/lib/crypto/mbedtls/library/chachapoly.o
+build_c ../sdk/lib/crypto/mbedtls/library/cipher.o
+build_c ../sdk/lib/crypto/mbedtls/library/cipher_wrap.o
+build_c ../sdk/lib/crypto/mbedtls/library/cmac.o
+build_c ../sdk/lib/crypto/mbedtls/library/constant_time.o
+build_c ../sdk/lib/crypto/mbedtls/library/ctr_drbg.o
+build_c ../sdk/lib/crypto/mbedtls/library/debug.o
+build_c ../sdk/lib/crypto/mbedtls/library/des.o
+build_c ../sdk/lib/crypto/mbedtls/library/dhm.o
+build_c ../sdk/lib/crypto/mbedtls/library/ecdh.o
+build_c ../sdk/lib/crypto/mbedtls/library/ecdsa.o
+build_c ../sdk/lib/crypto/mbedtls/library/ecjpake.o
+build_c ../sdk/lib/crypto/mbedtls/library/ecp.o
+build_c ../sdk/lib/crypto/mbedtls/library/ecp_curves.o
+build_c ../sdk/lib/crypto/mbedtls/library/entropy.o
+build_c ../sdk/lib/crypto/mbedtls/library/entropy_hwpoll.o
+build_c ../sdk/lib/crypto/mbedtls/library/entropy_poll.o
+build_c ../sdk/lib/crypto/mbedtls/library/gcm.o
+build_c ../sdk/lib/crypto/mbedtls/library/hash_info.o
+build_c ../sdk/lib/crypto/mbedtls/library/hkdf.o
+build_c ../sdk/lib/crypto/mbedtls/library/hmac_drbg.o
+build_c ../sdk/lib/crypto/mbedtls/library/lmots.o
+build_c ../sdk/lib/crypto/mbedtls/library/lms.o
+build_c ../sdk/lib/crypto/mbedtls/library/md.o
+build_c ../sdk/lib/crypto/mbedtls/library/md5.o
+build_c ../sdk/lib/crypto/mbedtls/library/memory_buffer_alloc.o
+build_c ../sdk/lib/crypto/mbedtls/library/mps_reader.o
+build_c ../sdk/lib/crypto/mbedtls/library/mps_trace.o
+build_c ../sdk/lib/crypto/mbedtls/library/net_sockets.o
+build_c ../sdk/lib/crypto/mbedtls/library/nist_kw.o
+build_c ../sdk/lib/crypto/mbedtls/library/oid.o
+build_c ../sdk/lib/crypto/mbedtls/library/padlock.o
+build_c ../sdk/lib/crypto/mbedtls/library/pem.o
+build_c ../sdk/lib/crypto/mbedtls/library/pk.o
+build_c ../sdk/lib/crypto/mbedtls/library/pkcs12.o
+build_c ../sdk/lib/crypto/mbedtls/library/pkcs5.o
+build_c ../sdk/lib/crypto/mbedtls/library/pkcs7.o
+build_c ../sdk/lib/crypto/mbedtls/library/pkparse.o
+build_c ../sdk/lib/crypto/mbedtls/library/pkwrite.o
+build_c ../sdk/lib/crypto/mbedtls/library/pk_wrap.o
+build_c ../sdk/lib/crypto/mbedtls/library/platform.o
+build_c ../sdk/lib/crypto/mbedtls/library/platform_util.o
+build_c ../sdk/lib/crypto/mbedtls/library/poly1305.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_aead.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_cipher.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_client.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_ecp.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_hash.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_mac.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_pake.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_rsa.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_se.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_slot_management.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_crypto_storage.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_its_file.o
+build_c ../sdk/lib/crypto/mbedtls/library/psa_util.o
+build_c ../sdk/lib/crypto/mbedtls/library/ripemd160.o
+build_c ../sdk/lib/crypto/mbedtls/library/rsa.o
+build_c ../sdk/lib/crypto/mbedtls/library/rsa_alt_helpers.o
+build_c ../sdk/lib/crypto/mbedtls/library/sha1.o
+build_c ../sdk/lib/crypto/mbedtls/library/sha256.o
+build_c ../sdk/lib/crypto/mbedtls/library/sha512.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_cache.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_ciphersuites.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_client.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_cookie.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_msg.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_ticket.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls12_client.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls12_server.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls13_client.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls13_generic.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls13_keys.o
+build_c ../sdk/lib/crypto/mbedtls/library/ssl_tls13_server.o
+build_c ../sdk/lib/crypto/mbedtls/library/threading.o
+build_c ../sdk/lib/crypto/mbedtls/library/timing.o
+build_c ../sdk/lib/crypto/mbedtls/library/version.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509write_crt.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509write_csr.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509_create.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509_crl.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509_crt.o
+build_c ../sdk/lib/crypto/mbedtls/library/x509_csr.o
+build_c ../sdk/lib/crypto/mbedtls/library/hw_alt/aes_alt.o
+build_c ../sdk/lib/crypto/mbedtls/library/hw_alt/sha256_alt.o
+build_c ../sdk/lib/posix/mqueue.o
+build_c ../sdk/lib/posix/posix_test.o
+build_c ../sdk/lib/posix/pthread.o
+build_c ../sdk/lib/posix/pthread_attr.o
+build_c ../sdk/lib/posix/pthread_barrier.o
+build_c ../sdk/lib/posix/pthread_cond.o
+build_c ../sdk/lib/posix/pthread_mutex.o
+build_c ../sdk/lib/posix/pthread_rwlock.o
+build_c ../sdk/lib/posix/sched.o
+build_c ../sdk/lib/posix/semaphore.o
+build_c ../sdk/lib/posix/timer.o
+build_c ../sdk/lib/posix/pthread_tls.o
+build_c ../sdk/lib/posix/sockets.o
+build_c ../sdk/lib/posix/stdio.o
+build_c ../sdk/lib/key/adkey.o
+build_c ../sdk/lib/key/keyScan.o
+build_c ../sdk/lib/key/keyWork.o
+build_c ../sdk/lib/key/power_checkkey.o
+build_c ../sdk/lib/key/adkey2.o
+build_c ../sdk/lib/flashdisk/flashdisk.o
+build_c ../sdk/lib/vef/video_ef.o
+build_c ../sdk/lib/third_audio/amrnb/interf_dec.o
+build_c ../sdk/lib/third_audio/amrnb/sp_dec.o
+build_c ../sdk/lib/third_audio/amrwb/dec_acelp.o
+build_c ../sdk/lib/third_audio/amrwb/dec_dtx.o
+build_c ../sdk/lib/third_audio/amrwb/dec_gain.o
+build_c ../sdk/lib/third_audio/amrwb/dec_if.o
+build_c ../sdk/lib/third_audio/amrwb/dec_lpc.o
+build_c ../sdk/lib/third_audio/amrwb/dec_main.o
+build_c ../sdk/lib/third_audio/amrwb/dec_rom.o
+build_c ../sdk/lib/third_audio/amrwb/dec_util.o
+build_c ../sdk/lib/third_audio/amrwb/if_rom.o
+build_c ../sdk/lib/third_audio/libmad/bit.o
+build_c ../sdk/lib/third_audio/libmad/decoder.o
+build_c ../sdk/lib/third_audio/libmad/fixed.o
+build_c ../sdk/lib/third_audio/libmad/frame.o
+build_c ../sdk/lib/third_audio/libmad/huffman.o
+build_c ../sdk/lib/third_audio/libmad/layer12.o
+build_c ../sdk/lib/third_audio/libmad/layer3.o
+build_c ../sdk/lib/third_audio/libmad/stream.o
+build_c ../sdk/lib/third_audio/libmad/synth.o
+build_c ../sdk/lib/third_audio/libmad/timer.o
+build_c ../sdk/lib/third_audio/libmad/version.o
+build_c ../sdk/lib/minilzo/minilzo.o
+build_c ../sdk/lib/misc/rtt/rt_event.o
+build_c ../sdk/lib/misc/rtt/rt_mq.o
+build_c ../sdk/lib/misc/rtt/rt_rbuffer.o
+build_c ../sdk/lib/misc/rtt/rt_sem.o
+build_c ../sdk/lib/misc/rtt/rt_thread.o
+build_c ../sdk/lib/misc/rtt/rt_timer.o
+build_c ../sdk/lib/sonic/sonic.o
+build_c ../sdk/lib/sonic/sonic_process.o
+build_c ../sdk/osal/csky/msgqueue.o
+build_c ../sdk/osal/csky/mutex.o
+build_c ../sdk/osal/csky/semaphore.o
+build_c ../sdk/osal/csky/task.o
+build_c ../sdk/osal/csky/timer.o
+build_c ../sdk/osal/csky/sleep.o
+build_c ../sdk/osal/csky/time.o
+build_c ../sdk/osal/csky/condv.o
+build_c ../sdk/osal/csky/event.o
+build_c ../sdk/app/algorithm/pdmFilter/pdmFilter.o
+build_c ../sdk/app/algorithm/stream_frame/stream_frame.o
+build_c ../sdk/app/algorithm/t_queue/t_queue.o
+../sdk/app/algorithm/stream_frame/stream_frame.c: In function ‘stream_gc_marker_timer’:
+../sdk/app/algorithm/stream_frame/stream_frame.c:1093:34: warning: initialization discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+                     char *name = s->name;
+                                  ^
+build_c ../sdk/app/avi/play_avi.o
+build_c ../sdk/app/avi/newavi2_player.o
+build_c ../sdk/app/custom_mem/custom_mem.o
+build_c ../sdk/app/dhcpd_eloop/dhcpd_eloop.o
+build_c ../sdk/app/dns_eloop/dns_eloop.o
+build_c ../sdk/app/gsensor/g_sensor.o
+build_c ../sdk/app/media/media.o
+build_c ../sdk/app/newaudio/newaudio.o
+../sdk/app/newaudio/newaudio.c: In function ‘newaudio_deal_task’:
+../sdk/app/newaudio/newaudio.c:44:9: warning: implicit declaration of function ‘csi_kernel_msgq_get’ [-Wimplicit-function-declaration]
+   res = csi_kernel_msgq_get(self_priv->pdm_msgq,&data,-1);
+         ^~~~~~~~~~~~~~~~~~~
+../sdk/app/newaudio/newaudio.c: In function ‘opcode_func’:
+../sdk/app/newaudio/newaudio.c:111:35: warning: implicit declaration of function ‘csi_kernel_msgq_new’ [-Wimplicit-function-declaration]
+     self_priv->pdm_msgq  = (void*)csi_kernel_msgq_new(1,sizeof(uint8_t*));
+                                   ^~~~~~~~~~~~~~~~~~~
+../sdk/app/newaudio/newaudio.c: In function ‘newaudio_get_buf’:
+../sdk/app/newaudio/newaudio.c:212:8: warning: implicit declaration of function ‘csi_kernel_msgq_put’ [-Wimplicit-function-declaration]
+  res = csi_kernel_msgq_put(self_priv->pdm_msgq,&data,0,0);
+        ^~~~~~~~~~~~~~~~~~~
+build_c ../sdk/app/socketModule/socket_module.o
+build_c ../sdk/app/speedTest/speedTest.o
+build_c ../sdk/app/spook/access_log.o
+build_c ../sdk/app/spook/encoder-audio.o
+build_c ../sdk/app/spook/encoder-jpeg.o
+build_c ../sdk/app/spook/ephoto.o
+build_c ../sdk/app/spook/frame.o
+build_c ../sdk/app/spook/live.o
+build_c ../sdk/app/spook/log.o
+build_c ../sdk/app/spook/pmsg.o
+build_c ../sdk/app/spook/rtp-audio.o
+build_c ../sdk/app/spook/rtp-jpeg.o
+build_c ../sdk/app/spook/rtp.o
+build_c ../sdk/app/spook/rtsp.o
+build_c ../sdk/app/spook/rtsp_common.o
+build_c ../sdk/app/spook/session.o
+build_c ../sdk/app/spook/spook.o
+build_c ../sdk/app/spook/stream.o
+build_c ../sdk/app/spook/tcp.o
+build_c ../sdk/app/spook/webfile.o
+build_c ../sdk/app/sta_interface/sta_interface.o
+build_c ../sdk/app/update/ota.o
+build_c ../sdk/app/video_app/video_app.o
+build_c ../sdk/app/video_app/video_app_usb.o
+build_c ../sdk/app/video_app/video_app_bbm.o
+build_c ../sdk/app/video_app/new_video_app.o
+build_c ../sdk/app/video_app/video_app_usb_psram_dual.o
+build_c ../sdk/app/video_app/independ_video_usb.o
+build_c ../sdk/app/playback/playback.o
+build_c ../sdk/app/interface_management/interface_mgnt.o
+build_c ../sdk/app/audio_app/audio_ad.o
+build_c ../sdk/app/audio_app/audio_da.o
+build_c ../sdk/app/audio_app/hal_i2s_audio.o
+build_c ../sdk/app/audio_app/pdm_audio.o
+build_c ../sdk/app/audio_app/audio_usbmic.o
+In file included from ../sdk/include/osal/string.h:6:0,
+                 from ../sdk/app/audio_app/audio_usbmic.c:1:
+../sdk/app/audio_app/audio_usbmic.c: In function ‘get_usbmic_audio’:
+../sdk/include/osal/csky/string.h:94:36: warning: passing argument 1 of ‘memcpy’ discards ‘volatile’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+ #define os_memcpy(d, s, n) MEMCPYS((d), (s), (n))
+                                    ^
+../sdk/app/audio_app/audio_usbmic.c:135:5: note: in expansion of macro ‘os_memcpy’
+     os_memcpy(realdata, audio_addr, audio_len);
+     ^~~~~~~~~
+In file included from ../sdk/include/osal/csky/string.h:6:0,
+                 from ../sdk/include/osal/string.h:6,
+                 from ../sdk/app/audio_app/audio_usbmic.c:1:
+/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/OpenTXW81X/tools/gcc/csky-elfabiv2/sys-include/string.h:25:15: note: expected ‘void *’ but argument is of type ‘volatile int16 * {aka volatile short int *}’
+ extern void * memcpy( void *, const void *, size_t );
+               ^~~~~~
+build_c ../sdk/app/audio_app/audio_usbspk.o
+build_c ../sdk/app/decode/jpg_decode_stream.o
+In file included from ../sdk/include/osal/string.h:6:0,
+                 from ../sdk/app/audio_app/audio_usbspk.c:1:
+../sdk/app/audio_app/audio_usbspk.c: In function ‘send_usbspk_audio’:
+../sdk/include/osal/csky/string.h:94:41: warning: passing argument 2 of ‘memcpy’ discards ‘volatile’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+ #define os_memcpy(d, s, n) MEMCPYS((d), (s), (n))
+                                         ^
+../sdk/app/audio_app/audio_usbspk.c:81:5: note: in expansion of macro ‘os_memcpy’
+     os_memcpy((uint8*)audio_addr, buf, len);
+     ^~~~~~~~~
+In file included from ../sdk/include/osal/csky/string.h:6:0,
+                 from ../sdk/include/osal/string.h:6,
+                 from ../sdk/app/audio_app/audio_usbspk.c:1:
+/home/runner/work/OpenBK7231T_App/OpenBK7231T_App/sdk/OpenTXW81X/tools/gcc/csky-elfabiv2/sys-include/string.h:25:15: note: expected ‘const void *’ but argument is of type ‘volatile int16 * {aka volatile short int *}’
+ extern void * memcpy( void *, const void *, size_t );
+               ^~~~~~
+build_c ../sdk/app/decode/read_jpg_file_demo.o
+build_c ../sdk/app/decode/recv_jpg_yuv_demo.o
+build_c ../sdk/app/decode/yuv_stream.o
+build_c ../sdk/app/other_jpg_show/other_jpg_show_stream.o
+build_c ../sdk/app/debug_stream/debug_stream.o
+build_c ../sdk/app/scale3Stream/scale3_stream.o
+build_c ../sdk/app/scale3Stream/scale1Stream.o
+build_c ../sdk/app/ui/preview_ui.o
+build_c ../sdk/app/ui/main_ui.o
+build_c ../sdk/app/ui/preview_encode_ui.o
+build_c ../sdk/app/ui/preview_encode_QQVGA_ui.o
+build_c ../sdk/app/ui/system_msg_ui.o
+build_c ../sdk/app/ui/preview_dvp_pip_ui.o
+build_c ../sdk/app/ui/preview_usb_ui.o
+build_c ../sdk/app/ui/preview_usb_encode_ui.o
+build_c ../sdk/app/ui/preview_dvp_usb_ui.o
+build_c ../sdk/app/ui/player_ui.o
+../sdk/app/ui/player_ui.c: In function ‘exit_player_ui’:
+../sdk/app/ui/player_ui.c:656:9: warning: implicit declaration of function ‘print_custom_psram’ [-Wimplicit-function-declaration]
+         print_custom_psram();
+         ^~~~~~~~~~~~~~~~~~
+build_c ../sdk/app/ui/preview_encode_takephoto_ui.o
+build_c ../sdk/app/ui/preview_encode_960p_ui.o
+build_c ../sdk/app/ui/preview_encode_select_ui.o
+build_c ../sdk/app/ui/preview_net_jpg_ui.o
+build_c ../sdk/app/ui/zbar_ui.o
+build_c ../sdk/app/ui/player2_ui.o
+../sdk/app/ui/player2_ui.c: In function ‘exit_player_ui’:
+../sdk/app/ui/player2_ui.c:678:9: warning: implicit declaration of function ‘print_custom_psram’ [-Wimplicit-function-declaration]
+         print_custom_psram();
+         ^~~~~~~~~~~~~~~~~~
+build_c ../sdk/app/ui/preview_usb_select_ui.o
+build_c ../sdk/app/ui/photo_ui.o
+build_c ../sdk/app/ui/zbar_dvp_ui.o
+build_c ../sdk/app/ui/zbar_usb_ui.o
+build_c ../sdk/app/new_avi/avi.o
+build_c ../sdk/app/new_avi/newavi_player.o
+build_c ../sdk/app/usbd_mass_speed_optimize/usbd_mass_speed_optimize.o
+build_c ../sdk/app/zbar_stream/zbar_stream.o
+build_c ../sdk/app/avi_save_stream/avi_save_stream.o
+build_c ../sdk/app/prc_stream/prc_stream.o
+build_c ../sdk/app/magicSound/magic_sound.o
+build_c ../sdk/app/llm_app/voice_conversation_demo/voice_conversation_demo.o
+build_c ../sdk/app/energy_spectrum/energy_spectrum.o
+build_c device.o
+build_c syscfg.o
+build_c ../../../platforms/TXW81X/txw81x_diag_main.o
+build_S ../csky/csi_kernel/rhino/arch/csky/ck803/port_s.O
+../../../platforms/TXW81X/txw81x_diag_main.c:12:15: error: conflicting types for ‘sysctrl_get_chip_id’
+ extern uint32 sysctrl_get_chip_id(void);
+               ^~~~~~~~~~~~~~~~~~~
+In file included from ../sdk/include/chip/tx_platform.h:44:0,
+                 from ../sdk/include/typesdef.h:62,
+                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
+../sdk/include/chip/txw81x/sysctrl.h:802:8: note: previous declaration of ‘sysctrl_get_chip_id’ was here
+ uint16 sysctrl_get_chip_id(void);
+        ^~~~~~~~~~~~~~~~~~~
+../../../platforms/TXW81X/txw81x_diag_main.c:13:15: error: conflicting types for ‘get_chip_pack’
+ extern uint32 get_chip_pack(void);
+               ^~~~~~~~~~~~~
+In file included from ../sdk/include/chip/tx_platform.h:44:0,
+                 from ../sdk/include/typesdef.h:62,
+                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
+../sdk/include/chip/txw81x/sysctrl.h:840:7: note: previous declaration of ‘get_chip_pack’ was here
+ uint8 get_chip_pack(void);
+       ^~~~~~~~~~~~~
+../../../platforms/TXW81X/txw81x_diag_main.c:14:15: error: conflicting types for ‘get_bios_id’
+ extern uint32 get_bios_id(void);
+               ^~~~~~~~~~~
+In file included from ../sdk/include/chip/tx_platform.h:44:0,
+                 from ../sdk/include/typesdef.h:62,
+                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
+../sdk/include/chip/txw81x/sysctrl.h:841:7: note: previous declaration of ‘get_bios_id’ was here
+ uint8 get_bios_id(void);
+       ^~~~~~~~~~~
+../../../platforms/TXW81X/txw81x_diag_main.c:15:15: error: conflicting types for ‘sysctrl_efuse_get_module_type’
+ extern uint32 sysctrl_efuse_get_module_type(void);
+               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../sdk/include/chip/tx_platform.h:44:0,
+                 from ../sdk/include/typesdef.h:62,
+                 from ../../../platforms/TXW81X/txw81x_diag_main.c:4:
+../sdk/include/chip/txw81x/sysctrl.h:831:7: note: previous declaration of ‘sysctrl_efuse_get_module_type’ was here
+ uint8 sysctrl_efuse_get_module_type(void);
+       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+build_S ../sdk/chip/txw81x/vectors.O
+make: *** [Makefile:1483: ../../../platforms/TXW81X/txw81x_diag_main.o] Error 1
+make: *** Waiting for unfinished jobs....
