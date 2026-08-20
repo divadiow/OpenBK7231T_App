@@ -99,7 +99,7 @@ static void process_line(char *s)
     uint32 n;
 
     if (streq(s, "AT+DIAG=PING")) {
-        txs("TXWDIAG PONG v=0.3 target=TXW817-810");
+        txs("TXWDIAG PONG v=0.4 target=TXW817-810 PA9TX/PA8RX");
         txnl();
         return;
     }
@@ -144,15 +144,25 @@ static void process_line(char *s)
     txnl();
 }
 
-static void move_uart0_to_pa8_pa9(void)
+static void move_uart0_to_rom_native_pins(void)
 {
-    /* device_init() has already attached/opened UART0 on the normal OpenTXW81X
-       console pins. Re-route the already-live UART to the ROM UART pins, then
-       change only its baud rate. This deliberately avoids reopening UART0,
-       because uart_open() would reapply project_config.h's PC7/PC6 pin map. */
-    gpio_iomap_output(PA_8, GPIO_IOMAP_OUT_UART0_TX);
-    gpio_iomap_input(PA_9, GPIO_IOMAP_IN_UART0_IN);
-    gpio_set_mode(PA_9, GPIO_PULL_UP, GPIO_PULL_LEVEL_100K);
+    /*
+     * Live TXW817 testing plus ROM disassembly established the mask-ROM UART
+     * direction as:
+     *
+     *   PA8 = UART0 RX (host TX -> target)
+     *   PA9 = UART0 TX (target -> host RX)
+     *
+     * Use that same direction in the diagnostic application so the application
+     * -> system_goto_boot() -> mask-ROM transition needs no physical wire swap.
+     *
+     * device_init() has already attached/opened UART0 on the stock OpenTXW81X
+     * console pins. Re-route the live UART and change only its baud rate; do not
+     * call uart_open() again because that would reapply project_config.h pinmux.
+     */
+    gpio_iomap_output(PA_9, GPIO_IOMAP_OUT_UART0_TX);
+    gpio_iomap_input(PA_8, GPIO_IOMAP_IN_UART0_IN);
+    gpio_set_mode(PA_8, GPIO_PULL_UP, GPIO_PULL_LEVEL_100K);
     uart_ioctl(g_uart, UART_IOCTL_CMD_SET_BAUDRATE, 115200, 0);
 }
 
@@ -166,10 +176,10 @@ int main(void)
         for (;;) {}
     }
 
-    move_uart0_to_pa8_pa9();
+    move_uart0_to_rom_native_pins();
     os_sleep_ms(20);
 
-    txs("TXWDIAG READY v=0.3 target=TXW817-810 PA8/PA9 115200");
+    txs("TXWDIAG READY v=0.4 target=TXW817-810 PA9TX/PA8RX 115200");
     txnl();
     snapshot();
 
