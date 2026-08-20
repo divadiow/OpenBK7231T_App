@@ -1,21 +1,18 @@
-name: TXW81X minimal diagnostic
+name: TXW81X minimal diagnostic v0.4
 
 on:
   push:
     branches:
       - txw81x-minimal-diag
     paths:
-      - '.github/workflows/txw81x-minimal-diag.yml'
-      - 'platforms/TXW81X/OpenBeken.mk'
-      - 'platforms/TXW81X/txw81x_diag_main.c'
-      - 'tools/txw81x_diag_capture.ps1'
+      - 'diag_trigger/v04_run.txt'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: txw81x-minimal-diag
+  group: txw81x-minimal-diag-v04
   cancel-in-progress: true
 
 jobs:
@@ -40,7 +37,7 @@ jobs:
             tar -xf *.tar.gz
           fi
 
-      - name: Obtain previously byte-validated native TXW81X packer
+      - name: Obtain byte-validated native TXW81X packer
         shell: bash
         run: |
           set -euxo pipefail
@@ -48,7 +45,7 @@ jobs:
           git show FETCH_HEAD:tools/txw81x_pack/txw81x_pack.py > /tmp/txw81x_pack.py
           python3 -m py_compile /tmp/txw81x_pack.py
 
-      - name: Build through the known-working OpenTXW81X compile/link path
+      - name: Build through known-working OpenTXW81X compile/link path
         id: firmware_build
         continue-on-error: true
         shell: bash
@@ -59,7 +56,7 @@ jobs:
             set -x
             cd sdk/OpenTXW81X/project
             make clean || true
-            make APP_VERSION=diag_v03 -j2
+            make APP_VERSION=diag_v04 -j2
             test -s project.hex
             test -s project.bin
 
@@ -70,15 +67,16 @@ jobs:
               --sdk-version 02050307 \
               --svn-version 8EB5 \
               --app-version 0 \
-              --date 2026-08-19 \
+              --date 2026-08-20 \
               --output APP.bin
 
             python3 /tmp/txw81x_pack.py inspect APP.bin
             test -s APP.bin
-            grep -a -q 'TXWDIAG READY v=0.3' APP.bin
-            grep -a -q 'TXWDIAG PONG v=0.3' APP.bin
+            grep -a -q 'TXWDIAG READY v=0.4' APP.bin
+            grep -a -q 'TXWDIAG PONG v=0.4' APP.bin
+            grep -a -q 'PA9TX/PA8RX' APP.bin
             ls -l project.elf project.hex project.bin APP.bin
-          } 2>&1 | tee "$GITHUB_WORKSPACE/published/TXW817_810_DIAG_MINIMAL_v03_build.log"
+          } 2>&1 | tee "$GITHUB_WORKSPACE/published/TXW817_810_DIAG_MINIMAL_v04_build.log"
 
       - name: Prepare minimal test files if build succeeded
         if: steps.firmware_build.outcome == 'success'
@@ -86,16 +84,16 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p _txwdiag published
-          cp sdk/OpenTXW81X/project/APP.bin _txwdiag/TXW817_810_DIAG_MINIMAL_v03.bin
-          cp _txwdiag/TXW817_810_DIAG_MINIMAL_v03.bin published/TXW817_810_DIAG_MINIMAL_v03.bin
+          cp sdk/OpenTXW81X/project/APP.bin _txwdiag/TXW817_810_DIAG_MINIMAL_v04.bin
+          cp _txwdiag/TXW817_810_DIAG_MINIMAL_v04.bin published/TXW817_810_DIAG_MINIMAL_v04.bin
           cp tools/txw81x_diag_capture.ps1 _txwdiag/txw81x_diag_capture.ps1
-          printf '@echo off\r\npowershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%%~dp0txw81x_diag_capture.ps1" %%*\r\npause\r\n' > _txwdiag/2_CAPTURE_TXW817_810.cmd
+          printf '@echo off\r\npowershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%%~dp0txw81x_diag_capture.ps1" %%*\r\npause\r\n' > _txwdiag/RUN_TXW817_DIAG_V04.cmd
 
-      - name: Upload minimal test files
+      - name: Upload minimal v0.4 test files
         if: steps.firmware_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: TXW817_810_DIAG_MINIMAL_v03
+          name: TXW817_810_DIAG_MINIMAL_v04
           path: _txwdiag
           compression-level: 0
           if-no-files-found: error
@@ -106,18 +104,18 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          echo "$GITHUB_RUN_ID" > published/TXW817_810_DIAG_MINIMAL_v03_run_id.txt
+          echo "$GITHUB_RUN_ID" > published/TXW817_810_DIAG_MINIMAL_v04_run_id.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -f published/TXW817_810_DIAG_MINIMAL_v03_build.log
-          git add -f published/TXW817_810_DIAG_MINIMAL_v03_run_id.txt
-          if [ -f published/TXW817_810_DIAG_MINIMAL_v03.bin ]; then
-            git add -f published/TXW817_810_DIAG_MINIMAL_v03.bin
+          git add -f published/TXW817_810_DIAG_MINIMAL_v04_build.log
+          git add -f published/TXW817_810_DIAG_MINIMAL_v04_run_id.txt
+          if [ -f published/TXW817_810_DIAG_MINIMAL_v04.bin ]; then
+            git add -f published/TXW817_810_DIAG_MINIMAL_v04.bin
           fi
           if git diff --cached --quiet; then
             echo 'No result change to publish.'
           else
-            git commit -m 'Publish TXW817 minimal diagnostic v0.3 build result'
+            git commit -m 'Publish TXW817 minimal diagnostic v0.4 build result'
             git push origin HEAD:txw81x-minimal-diag
           fi
 
