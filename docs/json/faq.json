@@ -89,7 +89,7 @@
     },
     {
         "question": "How to do OTA in OpenBeken? How to update firmware?",
-        "answer": "There are two methods. <br>First is to use Web Application, in OTA tab, drag and drop proper platform OTA file (for BK it is RBL, for BL602 it's bin.xz.ota, etc, see Releases tab), and click start.<br>Second method is to use HTTP ota, just paste a HTTP server link to Config->OTA and submit. Remember that it will work only for HTTP right now, not HTTPS."
+        "answer": "There are two methods. <br>First is to use Web Application, in OTA tab, drag and drop the proper platform OTA file (for BK it is usually RBL; BK7238 devices retaining the original Tuya T1 bootloader use the TuyaT1_UG bin instead; for BL602 it's bin.xz.ota, etc, see Releases tab), and click start.<br>Second method is to use HTTP ota, just paste a HTTP server link to Config->OTA and submit. Remember that it will work only for HTTP right now, not HTTPS."
     },
     {
         "question": "How to control device via MQTT?",
