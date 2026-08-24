@@ -19,6 +19,11 @@ echo "[INFO] Inner build script started for $SOC_TARGET"
 
 SCRIPT_DIR="$(pwd)"
 
+# Keep native Windows Python ahead of any MSYS tool directory added below.
+# The SDK packager wrapper uses os.name to select beken_packager.exe versus
+# the Linux ELF, so running it under MSYS Python selects the wrong executable.
+WINDOWS_PYTHON="$(command -v python 2>/dev/null || true)"
+
 # Export the borrowed ARM GCC toolchain to the environment for Beken FreeRTOS SDK Makefile to pick up
 TOOLCHAIN_RAW="$(pwd)/sdk/OpenBK7231N/platforms/BK7231N/toolchain/windows/gcc-arm-none-eabi-4_9-2015q1/bin/"
 export ARM_GCC_TOOLCHAIN="$(cygpath -u "$TOOLCHAIN_RAW")/"
@@ -29,9 +34,10 @@ echo "[INFO] Toolchain: $ARM_GCC_TOOLCHAIN"
 # beken_packager.exe is a PyInstaller bundle that needs to extract VCRUNTIME140.dll
 # Use native Windows Temp directory where DLL drops are historically trusted by Defender
 # We must double-escape backslashes so MSYS Make doesn't swallow them when passing to subshells!
-LOCAL_TMP="$(cygpath -w "$USERPROFILE/AppData/Local/Temp/obk_p_$$" | sed 's/\\/\\\\/g')"
+LOCAL_TMP_POSIX="$(cygpath -u "$USERPROFILE/AppData/Local/Temp/obk_p_$$")"
+LOCAL_TMP="$(cygpath -w "$LOCAL_TMP_POSIX" | sed 's/\\/\\\\/g')"
 echo "[INFO] Setting local TEMP dir: $LOCAL_TMP"
-mkdir -p "$USERPROFILE/AppData/Local/Temp/obk_p_$$"
+mkdir -p "$LOCAL_TMP_POSIX"
 export TEMP="$LOCAL_TMP"
 export TMP="$LOCAL_TMP"
 export TMPDIR="$LOCAL_TMP"
@@ -61,9 +67,32 @@ fi
 
 if [ "$ACTION" = "clean" ]; then
     echo "[INFO] Running $SOC_TARGET clean from $(pwd)..."
-    make clean -C ./
+    make clean -C ./ OBK_DIR="../../src" OBK_VARIANT="$OBK_VARIANT"
     exit 0
 fi
+
+BUILD_ID="v1|$SOC_TARGET|$APP_VERSION|$OBK_VARIANT"
+BUILD_STAMP="./out/.obk_build_identity"
+LAST_BUILD_ID=""
+if [ -f "$BUILD_STAMP" ]; then
+    IFS= read -r LAST_BUILD_ID < "$BUILD_STAMP" || true
+fi
+if [ "$LAST_BUILD_ID" != "$BUILD_ID" ]; then
+    echo "[INFO] Build identity changed ($LAST_BUILD_ID -> $BUILD_ID); cleaning stale objects..."
+    make clean -C ./ OBK_DIR="../../src" OBK_VARIANT="$OBK_VARIANT"
+fi
+
+if [ -z "$WINDOWS_PYTHON" ] || ! "$WINDOWS_PYTHON" -c 'import os, sys; raise SystemExit(os.name != "nt" or sys.version_info.major != 3)'; then
+    echo "[ERROR] Native Windows Python 3 is required for Beken packaging."
+    exit 1
+fi
+WINDOWS_PYTHON_DIR="$(dirname "$WINDOWS_PYTHON")"
+
+# Some MSYS installations include a POSIX Python beside make. Keep the native
+# interpreter first so application.mk's hard-coded 'python' command invokes
+# beken_packager.exe rather than the bundled Linux beken_packager ELF.
+export PATH="$WINDOWS_PYTHON_DIR:$PATH"
+echo "[INFO] Windows Python: $WINDOWS_PYTHON"
 
 echo "[INFO] Running $SOC_TARGET build from $(pwd)..."
 
@@ -75,7 +104,9 @@ sed -i 's/"\.\/tools\/crc_binary\/encrypt_n"/"\.\/tools\/crc_binary\/encrypt\.ex
 # Replace encrypt.exe with the compatible one from OpenBK7231T SDK that supports multi-key arguments
 cp "$(cygpath -u "$SCRIPT_DIR/sdk/OpenBK7231T/platforms/bk7231t/bk7231t_os/tools/generate/package_tool/windows/encrypt.exe")" ./tools/crc_binary/encrypt.exe
 
-make TEMP="$LOCAL_TMP" TMP="$LOCAL_TMP" TMPDIR="$LOCAL_TMP" "$SOC_TARGET" -j8 USER_SW_VER="$APP_VERSION" OBK_DIR="../../src"
+make TEMP="$LOCAL_TMP" TMP="$LOCAL_TMP" TMPDIR="$LOCAL_TMP" "$SOC_TARGET" -j8 USER_SW_VER="$APP_VERSION" OBK_VARIANT="$OBK_VARIANT" OBK_DIR="../../src"
+
+printf '%s\n' "$BUILD_ID" > "$BUILD_STAMP"
 
 # Generate OTA RBL if bsp.bin exists
 if [ -f ./out/bsp.bin ]; then

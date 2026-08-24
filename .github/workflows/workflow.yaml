@@ -311,6 +311,13 @@ jobs:
       - name: Run make
         run: make APP_VERSION=${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }} APP_NAME=${{ matrix.platform }} VARIANT="${{ matrix.variant }}" ${{ matrix.platform }}
 
+      - name: Package BK7238 Tuya T1 OTA
+        if: ${{ matrix.platform == 'OpenBK7238' }}
+        run: |
+          python3 build_scripts/package_bk7238_tuya.py \
+            sdk/beken_freertos_sdk/out/bsp.bin \
+            output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_TuyaT1_UG_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin
+
       - name: Save build assets
         uses: actions/upload-artifact@v6
         with:
@@ -318,6 +325,7 @@ jobs:
           path: |
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_UA_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_Tuya_UA_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin
+            output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_TuyaT1_UG_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_UG_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_UG_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.img
             output/${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}/${{ matrix.platform }}_QIO_${{ needs.refs.outputs.version }}${{ matrix.variant != 'default' && '_' || '' }}${{ matrix.variant != 'default' && matrix.variant || '' }}.bin

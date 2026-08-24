@@ -59,3 +59,12 @@ BERRY_SRCPATH = $(OBK_DIR)/../libraries/berry/src
 include $(OBK_DIR)/../libraries/berry.mk
 
 APP_C += $(BERRY_SRC_C)
+
+# OBK_DIR may contain parent-directory components, causing these objects to be
+# emitted outside the SDK's out directory. Make clean remove the exact derived
+# OpenBeken object and dependency paths as well.
+.PHONY: clean_obk_objects
+clean: clean_obk_objects
+clean_obk_objects:
+	$(Q)-rm -f $(OBJ_APP_LIST) $(OBJ_CXX_LIST)
+	$(Q)-rm -f $(OBJ_APP_LIST:.o=.d) $(OBJ_CXX_LIST:.o=.d)

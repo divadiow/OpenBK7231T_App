@@ -96,10 +96,35 @@ if %BUILD_RESULT% neq 0 (
     exit /b %BUILD_RESULT%
 )
 
+if /i "%ACTION%"=="clean" (
+    echo [INFO] BK7238 clean completed.
+    exit /b 0
+)
+
 :: --- Copy output ---
 echo.
 echo [INFO] Checking output files...
 set GEN_DIR=%SDK_DIR%\out
+
+set PYTHON_CMD=
+where python >nul 2>nul
+if !errorlevel! equ 0 (
+    set "PYTHON_CMD=python"
+) else (
+    where python3 >nul 2>nul
+    if !errorlevel! equ 0 set "PYTHON_CMD=python3"
+)
+if not defined PYTHON_CMD (
+    echo [ERROR] Python 3 not found in PATH!
+    exit /b 1
+)
+echo [INFO] Packaging Tuya T1 OTA with !PYTHON_CMD!...
+
+"!PYTHON_CMD!" build_scripts\package_bk7238_tuya.py "%GEN_DIR%\bsp.bin" "%GEN_DIR%\app_tuya_t1.bin"
+if !errorlevel! neq 0 (
+    echo [ERROR] Tuya T1 OTA packaging failed with exit code !errorlevel!!
+    exit /b !errorlevel!
+)
 
 set COPIED_COUNT=0
 if exist "%GEN_DIR%\app.rbl" (
@@ -115,6 +140,11 @@ if exist "%GEN_DIR%\bk7238_QIO.bin" (
 if exist "%GEN_DIR%\bk7238_UA.bin" (
     copy /y "%GEN_DIR%\bk7238_UA.bin" "output\%APP_VERSION%\%APP_NAME%_UA_%APP_VERSION%.bin" >nul 2>nul
     echo [INFO] Copied: %APP_NAME%_UA_%APP_VERSION%.bin
+    set /a COPIED_COUNT+=1
+)
+if exist "%GEN_DIR%\app_tuya_t1.bin" (
+    copy /y "%GEN_DIR%\app_tuya_t1.bin" "output\%APP_VERSION%\%APP_NAME%_TuyaT1_UG_%APP_VERSION%.bin" >nul 2>nul
+    echo [INFO] Copied: %APP_NAME%_TuyaT1_UG_%APP_VERSION%.bin
     set /a COPIED_COUNT+=1
 )
 
