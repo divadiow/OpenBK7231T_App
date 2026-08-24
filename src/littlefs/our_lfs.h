@@ -38,6 +38,13 @@
 
 #define LFS_BLOCK_SIZE 0x1000
 
+#elif PLATFORM_BK7238
+
+// start 0x1000 after OTA addr; OTA intentionally wipes the filesystem
+#define LFS_BLOCKS_START 0x133000
+#define LFS_BLOCKS_START_MIN 0x133000
+#define LFS_BLOCKS_END 0x1AB000
+
 #elif PLATFORM_BK7231T
 
 // start 0x1000 after OTA addr
@@ -207,5 +214,8 @@ void LFSAddCmds();
 void init_lfs(int create);
 void release_lfs();
 int lfs_present();
+int LFS_BeginFlashAccessBlock(void);
+void LFS_EndFlashAccessBlock(int restore_access);
+int LFS_IsFlashAccessBlocked(void);
 #endif
 #endif

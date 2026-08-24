@@ -34,6 +34,9 @@
 #elif defined(PLATFORM_BEKEN)
 #include "start_type_pub.h"
 #include "rw_pub.h"
+#if PLATFORM_BK7238
+#include "BkDriverFlash.h"
+#endif
 #elif PLATFORM_XRADIO
 #include <image/flash.h>
 #include <ota/ota.h>
@@ -3670,25 +3673,44 @@ int http_fn_ota(http_request_t* request) {
 #ifndef OBK_OTA_EXTENSION
 	poststr(request, "<h3>Sorry, OTA update not implemented for " DEVICENAME_PREFIX_FULL " </h3>");
 #else
-	poststr(request, "<p>It's recommended to use the OTA option in the Web Application, where you can easily drag and drop files.<br><br>If you have an HTTP server providing the OTA file, you may enter the URL below. "
-#if PLATFORM_BEKEN
-	" On Beken platforms, the .rbl file is used for OTA updates."
+	poststr(request, "<p>It's recommended to use the OTA option in the Web Application, where you can easily drag and drop files.<br><br>If you have an HTTP server providing the OTA file, you may enter the URL below. ");
+#if PLATFORM_BK7238
+	if (bk_flash_get_boot_profile() == BK_FLASH_BOOT_PROFILE_TUYA_T1) {
+		poststr(request, "Detected original Tuya T1 bootloader: use the OpenBK7238_TuyaT1_UG_*.bin PCZL file. The native RF sector at 0x1E3000 is preserved.");
+	}
+	else if (bk_flash_get_boot_profile() == BK_FLASH_BOOT_PROFILE_STANDARD) {
+		poststr(request, "Detected standard Beken bootloader: use the OpenBK7238 .rbl file.");
+	}
+	else {
+		poststr(request, "The bootloader profile is unknown, so OTA is disabled for safety.");
+	}
+#elif PLATFORM_BEKEN
+	poststr(request, "On Beken platforms, the .rbl file is used for OTA updates.");
 #endif
-	"</p>");
+	poststr(request, "</p>");
 	add_label_text_field(request, "URL for ota firmware file", "host", "", "<form action=\"/ota_exec\">");
 	poststr(request, "<br>\
 <input type=\"submit\" value=\"Submit\" onclick=\"return confirm('Are you sure?')\">\
 </form>");
 
 	const char htmlOTA[] = "<script>var o=document.getElementById('otafile'),d=document.querySelector('dialog'),h=document.getElementById('hint'),D='OTA started! Please wait ',R=/" DEVICENAME_PREFIX_FULL "_.*" 
+#if PLATFORM_BK7238
+"(?:\\.rbl|_UG_.*\\.bin)$/i,SR=R.source,mr=(e)=>e.name.match(R);doota=async()=>{f=o.files[0];if(f&&mr(f)){d.showModal();var t=0,I=setInterval(()=>d.innerHTML=D+(++t)+' secs',1e3);try{const e=await fetch('/api/ota',{method:'POST',body:f}),m=await e.text();clearInterval(I);if(!e.ok){d.close();alert(m);return}d.innerHTML='OTA verified. Rebooting...';setTimeout(()=>location.href='/',8e3)}catch(e){clearInterval(I);d.close();alert('OTA upload failed: '+e)}}else alert(f?'filename invalid':'no file selected')};d.innerHTML=D,o.addEventListener('change',((e)=>{const t=e.target.files[0];if(!t)return;h.innerHTML=mr(t)?'':'Selected file does <b>not</b> match a BK7238 RBL or TuyaT1 UG release file!'}))</script>";
+#else
 #ifdef OBK_OTA_NAME_EXTENSION
 	OBK_OTA_NAME_EXTENSION
 #endif
 	OBK_OTA_EXTENSION "/,SR=R.source,mr=(e)=>e.name.match(R);doota=()=>{f=o.files[0];if(f&&(f)){d.showModal();var t=30;setTimeout(()=>{d.close(),location.href='/'},1e3*t),setInterval(()=>d.innerHTML=D+t--+' secs',1e3),fetch('/api/ota',{method:'POST',body:f}).then((e)=>{e.ok&&fetch('/index?restart=1')})}else alert(f?'filename invalid':'no file selected')};d.innerHTML=D,o.addEventListener('change',((e)=>{const t=e.target.files[0];if(!t)return;h.innerHTML=mr(t)?'':'Selected file does <b>not</b> match required format '+SR+'!'}))</script>";
+#endif
 
 	poststr(request, "<br><br><br>Expert feature: Upload firmware OTA file.<br>If unsure, please use Web App!<br><span id='hint' style='color: yellow;'></span><br><br>");
+#if PLATFORM_BK7238
+	poststr(request, "<input id='otafile' type='file' accept='.rbl,.bin'>");
+	poststr(request, "<input type='button' class='bred' onclick='doota();' value='START VERIFIED OTA'><dialog></dialog>");
+#else
 	poststr(request, "<input id='otafile' type='file' accept='" OBK_OTA_EXTENSION "'>");
 	poststr(request, "<input type='button' class='bred' onclick='doota();' value='START OTA - No file check - will reboot after OTA'><dialog></dialog>");
+#endif
 	poststr(request, htmlOTA);
 #endif
 	poststr(request, htmlFooterReturnToCfgOrMainPage);

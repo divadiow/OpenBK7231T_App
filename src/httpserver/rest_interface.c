@@ -62,6 +62,7 @@ static int http_rest_post_lfs_file(http_request_t* request);
 
 static int http_rest_post_reboot(http_request_t* request);
 int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr);
+int http_rest_post_ota(http_request_t* request);
 static int http_rest_get_flash(http_request_t* request, int startaddr, int len);
 static int http_rest_get_flash_advanced(http_request_t* request);
 static int http_rest_post_flash_advanced(http_request_t* request);
@@ -124,9 +125,13 @@ static int http_rest_get(http_request_t* request) {
 #if ENABLE_LITTLEFS
 	if (!strcmp(request->url, "api/fsblock")) {
 		uint32_t newsize = CFG_GetLFS_Size();
-		uint32_t newstart = (LFS_BLOCKS_END - newsize);
+		uint32_t newstart;
 
 		newsize = (newsize / LFS_BLOCK_SIZE) * LFS_BLOCK_SIZE;
+		if (newsize < LFS_BLOCKS_MIN_LEN || newsize > LFS_BLOCKS_MAX_LEN) {
+			return http_rest_error(request, -20, "LFS Size mismatch");
+		}
+		newstart = (LFS_BLOCKS_END - newsize);
 
 		// double check again that we're within bounds - don't want
 		// boot overwrite or anything nasty....
@@ -204,7 +209,7 @@ static int http_rest_post(http_request_t* request) {
 #endif
 		int r = 0;
 #if PLATFORM_BEKEN
-		r = http_rest_post_flash(request, START_ADR_OF_BK_PARTITION_OTA, LFS_BLOCKS_END);
+		r = http_rest_post_ota(request);
 #elif PLATFORM_W600
 		r = http_rest_post_flash(request, -1, -1);
 #elif PLATFORM_W800
@@ -245,13 +250,14 @@ static int http_rest_post(http_request_t* request) {
 
 #if ENABLE_LITTLEFS
 	if (!strcmp(request->url, "api/fsblock")) {
-		if (lfs_present()) {
-			release_lfs();
-		}
 		uint32_t newsize = CFG_GetLFS_Size();
-		uint32_t newstart = (LFS_BLOCKS_END - newsize);
+		uint32_t newstart;
 
 		newsize = (newsize / LFS_BLOCK_SIZE) * LFS_BLOCK_SIZE;
+		if (newsize < LFS_BLOCKS_MIN_LEN || newsize > LFS_BLOCKS_MAX_LEN) {
+			return http_rest_error(request, -20, "LFS Size mismatch");
+		}
+		newstart = (LFS_BLOCKS_END - newsize);
 
 		// double check again that we're within bounds - don't want
 		// boot overwrite or anything nasty....
@@ -263,11 +269,12 @@ static int http_rest_post(http_request_t* request) {
 			return http_rest_error(request, -20, "LFS Size mismatch");
 		}
 
+		if (!LFS_BeginFlashAccessBlock()) {
+			return http_rest_error(request, 409, "filesystem is busy");
+		}
 		// we are writing the lfs block
 		int res = http_rest_post_flash(request, newstart, LFS_BLOCKS_END);
-		// initialise the filesystem, it should be there now.
-		// don't create if it does not mount
-		init_lfs(0);
+		LFS_EndFlashAccessBlock(1);
 		return res;
 	}
 	if (!strncmp(request->url, "api/lfs/", 8)) {
@@ -1330,8 +1337,33 @@ static int http_rest_post_flash_advanced(http_request_t* request) {
 	int sres;
 	sres = sscanf(params, "%x", &startaddr);
 	if (sres == 1 && startaddr >= START_ADR_OF_BK_PARTITION_OTA) {
+		int res;
+#if PLATFORM_BK7238
+		if ((startaddr & 0xFFF) != 0) {
+			return http_rest_error(request, 400, "flash address must be sector-aligned");
+		}
+#endif
+#if PLATFORM_BK7238 && ENABLE_LITTLEFS
+		int lfs_blocked = 0;
+		uint64_t write_end = (uint64_t)(uint32_t)startaddr;
+		if (request->contentLength > 0) {
+			write_end += (uint32_t)request->contentLength;
+			if ((uint32_t)startaddr < LFS_BLOCKS_END && write_end > LFS_BLOCKS_START_MIN) {
+				if (!LFS_BeginFlashAccessBlock()) {
+					return http_rest_error(request, 409, "filesystem is busy");
+				}
+				lfs_blocked = 1;
+			}
+		}
+#endif
 		// allow up to end of flash
-		return http_rest_post_flash(request, startaddr, 0x200000);
+		res = http_rest_post_flash(request, startaddr, 0x200000);
+#if PLATFORM_BK7238 && ENABLE_LITTLEFS
+		if (lfs_blocked) {
+			LFS_EndFlashAccessBlock(1);
+		}
+#endif
+		return res;
 	}
 	return http_rest_error(request, -1, "invalid url");
 }

@@ -18,6 +18,9 @@
 
 #include "typedef.h"
 #include "flash_pub.h"
+#if PLATFORM_BK7238
+#include "BkDriverFlash.h"
+#endif
 
 #elif PLATFORM_BL602 && !PLATFORM_BL_NEW
 
@@ -115,8 +118,76 @@ extern uint8_t flash_size_8720;
 
 // variables used by the filesystem
 int lfs_initialised = 0;
+static volatile int lfs_flash_access_blocked;
 lfs_t lfs;
 lfs_file_t file;
+
+int LFS_IsFlashAccessBlocked(void)
+{
+    return lfs_flash_access_blocked;
+}
+
+#if PLATFORM_BK7238
+static beken_mutex_t lfs_bk7238_lifecycle_mutex;
+
+static int lfs_bk7238_lifecycle_lock(void)
+{
+    if (!lfs_bk7238_lifecycle_mutex &&
+        rtos_init_recursive_mutex(&lfs_bk7238_lifecycle_mutex) != kNoErr)
+    {
+        return 0;
+    }
+    return rtos_lock_recursive_mutex(&lfs_bk7238_lifecycle_mutex,
+        BEKEN_WAIT_FOREVER) == kNoErr;
+}
+
+static void lfs_bk7238_lifecycle_unlock(void)
+{
+    rtos_unlock_recursive_mutex(&lfs_bk7238_lifecycle_mutex);
+}
+
+static int lfs_bk7238_api_lock(const struct lfs_config *c)
+{
+    (void)c;
+    if (lfs_flash_access_blocked || !lfs_bk7238_lifecycle_lock())
+    {
+        return LFS_ERR_IO;
+    }
+    if (lfs_flash_access_blocked)
+    {
+        lfs_bk7238_lifecycle_unlock();
+        return LFS_ERR_IO;
+    }
+    return 0;
+}
+
+static int lfs_bk7238_api_unlock(const struct lfs_config *c)
+{
+    (void)c;
+    lfs_bk7238_lifecycle_unlock();
+    return 0;
+}
+
+static int lfs_bk7238_flash_begin(void)
+{
+    if (lfs_flash_access_blocked)
+    {
+        return 0;
+    }
+    hal_flash_lock();
+    if (lfs_flash_access_blocked)
+    {
+        hal_flash_unlock();
+        return 0;
+    }
+    return 1;
+}
+
+static void lfs_bk7238_flash_end(void)
+{
+    hal_flash_unlock();
+}
+#endif
 
 // from flash.c
 #if PLATFORM_BEKEN
@@ -162,7 +233,10 @@ struct lfs_config cfg = {
     .erase = lfs_erase,
     .sync  = lfs_sync,
 
-#if PLATFORM_REALTEK_NEW || PLATFORM_BL_NEW
+#if PLATFORM_BK7238
+    .lock = lfs_bk7238_api_lock,
+    .unlock = lfs_bk7238_api_unlock,
+#elif PLATFORM_REALTEK_NEW || PLATFORM_BL_NEW
     .lock = lfs_diskio_lock,
     .unlock = lfs_diskio_unlock,
 #endif
@@ -183,7 +257,7 @@ struct lfs_config cfg = {
 };
 
 int lfs_present(){
-    return lfs_initialised;
+    return lfs_initialised && !lfs_flash_access_blocked;
 }
 
 static commandResult_t CMD_LFS_Size(const void *context, const char *cmd, const char *args, int cmdFlags){
@@ -258,6 +332,10 @@ static commandResult_t CMD_LFS_Mount(const void *context, const char *cmd, const
 }
 
 static commandResult_t CMD_LFS_Format(const void *context, const char *cmd, const char *args, int cmdFlags){
+    if (lfs_flash_access_blocked){
+        ADDLOG_ERROR(LOG_FEATURE_CMD, "LFS access is blocked during OTA");
+        return CMD_RES_ERROR;
+    }
     if (lfs_initialised){
         release_lfs();
         ADDLOG_INFO(LOG_FEATURE_CMD, "LFS released size 0x%X", LFS_Size);
@@ -526,7 +604,10 @@ void LFSAddCmds(){
 }
 
 
-void init_lfs(int create){
+static void init_lfs_internal(int create){
+    if (lfs_flash_access_blocked){
+        return;
+    }
     if (!lfs_initialised){
         uint32_t newsize = CFG_GetLFS_Size();
 
@@ -690,11 +771,78 @@ void init_lfs(int create){
     }
 }
 
-void release_lfs(){
+void init_lfs(int create){
+#if PLATFORM_BK7238
+    if (lfs_flash_access_blocked || !lfs_bk7238_lifecycle_lock()){
+        return;
+    }
+    if (!lfs_flash_access_blocked){
+        init_lfs_internal(create);
+    }
+    lfs_bk7238_lifecycle_unlock();
+#else
+    init_lfs_internal(create);
+#endif
+}
+
+static int release_lfs_internal(void){
 	if (lfs_initialised) {
-		lfs_unmount(&lfs);
+		int err = lfs_unmount(&lfs);
+		if (err) {
+			return 0;
+		}
 		lfs_initialised = 0;
 	}
+	return 1;
+}
+
+void release_lfs(){
+#if PLATFORM_BK7238
+    if (!lfs_bk7238_lifecycle_lock()){
+        return;
+    }
+    release_lfs_internal();
+    lfs_bk7238_lifecycle_unlock();
+#else
+    release_lfs_internal();
+#endif
+}
+
+int LFS_BeginFlashAccessBlock(void){
+#if PLATFORM_BK7238
+    if (!lfs_bk7238_lifecycle_lock()){
+        return 0;
+    }
+    if (lfs_initialised && lfs.mlist){
+        lfs_bk7238_lifecycle_unlock();
+        return 0;
+    }
+    if (!release_lfs_internal()){
+        lfs_bk7238_lifecycle_unlock();
+        return 0;
+    }
+    lfs_flash_access_blocked = 1;
+    return 1;
+#else
+    lfs_flash_access_blocked = 1;
+    release_lfs_internal();
+    return 1;
+#endif
+}
+
+void LFS_EndFlashAccessBlock(int restore_access){
+#if PLATFORM_BK7238
+    if (restore_access){
+        lfs_flash_access_blocked = 0;
+        init_lfs_internal(0);
+    }
+    lfs_bk7238_lifecycle_unlock();
+#else
+    if (restore_access){
+        lfs_flash_access_blocked = 0;
+        init_lfs_internal(0);
+    }
+#endif
 }
 
 #if ENABLE_LFS_SPI
@@ -755,12 +903,21 @@ static int lfs_read(const struct lfs_config *c, lfs_block_t block,
         lfs_off_t off, void *buffer, lfs_size_t size){
     int res;
     unsigned int startAddr = LFS_Start;
+#if PLATFORM_BK7238
+    if (!lfs_bk7238_flash_begin())
+    {
+        return LFS_ERR_IO;
+    }
+#endif
     startAddr += block*LFS_BLOCK_SIZE;
     startAddr += off;
     GLOBAL_INT_DECLARATION();
     GLOBAL_INT_DISABLE();
     res = flash_read((char *)buffer, size, startAddr);
     GLOBAL_INT_RESTORE();
+#if PLATFORM_BK7238
+    lfs_bk7238_flash_end();
+#endif
     return res;
 }
 
@@ -774,6 +931,12 @@ static int lfs_write(const struct lfs_config *c, lfs_block_t block,
     unsigned int startAddr = LFS_Start;
     GLOBAL_INT_DECLARATION();
 
+#if PLATFORM_BK7238
+    if (!lfs_bk7238_flash_begin())
+    {
+        return LFS_ERR_IO;
+    }
+#endif
     startAddr += block*LFS_BLOCK_SIZE;
     startAddr += off;
 
@@ -784,6 +947,9 @@ static int lfs_write(const struct lfs_config *c, lfs_block_t block,
     protect = FLASH_PROTECT_ALL;
     flash_ctrl(CMD_FLASH_SET_PROTECT, &protect);
     GLOBAL_INT_RESTORE();
+#if PLATFORM_BK7238
+    lfs_bk7238_flash_end();
+#endif
 
     return res;
 }
@@ -798,6 +964,12 @@ static int lfs_erase(const struct lfs_config *c, lfs_block_t block){
     unsigned int startAddr = LFS_Start;
     GLOBAL_INT_DECLARATION();
 
+#if PLATFORM_BK7238
+    if (!lfs_bk7238_flash_begin())
+    {
+        return LFS_ERR_IO;
+    }
+#endif
     startAddr += block*LFS_BLOCK_SIZE;
     GLOBAL_INT_DISABLE();
     flash_ctrl(CMD_FLASH_SET_PROTECT, &protect);
@@ -806,6 +978,9 @@ static int lfs_erase(const struct lfs_config *c, lfs_block_t block){
     protect = FLASH_PROTECT_ALL;
     flash_ctrl(CMD_FLASH_SET_PROTECT, &protect);
     GLOBAL_INT_RESTORE();
+#if PLATFORM_BK7238
+    lfs_bk7238_flash_end();
+#endif
     return res;
 }
 

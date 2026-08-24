@@ -29,6 +29,13 @@ int HAL_Configuration_ReadConfigMemory(void *target, int dataLen){
     DD_HANDLE flash_handle;
 	bk_logic_partition_t *pt = bk_flash_get_info(BK_PARTITION_NET_PARAM);
 
+#if PLATFORM_BK7238
+	if (bk_flash_get_boot_profile() == BK_FLASH_BOOT_PROFILE_UNKNOWN) {
+		ADDLOG_ERROR(LOG_FEATURE_CFG, "%s - unknown BK7238 flash profile", __func__);
+		return 0;
+	}
+#endif
+
     flashaddr = pt->partition_start_addr;
     flashlen = pt->partition_length;
 
@@ -75,6 +82,13 @@ int beken_hal_flash_read(const unsigned int addr, void *dst, const unsigned int 
 int HAL_Configuration_SaveConfigMemory(void *src, int dataLen){
 	UINT32 flashaddr, flashlen;
 	bk_logic_partition_t *pt = bk_flash_get_info(BK_PARTITION_NET_PARAM);
+
+#if PLATFORM_BK7238
+	if (bk_flash_get_boot_profile() == BK_FLASH_BOOT_PROFILE_UNKNOWN) {
+		ADDLOG_ERROR(LOG_FEATURE_CFG, "%s - unknown BK7238 flash profile", __func__);
+		return 0;
+	}
+#endif
 
     flashaddr = pt->partition_start_addr;
     flashlen = pt->partition_length;
