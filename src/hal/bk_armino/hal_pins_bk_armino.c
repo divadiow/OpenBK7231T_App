@@ -75,11 +75,12 @@ void HAL_PIN_SetOutputValue(int index, int iVal)
 
 int HAL_PIN_ReadDigitalInput(int index)
 {
-	return bk_gpio_get_value(index);
+	return bk_gpio_get_input(index);
 }
 
 void HAL_PIN_Setup_Input_Pullup(int index)
 {
+	gpio_dev_unmap(index);
 	bk_gpio_enable_input(index);
 	bk_gpio_enable_pull(index);
 	bk_gpio_pull_up(index);
@@ -88,6 +89,7 @@ void HAL_PIN_Setup_Input_Pullup(int index)
 
 void HAL_PIN_Setup_Input_Pulldown(int index)
 {
+	gpio_dev_unmap(index);
 	bk_gpio_enable_input(index);
 	bk_gpio_enable_pull(index);
 	bk_gpio_pull_down(index);
@@ -96,6 +98,7 @@ void HAL_PIN_Setup_Input_Pulldown(int index)
 
 void HAL_PIN_Setup_Input(int index)
 {
+	gpio_dev_unmap(index);
 	bk_gpio_enable_input(index);
 	bk_gpio_disable_pull(index);
 	return;
@@ -103,6 +106,7 @@ void HAL_PIN_Setup_Input(int index)
 
 void HAL_PIN_Setup_Output(int index)
 {
+	gpio_dev_unmap(index);
 	bk_gpio_enable_output(index);
 	bk_gpio_enable_pull(index);
 	bk_gpio_pull_up(index);
