@@ -373,23 +373,40 @@ static void Test_TuyaMCU_BatteryPowered_RunUntilUARTData(int maxFrames) {
 	}
 	SELFTEST_ASSERT_HAS_SOME_DATA_IN_UART();
 }
-static void Test_TuyaMCU_BatteryPowered_TmSensorWinsOverV3ModeCommand(const char *modeCommand) {
+static void Test_TuyaMCU_BatteryPowered_TmSensorWinsOverLegacyMinimalMode() {
 	// reset whole device
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(1024);
 
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
 	CMD_ExecuteCommand("startDriver tmSensor", 0);
-	CMD_ExecuteCommand(modeCommand, 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode", 0);
 
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
-	Test_TuyaMCU_BatteryPowered_RunUntilUARTData(250);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
-	SELFTEST_ASSERT_HAS_UART_EMPTY();
-
+	// The v0 MCU can answer immediately after tmSensor starts. TuyaMCU must
+	// select the tmSensor state machine before the first one-second callback.
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA000100027B7DFA", 0);
 	Test_TuyaMCU_BatteryPowered_RunUntilUARTData(250);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 01 03 05");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+static void Test_TuyaMCU_BatteryPowered_V3RepliesRemainAvailable() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(1024);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("startDriver tmSensor", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 102 val 20", 0);
+
+	// tmSensor owns the polling schedule, but general v3 command dispatch must
+	// remain available to existing mixed configurations after an OTA update.
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0322000866020004000000D26A", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	SELFTEST_ASSERT_CHANNEL(20, 210);
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03900003021718C6", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
 void Test_TuyaMCU_BatteryPowered() {
@@ -403,8 +420,8 @@ void Test_TuyaMCU_BatteryPowered() {
 	Test_TuyaMCU_BatteryPowered_DPcacheFeature4();
 
 	Test_TuyaMCU_BatteryPowered_QuerySignalStrength();
-	Test_TuyaMCU_BatteryPowered_TmSensorWinsOverV3ModeCommand("tuyaMcu_batteryPoweredMode");
-	Test_TuyaMCU_BatteryPowered_TmSensorWinsOverV3ModeCommand("tuyaMcu_v3LowPowerMode");
+	Test_TuyaMCU_BatteryPowered_TmSensorWinsOverLegacyMinimalMode();
+	Test_TuyaMCU_BatteryPowered_V3RepliesRemainAvailable();
 }
 
 #endif

@@ -3,6 +3,7 @@
 
 #include "selftest_local.h"
 #include "../hal/hal_wifi.h"
+#include "../driver/drv_uart.h"
 
 void Test_TuyaMCU_RawAccess() {
 	// reset whole device
@@ -235,10 +236,11 @@ static int Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket() {
 	SIM_UART_ConsumeBytes(8);
 	return wifiState;
 }
-static void Test_TuyaMCU_V3_NormalStartupCompatibility() {
+static void Test_TuyaMCU_V3_RunToMCUConf() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
 
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	Test_TuyaMCU_RunUntilUARTData(250);
@@ -255,34 +257,68 @@ static void Test_TuyaMCU_V3_NormalStartupCompatibility() {
 	Test_TuyaMCU_RunUntilUARTData(250);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+static void Test_TuyaMCU_V3_NormalStartupCompatibility() {
+	Test_TuyaMCU_V3_RunToMCUConf();
 
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
 	Test_TuyaMCU_RunUntilUARTData(250);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
-static void Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility() {
-	SIM_ClearOBK(0);
-	SIM_UART_InitReceiveRingBuffer(2048);
-	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
 
+static void Test_TuyaMCU_V3_LegacySelfProcessingStartupCompatibility() {
+	Test_TuyaMCU_V3_RunToMCUConf();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030200020C0D1F", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	// Preserve the second empty 0x03 frame emitted by the original state machine.
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 03 00 00 02");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+static void Test_TuyaMCU_V3_ManualProductQueryCompatibility() {
+	Test_TuyaMCU_V3_NormalStartupCompatibility();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0307000009", 0);
+
+	CMD_ExecuteCommand("tuyaMcu_sendProductInformation", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100027B7DFD", 0);
+
+	// The normal heartbeat schedule continues, but the product response must not
+	// restart initialization and request MCU configuration again.
 	Test_TuyaMCU_RunUntilUARTData(250);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010104", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
+static void Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility() {
+	Test_TuyaMCU_V3_NormalStartupCompatibility();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0307000009", 0);
 
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 25 00 00 24");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	// Disabling the legacy minimal mode must not undo the MCU's 0x25 request.
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
 
-	Test_TuyaMCU_RunUntilUARTData(500);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	Sim_RunFrames(500, false);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
-static void Test_TuyaMCU_V3_DisableHeartbeatLowPowerCompatibility() {
+
+static void Test_TuyaMCU_V3_DisableHeartbeatLegacyMinimalModeCompatibility() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
-	CMD_ExecuteCommand("tuyaMcu_v3LowPowerMode", 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode", 0);
 
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
@@ -293,7 +329,8 @@ static void Test_TuyaMCU_V3_DisableHeartbeatLowPowerCompatibility() {
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
-static void Test_TuyaMCU_V3_LowPowerStartupCompatibility() {
+
+static void Test_TuyaMCU_V3_LegacyMinimalModeStartupCompatibility() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
@@ -310,22 +347,35 @@ static void Test_TuyaMCU_V3_LowPowerStartupCompatibility() {
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	Sim_RunFrames(250, false);
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
 }
-static void Test_TuyaMCU_V3_LowPowerMcuInitiatedWakeCompatibility() {
+
+static void Test_TuyaMCU_V3_McuInitiatedWakeCompatibility() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
-	CMD_ExecuteCommand("tuyaMcu_v3LowPowerMode", 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
 	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 5 val 5", 0);
 
+	// A previous wake session asked the module to stop heartbeats before sleeping.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 25 00 00 24");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100467B2270223A22726B6E7769306374626267687A676C61222C2276223A22312E302E30222C226D223A312C226D74223A312C226E223A302C226C6F77223A312C22736D223A307D6A", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
 	Test_TuyaMCU_RunUntilUARTData(250);
 	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
+	// A compatibility script that explicitly disables the old minimal mode must
+	// not cancel the automatic standard-v3 exchange already in progress.
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
@@ -335,12 +385,111 @@ static void Test_TuyaMCU_V3_LowPowerMcuInitiatedWakeCompatibility() {
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 	SELFTEST_ASSERT_CHANNEL(5, 312);
 
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0325000027", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 25 00 00 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100467B2270223A22726B6E7769306374626267687A676C61222C2276223A22312E302E30222C226D223A312C226D74223A312C226E223A302C226C6F77223A312C22736D223A307D6A", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// The alternate self-processing working-mode response still uses the same
+	// immediate WiFi-ACK-to-QUERY_STATE wake ordering when sm=0/1.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030200020C0D1F", 0);
 	Test_TuyaMCU_RunUntilUARTData(250);
 	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// Conversely, enabling the legacy minimal mode during a wake must take over
+	// before the pending WiFi ACK can trigger the automatic 0x08 query.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100467B2270223A22726B6E7769306374626267687A676C61222C2276223A22312E302E30222C226D223A312C226D74223A312C226E223A302C226C6F77223A312C22736D223A307D6A", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode", 0);
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
 }
-static void Test_TuyaMCU_V3_DPCacheTypes() {
+
+static void Test_TuyaMCU_V3_LowPowerMissingMCUConfCompatibility() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 5 val 5", 0);
+
+	// This field capture identifies an sm=0 wake but never answers 0x02. The
+	// standard query is still attempted first, then the driver must continue
+	// with the legacy-compatible WiFi exchange instead of stalling forever.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100467B2270223A22726B6E7769306374626267687A676C61222C2276223A22312E302E30222C226D223A312C226D74223A312C226E223A302C226C6F77223A312C22736D223A307D6A", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03220008050200040000013870", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	SELFTEST_ASSERT_CHANNEL(5, 312);
+}
+
+static void Test_TuyaMCU_TH03Pro_V3PowerOffSession() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 102 val 21", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 103 val 22", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 104 enum 23", 0);
+
+	// Exact TH03Pro FY sm=0 session recovered from NY8A054E ROM
+	// EC1CBEE6224E2674437ECC18EB140ABFD1E8BFF8BE7762BD0A1C8BE4FAEAB162.
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010003", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100377B2270223A2278656167696D616E7462376437617062222C2276223A22312E302E30222C226D223A302C226E223A312C22736D223A307D24", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0324000026", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 24 00 01 FF 23");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0322001566020004000000E1670200040000002F680400010291", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	SELFTEST_ASSERT_CHANNEL(21, 225);
+	SELFTEST_ASSERT_CHANNEL(22, 47);
+	SELFTEST_ASSERT_CHANNEL(23, 2);
+}
+
+static void Test_TuyaMCU_V3_EmptyCloudCacheCompatibility() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
@@ -352,28 +501,118 @@ static void Test_TuyaMCU_V3_DPCacheTypes() {
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020119AE", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0A 01 01 19 02 00 04 00 01 E2 40 DD");
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020319B0", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0A 01 01 19 02 00 04 00 01 E2 40 DD");
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA03900002011AAF", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 07 01 01 1A 04 00 01 02 B9");
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000010093", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 0F 01 02 1A 04 00 01 02 19 02 00 04 00 01 E2 40 04");
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// Legacy v0 command 0x10 still returns configured DPCache channel values.
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA001000010010", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 10 00 0F 01 02 1A 04 00 01 02 19 02 00 04 00 01 E2 40 84");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// Preserve the old driver's version-header tolerance for legacy 0x10.
+	// This remains distinct from the standard-v3 0x90 empty-cache response.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0310000012", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 10 00 0F 01 02 1A 04 00 01 02 19 02 00 04 00 01 E2 40 84");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 }
+
+static void Test_TuyaMCU_V3_FeatureSettingsCompatibility() {
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("tuyaMcu_batteryPoweredMode 0", 0);
+
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010003", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100027B7DFD", 0);
+
+	// abv bit 3 is clear: optional reconnect/app-panel queries are disabled, but
+	// Tuya still requires the initial status query after module initialization.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0337000A007B22616276223A307D22", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 37 00 02 00 00 38");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 08 00 00 07");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0307000009", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010104", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	Sim_RunSeconds(1.0f, false);
+	// The simulator may establish MQTT during this second and legitimately send
+	// one updated WiFi-state report. Acknowledge it, then ensure no 0x08 follows.
+	if (SIM_UART_GetDataSize() != 0) {
+		Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+		SELFTEST_ASSERT_HAS_UART_EMPTY();
+		CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	}
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// A synchronous report remains accepted and acknowledged without a query.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0322000024", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// On a later MCU restart, abv bit 3 now suppresses only the optional query.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010003", 0);
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100027B7DFD", 0);
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0337000A007B22616276223A307D22", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 37 00 02 00 00 38");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0302000004", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030000010104", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0303000005", 0);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// Invalid feature JSON is explicitly rejected.
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03370002007BB6", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 37 00 02 00 01 39");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
 void Test_TuyaMCU_DP22() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
 	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+
+	// Preserve the legacy driver's tolerance for a v3 0x22 command carrying a
+	// version-0 header. Existing devices must still receive the success ACK.
+	CMD_ExecuteCommand("uartFakeHex 55AA0022000021", 0);
+	Sim_RunFrames(20, false);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 23 00 01 01 24");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 1 bool 1", 0);
 	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 2 bool 2", 0);
@@ -436,12 +675,64 @@ void Test_TuyaMCU_DP22() {
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020117AC", 0);
-	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 07 01 01 17 01 00 01 01 B2");
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	SIM_ClearUART();
 	CMD_ExecuteCommand("fakeTuyaPacket 55AA039000020118AD", 0);
 	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 90 00 02 01 00 92");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0337000A007B22616276223A387D2A", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 37 00 02 00 00 38");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030F000011", 0);
+	{
+		int i;
+		int checksum = 0;
+		uint32_t freeMemory;
+
+		SELFTEST_ASSERT(SIM_UART_GetDataSize() == 11);
+		SELFTEST_ASSERT(SIM_UART_GetByte(0) == 0x55);
+		SELFTEST_ASSERT(SIM_UART_GetByte(1) == 0xAA);
+		SELFTEST_ASSERT(SIM_UART_GetByte(2) == 0x00);
+		SELFTEST_ASSERT(SIM_UART_GetByte(3) == 0x0F);
+		SELFTEST_ASSERT(SIM_UART_GetByte(4) == 0x00);
+		SELFTEST_ASSERT(SIM_UART_GetByte(5) == 0x04);
+		freeMemory = ((uint32_t)SIM_UART_GetByte(6) << 24) |
+			((uint32_t)SIM_UART_GetByte(7) << 16) |
+			((uint32_t)SIM_UART_GetByte(8) << 8) |
+			SIM_UART_GetByte(9);
+		SELFTEST_ASSERT(freeMemory > 0);
+		for (i = 0; i < 10; i++) {
+			checksum += SIM_UART_GetByte(i);
+		}
+		SELFTEST_ASSERT(SIM_UART_GetByte(10) == (checksum & 0xFF));
+		SIM_UART_ConsumeBytes(11);
+	}
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0320000022", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 20 00 02 00 02 23");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03340001033A", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 34 00 02 03 01 39");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA033400010B42", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 34 00 02 0B 03 43");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030500010109", 0);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 05 00 00 04");
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	SIM_ClearUART();
@@ -479,11 +770,16 @@ void Test_TuyaMCU_DP22() {
 	SELFTEST_ASSERT_HAS_UART_EMPTY();
 
 	Test_TuyaMCU_V3_NormalStartupCompatibility();
+	Test_TuyaMCU_V3_LegacySelfProcessingStartupCompatibility();
+	Test_TuyaMCU_V3_ManualProductQueryCompatibility();
 	Test_TuyaMCU_V3_DisableHeartbeatNormalModeCompatibility();
-	Test_TuyaMCU_V3_DisableHeartbeatLowPowerCompatibility();
-	Test_TuyaMCU_V3_LowPowerStartupCompatibility();
-	Test_TuyaMCU_V3_LowPowerMcuInitiatedWakeCompatibility();
-	Test_TuyaMCU_V3_DPCacheTypes();
+	Test_TuyaMCU_V3_DisableHeartbeatLegacyMinimalModeCompatibility();
+	Test_TuyaMCU_V3_LegacyMinimalModeStartupCompatibility();
+	Test_TuyaMCU_V3_McuInitiatedWakeCompatibility();
+	Test_TuyaMCU_V3_LowPowerMissingMCUConfCompatibility();
+	Test_TuyaMCU_TH03Pro_V3PowerOffSession();
+	Test_TuyaMCU_V3_EmptyCloudCacheCompatibility();
+	Test_TuyaMCU_V3_FeatureSettingsCompatibility();
 }
 void Test_TuyaMCU_Basic() {
 	// reset whole device
@@ -1031,6 +1327,11 @@ void Test_TuyaMCU_Robustness() {
 	Sim_RunFrames(100, false);
 	SELFTEST_ASSERT_CHANNEL(20, 1);
 
+	// High-bit values must be decoded as defined signed 32-bit values.
+	CMD_ExecuteCommand("uartFakeHex 55AA0307000801020004FFFFFFF60B", 0);
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(20, -10);
+
 	// -----------------------------------------------------------------------
 	// Part 2: Truncated V0 cmd 0x05 packet (no datetime prefix)
 	//
@@ -1084,6 +1385,80 @@ void Test_TuyaMCU_Robustness() {
 	CMD_ExecuteCommand("uartFakeHex 55AA0008000F0000000000000001020004000000011E", 0);
 	Sim_RunFrames(100, false);
 	SELFTEST_ASSERT_CHANNEL(22, 1);
+
+	// Direct command injection must reject undersized and payload-less record frames.
+	SIM_ClearUART();
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA", 0);
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA0334000036", 0);
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// A plausible but incomplete false header must not wedge a valid packet behind it.
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 1 val 23", 0);
+	{
+		byte falseHeader[] = { 0x55, 0xAA, 0x03, 0x07, 0x03, 0x00 };
+		byte validPacket[] = { 0x55, 0xAA, 0x03, 0x07, 0x00, 0x08, 0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x19 };
+		int i;
+
+		for (i = 0; i < (int)sizeof(falseHeader); i++) {
+			UART_AppendByteToReceiveRingBuffer(falseHeader[i]);
+		}
+		for (i = 0; i < (int)sizeof(validPacket); i++) {
+			UART_AppendByteToReceiveRingBuffer(validPacket[i]);
+		}
+	}
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(23, 1);
+
+	// A complete bad-checksum frame is skipped without consuming the valid successor.
+	{
+		byte badPacket[] = { 0x55, 0xAA, 0x03, 0x07, 0x00, 0x00, 0x00 };
+		byte validPacket[] = { 0x55, 0xAA, 0x03, 0x07, 0x00, 0x08, 0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x02, 0x1A };
+		int i;
+
+		for (i = 0; i < (int)sizeof(badPacket); i++) {
+			UART_AppendByteToReceiveRingBuffer(badPacket[i]);
+		}
+		for (i = 0; i < (int)sizeof(validPacket); i++) {
+			UART_AppendByteToReceiveRingBuffer(validPacket[i]);
+		}
+	}
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(23, 2);
+
+	// Exercise a valid 279-byte frame: both length bytes and receive-buffer growth matter.
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("linkTuyaMCUOutputToChannel 1 val 24", 0);
+	{
+		byte header[] = { 0x55, 0xAA, 0x03, 0x07, 0x01, 0x10 };
+		byte rawHeader[] = { 0x63, 0x00, 0x01, 0x04 };
+		byte valueDP[] = { 0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x2A };
+		byte checksum = 0;
+		int i;
+
+		for (i = 0; i < (int)sizeof(header); i++) {
+			UART_AppendByteToReceiveRingBuffer(header[i]);
+			checksum += header[i];
+		}
+		for (i = 0; i < (int)sizeof(rawHeader); i++) {
+			UART_AppendByteToReceiveRingBuffer(rawHeader[i]);
+			checksum += rawHeader[i];
+		}
+		for (i = 0; i < 260; i++) {
+			UART_AppendByteToReceiveRingBuffer(0x00);
+		}
+		for (i = 0; i < (int)sizeof(valueDP); i++) {
+			UART_AppendByteToReceiveRingBuffer(valueDP[i]);
+			checksum += valueDP[i];
+		}
+		UART_AppendByteToReceiveRingBuffer(checksum);
+	}
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(24, 42);
 }
 
 #endif
