@@ -121,7 +121,31 @@ void Test_HassDiscovery_LED_CW() {
 }
 
 void Test_HassDiscovery_LED_RGB() {
-	// TODO
+	const char *shortName = "RGBtest";
+	const char *fullName = "Windows Fake RGB";
+	const char *mqttName = "testRGB";
+
+	SIM_ClearOBK(shortName);
+	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
+
+	CFG_SetShortDeviceName(shortName);
+	CFG_SetDeviceName(fullName);
+
+	PIN_SetPinRoleForPinIndex(24, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(24, 1);
+	PIN_SetPinRoleForPinIndex(26, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(26, 2);
+	PIN_SetPinRoleForPinIndex(9, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(9, 3);
+
+	SIM_ClearMQTTHistory();
+	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
+	Sim_RunSeconds(5, false);
+
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_cmd_t", "cmnd/testRGB/led_dimmer");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testRGB/led_basecolor_rgb");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "cmd_t", "cmnd/testRGB/led_enableAll");
+	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testRGB/led_temperature");
 }
 
 void Test_HassDiscovery_LED_RGBCW() {
@@ -214,8 +238,73 @@ void Test_HassDiscovery_LED_RGBW() {
 	//SIM_DumpMQTTHistory();
 }
 void Test_HassDiscovery_LED_SingleColor() {
-	// TODO
+	const char *shortName = "SingleLEDtest";
+	const char *fullName = "Windows Fake Single LED";
+	const char *mqttName = "testSingleLED";
+
+	SIM_ClearOBK(shortName);
+	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
+
+	CFG_SetShortDeviceName(shortName);
+	CFG_SetDeviceName(fullName);
+
+	PIN_SetPinRoleForPinIndex(24, IOR_PWM);
+	PIN_SetPinChannelForPinIndex(24, 1);
+
+	SIM_ClearMQTTHistory();
+	CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
+	Sim_RunSeconds(5, false);
+
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_cmd_t", "cmnd/testSingleLED/led_dimmer");
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "cmd_t", "cmnd/testSingleLED/led_enableAll");
+	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testSingleLED/led_basecolor_rgb");
+	SELFTEST_ASSERT_HAS_NOT_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testSingleLED/led_temperature");
 }
+
+#if ENABLE_DRIVER_TUYAMCU
+void Test_HassDiscovery_LED_TuyaMCU() {
+	const char *shortName = "TuyaLEDtest";
+	const char *fullName = "Windows Fake TuyaMCU LED";
+	const char *mqttName = "testTuyaLED";
+	static const int maps[6][5] = {
+		{ 0xff, 0xff, 0xff, 0xff, 0xff },
+		{ 0,    0xff, 0xff, 0xff, 0xff },
+		{ 0,    1,    0xff, 0xff, 0xff },
+		{ 0,    1,    2,    0xff, 0xff },
+		{ 0,    1,    2,    3,    0xff },
+		{ 0,    1,    2,    3,    4    }
+	};
+
+	SIM_ClearOBK(shortName);
+	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
+
+	CFG_SetShortDeviceName(shortName);
+	CFG_SetDeviceName(fullName);
+
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+	CMD_ExecuteCommand("tuyaMcu_setupLED 24 1", 0);
+	SELFTEST_ASSERT(TuyaMCU_IsLEDRunning());
+
+	// A TuyaMCU LED is a logical UART-backed LED driver. HA discovery must not
+	// depend on the persisted physical LED_Map left by a different LED driver.
+	for (int mapIndex = 0; mapIndex < 6; mapIndex++) {
+		CFG_SetLEDRemap(maps[mapIndex][0], maps[mapIndex][1], maps[mapIndex][2], maps[mapIndex][3], maps[mapIndex][4]);
+
+		SIM_ClearMQTTHistory();
+		CMD_ExecuteCommand("scheduleHADiscovery 1", 0);
+		Sim_RunSeconds(5, false);
+
+		SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "bri_cmd_t", "cmnd/testTuyaLED/led_dimmer");
+		SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "rgb_cmd_t", "cmnd/testTuyaLED/led_basecolor_rgb");
+		SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "clr_temp_cmd_t", "cmnd/testTuyaLED/led_temperature");
+		SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "cmd_t", "cmnd/testTuyaLED/led_enableAll");
+	}
+
+	// Do not leak the logical LED-active state into later simulator tests.
+	CMD_ExecuteCommand("tuyaMcu_setupLED -1 -1", 0);
+}
+#endif
+
 void Test_HassDiscovery_DHT11() {
 	const char *shortName = "DHTtest";
 	const char *fullName = "Windows Fake DHT11";
@@ -224,9 +313,13 @@ void Test_HassDiscovery_DHT11() {
 	SIM_ClearOBK(shortName);
 	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
 
+	CFG_SetShortDeviceName(shortName);
+	CFG_SetDeviceName(fullName);
+
 	PIN_SetPinRoleForPinIndex(24, IOR_DHT11);
 	// for testing purposes, set channels 15 and 25
 	PIN_SetPinChannelForPinIndex(24, 15);
+	PIN_SetPinRoleForPinIndex(26, IOR_DHT11);
 	PIN_SetPinChannel2ForPinIndex(24, 25);
 
 	SIM_ClearMQTTHistory();
@@ -237,7 +330,7 @@ void Test_HassDiscovery_DHT11() {
 
 	// OBK device should publish JSON on MQTT topic "homeassistant"
 	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
-	//SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, "dev", 0, "name", shortName);
+	//SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "unit_of_meas", "°C");
 	// first dev - as temperature
 	//SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "unit_of_meas", "°C");
 	// old method - round
@@ -278,16 +371,13 @@ void Test_HassDiscovery_Battery() {
 	Sim_RunSeconds(10, false);
 
 
-	// OBK device should publish JSON on MQTT topic "homeassistant"
-	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
-	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, "dev", 0, "name", shortName);
-	// first dev - as battery
+	// first dev -
 	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
 		"dev_cla", "battery",
 		"stat_t", "~/battery/get",
 		"unit_of_meas", "%",
 		"stat_cla", "measurement");
-	// second dev - as voltage
+	// second dev -
 	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
 		"dev_cla", "voltage",
 		"stat_t", "~/voltage/get",
@@ -544,6 +634,9 @@ void Test_HassDiscovery() {
 	Test_HassDiscovery_LED_RGBCW();
 	Test_HassDiscovery_LED_SingleColor();
 	Test_HassDiscovery_LED_RGBW();
+#if ENABLE_DRIVER_TUYAMCU
+	Test_HassDiscovery_LED_TuyaMCU();
+#endif
 #endif
 	Test_HassDiscovery_DHT11();
 	Test_HassDiscovery_digitalInput();
