@@ -313,13 +313,9 @@ void Test_HassDiscovery_DHT11() {
 	SIM_ClearOBK(shortName);
 	SIM_ClearAndPrepareForMQTTTesting(mqttName, "bekens");
 
-	CFG_SetShortDeviceName(shortName);
-	CFG_SetDeviceName(fullName);
-
 	PIN_SetPinRoleForPinIndex(24, IOR_DHT11);
 	// for testing purposes, set channels 15 and 25
 	PIN_SetPinChannelForPinIndex(24, 15);
-	PIN_SetPinRoleForPinIndex(26, IOR_DHT11);
 	PIN_SetPinChannel2ForPinIndex(24, 25);
 
 	SIM_ClearMQTTHistory();
@@ -330,7 +326,7 @@ void Test_HassDiscovery_DHT11() {
 
 	// OBK device should publish JSON on MQTT topic "homeassistant"
 	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
-	//SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "unit_of_meas", "°C");
+	//SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, "dev", 0, "name", shortName);
 	// first dev - as temperature
 	//SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, 0, 0, "unit_of_meas", "°C");
 	// old method - round
@@ -371,13 +367,16 @@ void Test_HassDiscovery_Battery() {
 	Sim_RunSeconds(10, false);
 
 
-	// first dev -
+	// OBK device should publish JSON on MQTT topic "homeassistant"
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT("homeassistant", true);
+	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY("homeassistant", true, "dev", 0, "name", shortName);
+	// first dev - as battery
 	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
 		"dev_cla", "battery",
 		"stat_t", "~/battery/get",
 		"unit_of_meas", "%",
 		"stat_cla", "measurement");
-	// second dev -
+	// second dev - as voltage
 	SELFTEST_ASSERT_HAS_MQTT_JSON_SENT_ANY_4KEY("homeassistant", true, 0, 0,
 		"dev_cla", "voltage",
 		"stat_t", "~/voltage/get",
@@ -645,4 +644,3 @@ void Test_HassDiscovery() {
 
 
 #endif
-
