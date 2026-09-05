@@ -8,6 +8,8 @@
 #include "hal/hal_wifi.h"
 #include "hal/hal_flashConfig.h"
 #include "cmnds/cmd_public.h"
+#include "driver/drv_tuyaMCU.h"
+#include "driver/drv_public.h"
 #if ENABLE_LITTLEFS
 #include "littlefs/our_lfs.h"
 #endif
@@ -182,7 +184,45 @@ void CFG_SetDefaultLEDRemap(int r, int g, int b, int c, int w) {
 		CFG_SetLEDRemap(r, g, b, c, w);
 	}
 }
+static bool CFG_IsPureTuyaMCULEDBackend() {
+#if ENABLE_DRIVER_TUYAMCU
+	int pwmCount = 0;
+
+	if (!TuyaMCU_IsLEDRunning()) {
+		return false;
+	}
+
+	// A local PWM light is a real LED backend too. Preserve its existing
+	// discovery behaviour instead of allowing TuyaMCU to override it.
+	PIN_get_Relay_PWM_Count(0, &pwmCount, 0);
+	if (pwmCount != 0) {
+		return false;
+	}
+
+#ifndef OBK_DISABLE_ALL_DRIVERS
+	// Keep physical LED drivers on their configured LED_Map path. This list
+	// mirrors the physical backends recognised by LED_IsLedDriverChipRunning().
+	if (DRV_IsRunning("SM2135") || DRV_IsRunning("BP5758D")
+		|| DRV_IsRunning("TESTLED") || DRV_IsRunning("SM2235") || DRV_IsRunning("BP1658CJ")
+		|| DRV_IsRunning("KP18058") || DRV_IsRunning("SM16703P")
+		|| DRV_IsRunning("SM15155E") || DRV_IsRunning("DMX")) {
+		return false;
+	}
+#endif
+
+	return true;
+#else
+	return false;
+#endif
+}
 int CFG_CountLEDRemapChannels() {
+	// TuyaMCU's LED bridge is logical and UART-backed, so a stale physical
+	// LED_Map must not determine its Home Assistant or web light capabilities.
+	// Before PR #1789, a running TuyaMCU LED was treated as an RGBCW light.
+	if (CFG_IsPureTuyaMCULEDBackend()) {
+		return 5;
+	}
+
 	int r = 0;
 	for (int i = 0; i < 5; i++) {
 		int ch = g_cfg.ledRemap.ar[i];
@@ -313,7 +353,7 @@ void CFG_SetMQTTPort(int p) {
 }
 void CFG_SetOpenAccessPoint() {
 	// is there a change?
-	if(g_cfg.wifi_ssid[0] == 0 && g_cfg.wifi_pass[0] == 0) {
+	if (g_cfg.wifi_ssid[0] == 0 && g_cfg.wifi_pass[0] == 0) {
 		return;
 	}
 	g_cfg.wifi_ssid[0] = 0;
@@ -790,17 +830,13 @@ void CFG_SetMQTTUseTls(byte value) {
 	}
 }
 void CFG_SetMQTTVerifyTlsCert(byte value) {
-	// is there a change?
 	if (g_cfg.mqtt_verify_tls_cert != value) {
 		g_cfg.mqtt_verify_tls_cert = value;
-		// mark as dirty (value has changed)
 		g_cfg_pendingChanges++;
 	}
 }
 void CFG_SetMQTTCertFile(const char* s) {
-	// this will return non-zero if there were any changes
 	if (strcpy_safe_checkForChanges(g_cfg.mqtt_cert_file, s, sizeof(g_cfg.mqtt_cert_file))) {
-		// mark as dirty (value has changed)
 		g_cfg_pendingChanges++;
 	}
 }
@@ -808,10 +844,8 @@ byte CFG_GetDisableWebServer() {
 	return g_cfg.disable_web_server;
 }
 void CFG_SetDisableWebServer(byte value) {
-	// is there a change?
 	if (g_cfg.disable_web_server != value) {
 		g_cfg.disable_web_server = value;
-		// mark as dirty (value has changed)
 		g_cfg_pendingChanges++;
 	}
 }
