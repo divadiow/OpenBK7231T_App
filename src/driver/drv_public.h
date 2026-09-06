@@ -90,6 +90,46 @@ bool DRV_IsSensor();
 void TuyaMCU_OnRGBCWChange(const float *rgbcw, int bLightEnableAll, int iLightMode, float brightnessRange01, float temperatureRange01);
 bool TuyaMCU_IsLEDRunning();
 
+/*
+ * CFG_CountLEDRemapChannels() describes the LED_Map used by physical LED
+ * driver chips. TuyaMCU's LED bridge is logical/UART-backed and does not use
+ * that map. http_fns.c historically uses the remap count for both its LED UI
+ * and Home Assistant discovery, so adjust those callers without changing the
+ * stored LED_Map or the physical-driver semantics.
+ *
+ * The wrapper is deliberately only enabled when new_cfg.h and new_pins.h have
+ * already been included. At present the CFG_CountLEDRemapChannels() callers
+ * that also include drv_public.h are in http_fns.c, where this is the intended
+ * discovery/UI behaviour.
+ */
+#if ENABLE_DRIVER_TUYAMCU && defined(__NEW_CFG_H__) && defined(__NEW_PINS_H__)
+static inline bool LED_IsPhysicalDriverChipRunningForDiscovery(void) {
+#ifndef OBK_DISABLE_ALL_DRIVERS
+	return DRV_IsRunning("SM2135") || DRV_IsRunning("BP5758D")
+		|| DRV_IsRunning("TESTLED") || DRV_IsRunning("SM2235") || DRV_IsRunning("BP1658CJ")
+		|| DRV_IsRunning("KP18058")
+		|| DRV_IsRunning("SM16703P")
+		|| DRV_IsRunning("SM15155E")
+		|| DRV_IsRunning("DMX");
+#else
+	return false;
+#endif
+}
+
+static inline int LED_GetEffectiveMappedChannelCount(void) {
+	if (TuyaMCU_IsLEDRunning() && !LED_IsPhysicalDriverChipRunningForDiscovery()) {
+		int pwmCount = 0;
+		PIN_get_Relay_PWM_Count(0, &pwmCount, 0);
+		// Local PWM configuration takes precedence in mixed local/Tuya setups.
+		// With no local PWM, tuyaMcu_setupLED exposes the full logical RGBCW API.
+		return pwmCount > 0 ? pwmCount : 5;
+	}
+	return (CFG_CountLEDRemapChannels)();
+}
+
+#define CFG_CountLEDRemapChannels() LED_GetEffectiveMappedChannelCount()
+#endif
+
 void Shutter_MoveByIndex(int index, float frac, bool bStopOnDuplicate);
 
 #endif /* __DRV_PUBLIC_H__ */
