@@ -11,7 +11,6 @@
 //#include "driver/drv_ir.h"
 #include "driver/drv_public.h"
 #include "driver/drv_bl_shared.h"
-#include "driver/drv_hlw8112.h"
 //#include "ir/ir_local.h"
 
 #include "driver/drv_deviceclock.h"
@@ -35,6 +34,9 @@
 
 #if ENABLE_LITTLEFS
 #include "littlefs/our_lfs.h"
+#endif
+#if ENABLE_LITTLEFS && ENABLE_LOG2LFS
+uint8_t g_log2lfs;
 #endif
 
 
@@ -119,7 +121,7 @@ void Main_ForceUnsafeInit();
 #if PLATFORM_BEKEN
 #define WFI_FUNC WFI
 #elif PLATFORM_BL602 || PLATFORM_REALTEK || PLATFORM_XRADIO || PLATFORM_W600 || PLATFORM_RDA5981 || PLATFORM_LN8825 \
-	|| PLATFORM_LN882H || PLATFORM_BL_NEW
+	|| PLATFORM_LN882H || PLATFORM_BL_NEW || PLATFORM_GD32VW553 || PLATFORM_ARMINO
 #define WFI_FUNC() __asm volatile("wfi")
 #elif PLATFORM_W800
 #define WFI_FUNC __WFI
@@ -262,7 +264,7 @@ int LWIP_GetActiveSockets() {
 
 #if PLATFORM_BL602 || PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H || PLATFORM_LN8825 \
 	|| PLATFORM_ESPIDF || PLATFORM_TR6260 || PLATFORM_REALTEK || PLATFORM_ECR6600 \
-	|| PLATFORM_XRADIO || PLATFORM_ESP8266 || PLATFORM_BL_NEW
+	|| PLATFORM_XRADIO || PLATFORM_ESP8266 || PLATFORM_BL_NEW || PLATFORM_GD32VW553
 
 OSStatus rtos_create_thread(beken_thread_t* thread,
 	uint8_t priority, const char* name,
@@ -713,7 +715,8 @@ bool Main_HasFastConnect() {
 		return true;
 	}
 	if ((PIN_FindPinIndexForRole(IOR_DoorSensorWithDeepSleep, -1) != -1) ||
-		(PIN_FindPinIndexForRole(IOR_DoorSensorWithDeepSleep_NoPup, -1) != -1))
+		(PIN_FindPinIndexForRole(IOR_DoorSensorWithDeepSleep_NoPup, -1) != -1) ||
+		(PIN_FindPinIndexForRole(IOR_DoorSensorWithDeepSleep_pd, -1) != -1))
 	{
 		return true;
 	}
@@ -772,6 +775,10 @@ void Main_OnEverySecond()
 		g_wifi_temperature = HAL_ADC_Temp();
 #elif PLATFORM_ECR6600
 		g_wifi_temperature = hal_adc_tempsensor();
+#elif PLATFORM_ARMINO
+		uint32_t adc_code = 0;
+		temp_detect_get_temperature(&adc_code);
+		g_wifi_temperature = bk_adc_data_calculate(adc_code, ADC_TEMP_SENSOR_CHANNEL);
 #endif
 	}
 
@@ -814,7 +821,7 @@ void Main_OnEverySecond()
 #ifndef OBK_DISABLE_ALL_DRIVERS
 	DRV_OnEverySecond();
 #if defined(PLATFORM_BEKEN) || defined(WINDOWS) || defined(PLATFORM_BL602) || defined(PLATFORM_ESPIDF) \
- || defined (PLATFORM_RTL87X0C) || PLATFORM_ESP8266 && !PLATFORM_BL_NEW
+ || defined (PLATFORM_RTL87X0C) || PLATFORM_ESP8266 || defined(PLATFORM_ARMINO) && !PLATFORM_BL_NEW
 	UART_RunEverySecond();
 #endif
 #endif
@@ -1072,9 +1079,7 @@ void Main_OnEverySecond()
 				BL09XX_SaveEmeteringStatistics();
 			}
 #endif       
-#if ENABLE_DRIVER_HLW8112SPI
-			HLW8112_Save_Statistics();
-#endif 
+			DRV_SavePowerMeterDriverStatistics();
 			ADDLOGF_INFO("Rebooting...");
 			// call disconnect so that fast connect wouldn't fail
 			HAL_DisconnectFromWifi();
@@ -1135,7 +1140,7 @@ void QuickTick(void* param)
 	PIN_ticks(param);
 #endif
 
-#if defined(PLATFORM_BEKEN) || defined(WINDOWS)
+#if defined(PLATFORM_BEKEN) || defined(WINDOWS) || defined(PLATFORM_ARMINO)
 	g_timeMs = rtos_get_time();
 #elif defined(PLATFORM_ESPIDF) //|| defined(PLATFORM_ESP8266)
 	g_timeMs = esp_timer_get_time() / 1000;
@@ -1210,7 +1215,7 @@ void QuickTick(void* param)
 
 #elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_TR6260 || defined(PLATFORM_REALTEK) || PLATFORM_ECR6600 \
 	|| PLATFORM_ESP8266 || PLATFORM_ESPIDF || PLATFORM_XRADIO || PLATFORM_LN882H || PLATFORM_TXW81X || PLATFORM_RDA5981 || PLATFORM_LN8825 \
-	|| PLATFORM_BL_NEW
+	|| PLATFORM_BL_NEW || PLATFORM_GD32VW553
 void quick_timer_thread(void* param)
 {
 	while (1) {
@@ -1226,7 +1231,7 @@ void QuickTick_StartThread(void)
 #if WINDOWS
 
 #elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_TR6260 || defined(PLATFORM_REALTEK) || PLATFORM_ECR6600 \
-	|| PLATFORM_ESP8266 || PLATFORM_ESPIDF || PLATFORM_XRADIO || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_BL_NEW
+	|| PLATFORM_ESP8266 || PLATFORM_ESPIDF || PLATFORM_XRADIO || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_BL_NEW || PLATFORM_GD32VW553
 	xTaskCreate(quick_timer_thread, "quick", QT_STACK_SIZE, NULL, 15, NULL);
 #elif PLATFORM_TXW81X
 	os_task_create("quick", quick_timer_thread, NULL, 15, 0, NULL, QT_STACK_SIZE);
@@ -1330,6 +1335,9 @@ void Main_Init_BeforeDelay_Unsafe(bool bAutoRunScripts) {
 #ifdef PLATFORM_BEKEN
 	int bk_misc_get_start_type();
 	g_rebootReason = bk_misc_get_start_type();
+#elif PLATFORM_ARMINO
+	extern uint32_t reset_reason_init(void);
+	g_rebootReason = reset_reason_init();
 #endif
 
 	RepeatingEvents_Init();
@@ -1413,6 +1421,10 @@ void Main_Init_BeforeDelay_Unsafe(bool bAutoRunScripts) {
 			if (PIN_FindPinIndexForRole(IOR_BL0937_CF, -1) != -1 && PIN_FindPinIndexForRole(IOR_BL0937_CF1, -1) != -1
 				&& (PIN_FindPinIndexForRole(IOR_BL0937_SEL, -1) != -1 || PIN_FindPinIndexForRole(IOR_BL0937_SEL_n, -1) != -1)) {
 				DRV_StartDriver("BL0937");
+			}
+			if (PIN_FindPinIndexForRole(IOR_BL0939_SCLK, -1) != -1 && PIN_FindPinIndexForRole(IOR_BL0939_MOSI, -1) != -1
+				&& PIN_FindPinIndexForRole(IOR_BL0939_MISO, -1) != -1) {
+				DRV_StartDriver("BL0939SPI");
 			}
 			if ((PIN_FindPinIndexForRole(IOR_BridgeForward, -1) != -1) && (PIN_FindPinIndexForRole(IOR_BridgeReverse, -1) != -1))
 			{
@@ -1618,6 +1630,28 @@ void Main_Init_After_Delay()
 		}
 #endif
 		Main_Init_AfterDelay_Unsafe(true);
+#if ENABLE_LITTLEFS && ENABLE_LOG2LFS
+	// we have to wait until berry was run - it will else somewhow reinit/remount lfs and
+	// log2lfs will crash when its already writing ...
+	// defines/macros (LOG2LFS_SECONDS) included from logging.h
+	void initLog2LFS(void);	// implemented in logging.c
+	// Now CFG flash is ininitialized, immediatley check
+	// if we want startup log to be saved to LFS
+	g_log2lfs = LOG2LFS_SECONDS(CFG_Get_log2lfs());
+#if WINDOWS
+	// don't run log2lfs in selfTestMode  - it will kill LFS while
+	// log2lfs uses LFS
+	extern int g_selfTestsMode;
+	if ( g_selfTestsMode != 0) g_log2lfs = 0;
+	// uncomment for testing on Simulator: set to log first 20 seconds
+/*
+	else
+		if (g_log2lfs == 0) g_log2lfs = 20;
+*/
+#endif
+	if (g_log2lfs > 0) initLog2LFS();
+//	bk_printf("g_log2lfs=%i\r\n", g_log2lfs);
+#endif
 	}
 
 	ADDLOGF_INFO("%s done", __func__);
@@ -1659,8 +1693,8 @@ void Main_Init()
 }
 
 #if PLATFORM_ESPIDF || PLATFORM_ESP8266 || PLATFORM_BL602 || PLATFORM_REALTEK \
-|| PLATFORM_XRADIO || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_LN8825 || PLATFORM_LN882H || PLATFORM_BL_NEW
-#if PLATFORM_REALTEK_NEW
+|| PLATFORM_XRADIO || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_LN8825 || PLATFORM_LN882H || PLATFORM_BL_NEW || PLATFORM_ARMINO
+#if PLATFORM_REALTEK_NEW || PLATFORM_ARMINO
 void __wrap_vApplicationIdleHook(void)
 {
 	__real_vApplicationIdleHook();

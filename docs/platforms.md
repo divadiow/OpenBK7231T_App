@@ -3,10 +3,12 @@
 | BK7231T                                                 | Beken          | ✅   | ✅¹² | ✅     | ✅       | ✅   | ✅  | ✅  | ✅         | ✅  | ✅¹²   | ✅  | ❌  |
 | BK7231N                                                 | Beken          | ✅   | ✅¹² | ✅     | ✅       | ✅   | ✅  | ✅  | ✅         | ✅  | ✅     | ✅  | ✅  |
 | BK7231S<br>BK7231U                                      | Beken          | ✅   | ✅   | ✅¹    | ✅       | ✅   | ✅  | ✅  | ✅         | ✅  | ✅     | ✅  | ❌  |
+| BK7236                                                  | Beken          | ✅   | ✅   | ✅     | ✅       | ✅   | ✅  | ❌  | ✅         | ✅  | ❌     | ✅  | ❌  |
 | BK7238                                                  | Beken          | ✅   | ✅   | ✅     | ✅       | ✅   | ✅  | ✅  | ✅         | ✅  | ✅     | ✅  | ✅  |
+| BK7239N                                                 | Beken          | ✅   | ✅   | ✅     | ✅       | ✅   | ✅  | ❌  | ✅         | ✅  | ❌     | ✅  | ❌  |
 | BK7252                                                  | Beken          | ✅   | ✅   | ⚠️¹'¹⁴ | ✅       | ✅   | ✅  | ✅  | ✅         | ✅  | ✅     | ✅  | ❌  |
 | BK7252N                                                 | Beken          | ✅   | ✅   | ✅     | ✅       | ✅   | ✅  | ✅  | ✅         | ✅  | ✅     | ✅  | ❓  |
-| XR809                                                   | XRadio         | ✅   | ❌   | ❗️⁵    | ✅       | ✅   | ✅⁸ | ✅  | ✅         | ✅  | ❓     | ❓⁹ | ➖  |
+| XR809                                                   | XRadio         | ✅   | ❌   | ✅     | ✅       | ✅   | ✅⁸ | ✅  | ✅         | ✅  | ❓     | ❓⁹ | ➖  |
 | XR806                                                   | XRadio         | ✅   | ✅   | ✅     | ✅       | ✅   | ✅⁸ | ✅  | ✅         | ✅  | ✅     | ✅  | ❌  |
 | XR872/XF16                                              | XRadio         | ✅   | ✅   | ✅²    | ✅       | ✅   | ✅⁸ | ✅  | ✅         | ✅  | ❓     | ❓⁹ | ➖  |
 | BL602/LF686                                             | Bouffalo Lab   | ✅   | ✅   | ✅⁴    | ✅       | ✅   | ✅  | ❌  | ✅         | ✅  | ✅     | ✅  | ❌  |
@@ -27,6 +29,7 @@
 | RDA5981                                                 | RDA            | ✅   | ❌   | ✅     | ✅       | ✅   | ✅  | ❌  | ❌         | ✅  | ➖     | ❌  | ➖  |
 | LN8825B                                                 | Lightning Semi | ✅   | ❌   | ✅     | ✅       | ❌   | ✅  | ✅  | ❌         | ✅  | ❌     | ✅  | ➖  |
 | BL616                                                   | Bouffalo Lab   | ✅   | ✅   | ✅⁴    | ✅       | ❌   | ✅  | ❌  | ❌         | ✅  | ✅     | ✅  | ❌  |
+| GD32VW553                                               | GigaDevice     | ✅   | ✅   | ✅⁴    | ✅³      | ✅   | ✅⁸ | ✅  | ✅¹⁰       | ✅  | ✅     | ✅  | ✅⁶ |
 
 
 ✅ - Works<br>
@@ -38,7 +41,7 @@
 
 ¹ Success dependant on partition layout set in bootloader. SPI flash QIO firmware for guaranteed OTA success<br>
 ² Excluding 1MB variation<br>
-³ Implemented, but no tool to generate the file<br>
+³ Be careful with assignments (only one interrupt per pin, something A00 and B00 together is not supported)<br>
 ⁴ No HTTP OTA, only in Web App<br>
 ⁵ OTA attempt leads to device crash<br>
 ⁶ Disabled in obk_config <br>

@@ -141,6 +141,23 @@ void OWM_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState
 void DRV_HTTPButtons_ProcessChanges(http_request_t *request);
 void DRV_HTTPButtons_AddToHtmlPage(http_request_t *request);
 void DRV_InitHTTPButtons();
+#if ENABLE_HA_DISCOVERY
+void DRV_HTTPButtons_OnHassDiscovery(const char *topic);
+
+void BKSDCard_Init(void);
+void BKSDCard_OnEverySecond(void);
+void BKSDCard_StopDriver(void);
+void BKSDCard_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
+int BKSDCardFs_Mount(void);
+int BKSDCardFs_Unmount(void);
+int BKSDCardFs_IsMounted(void);
+int BKSDCardFs_LastResult(void);
+void BKSDCardFs_SetBase(unsigned int lba);
+unsigned int BKSDCardFs_GetBase(void);
+unsigned int BKSDCardFs_Reads(void);
+unsigned int BKSDCardFs_ReadFails(void);
+
+#endif
 
 void CHT83XX_Init();
 void CHT83XX_OnEverySecond();
@@ -165,6 +182,16 @@ void SGP_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState
 void SGP_OnEverySecond();
 void SGP_StopDriver();
 
+void BKCharge_Init(void);
+void BKCharge_OnEverySecond(void);
+void BKCharge_StopDriver(void);
+void BKCharge_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
+
+void BKAudio_Init(void);
+void BKAudio_OnEverySecond(void);
+void BKAudio_RunQuickTick(void);
+void BKAudio_StopDriver(void);
+void BKAudio_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
 void Batt_Init();
 void Batt_OnEverySecond();
 void Batt_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);

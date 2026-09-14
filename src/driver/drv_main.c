@@ -2,6 +2,7 @@
 #include "../logging/logging.h"
 #include "drv_bl0937.h"
 #include "drv_bl0942.h"
+#include "drv_bl0939.h"
 #include "drv_bl_shared.h"
 #include "drv_neo6m.h"
 #include "drv_cse7766.h"
@@ -17,6 +18,7 @@
 #include "drv_tuyaMCU.h"
 #include "drv_girierMCU.h"
 #include "drv_uart.h"
+#include "drv_gaitekAC.h"
 #include "drv_ds1820_simple.h"
 #include "drv_ds1820_full.h"
 #include "drv_ds1820_common.h"
@@ -443,7 +445,11 @@ static driver_t g_drivers[] = {
 	NULL,                                    // runQuickTick
 	NULL,                                    // stopFunction
 	NULL,                                    // onChannelChanged
+#if ENABLE_HA_DISCOVERY
+	DRV_HTTPButtons_OnHassDiscovery,        // onHassDiscovery
+#else
 	NULL,                                    // onHassDiscovery
+#endif
 	false,                                   // loaded
 	},
 #endif
@@ -636,6 +642,22 @@ static driver_t g_drivers[] = {
 	HLW8112SPI_Stop,                         // stopFunction
 	NULL,                                    // onChannelChanged
 	HLW8112_OnHassDiscovery,                 // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_BL0939SPI
+	//drvdetail:{"name":"BL0939SPI",
+	//drvdetail:"title":"BL0939 SPI dual-channel bidirectional power meter",
+	//drvdetail:"descr":"BL0939 SPI driver for dual CT clamp bidirectional power meters. Requires BL0939_SCLK, BL0939_MOSI and BL0939_MISO pin roles.",
+	//drvdetail:"requires":""}
+	{ "BL0939SPI",                           // Driver Name
+	BL0939_SPI_Init,                         // Init
+	BL0939_SPI_RunEverySecond,               // onEverySecond
+	BL0939_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	BL0939_SPI_Stop,                         // stopFunction
+	NULL,                                    // onChannelChanged
+	BL0939_OnHassDiscovery,                 // onHassDiscovery
 	false,                                   // loaded
 	},
 #endif
@@ -1399,6 +1421,54 @@ static driver_t g_drivers[] = {
 	//drvdetail:"title":"TODO",
 	//drvdetail:"descr":"Custom mechanism to measure battery level with ADC and an optional relay. See [example here](https://www.elektroda.com/rtvforum/topic3959103.html).",
 	//drvdetail:"requires":""}
+#if ENABLE_DRIVER_BKCHARGE
+	//drvdetail:{"name":"BKCharge",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"Reports the state of the BK7252N on-chip Li-ion charger: trickle, CC, CV, full, recharge and USB present. Publishes charging, charge_full and usb_power over MQTT and can drive a channel.",
+	//drvdetail:"requires":""}
+	{ "BKCharge",                            // Driver Name
+	BKCharge_Init,                                // Init
+	BKCharge_OnEverySecond,                       // onEverySecond
+	BKCharge_AppendInformationToHTTPIndexPage,    // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	BKCharge_StopDriver,                          // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_BKSDCARD
+	//drvdetail:{"name":"BKSDCard",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"Drives the BK7252N SD host, reports the card in the slot and reads raw blocks.",
+	//drvdetail:"requires":""}
+	{ "BKSDCard",                            // Driver Name
+	BKSDCard_Init,                           // Init
+	BKSDCard_OnEverySecond,                  // onEverySecond
+	BKSDCard_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	BKSDCard_StopDriver,                     // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_BKAUDIO
+	//drvdetail:{"name":"BKAudio",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"Captures from the BK7252N on-chip audio ADC and reports the level: RMS, peak, and a peak held until it is read. The ring buffer is drained from the quick tick, and the driver reports the sample rate it actually observes so that coverage can be checked.",
+	//drvdetail:"requires":""}
+	{ "BKAudio",                             // Driver Name
+	BKAudio_Init,                            // Init
+	BKAudio_OnEverySecond,                   // onEverySecond
+	BKAudio_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	BKAudio_RunQuickTick,                    // runQuickTick
+	BKAudio_StopDriver,                      // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
 	{ "Battery",                             // Driver Name
 	Batt_Init,                               // Init
 	Batt_OnEverySecond,                      // onEverySecond
@@ -1456,6 +1526,18 @@ static driver_t g_drivers[] = {
 	NULL,                                    // onChannelChanged
 	NULL,                                    // onHassDiscovery
 	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_GAITEKAC
+	{ "GaitekAC",
+	GaitekAC_Init,
+	GaitekAC_RunEverySecond,
+	NULL,
+	GaitekAC_RunQuickTick,
+	GaitekAC_Shutdown,
+	GaitekAC_OnChannelChanged,
+	NULL,
+	false,
 	},
 #endif
 #if PLATFORM_TXW81X
@@ -1555,6 +1637,15 @@ bool DRV_IsRunning(const char* name) {
 		}
 	}
 	return false;
+}
+
+void DRV_SavePowerMeterDriverStatistics(void) {
+#if ENABLE_DRIVER_HLW8112SPI
+	HLW8112_Save_Statistics();
+#endif
+#if ENABLE_DRIVER_BL0939SPI
+	BL0939_Save_Statistics();
+#endif
 }
 
 static SemaphoreHandle_t g_mutex = 0;

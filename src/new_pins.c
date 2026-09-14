@@ -256,6 +256,8 @@ void PINS_BeginDeepSleepWithPinWakeUp(unsigned int wakeUpTime) {
 				pull = 2;
 			}
 			SetWUPIO(i, pull, falling);
+#elif PLATFORM_ARMINO
+			bk_gpio_register_wakeup_source(i, 2 + falling);
 #else
 			setGPIActive(i, 1, falling);
 #endif
@@ -264,6 +266,14 @@ void PINS_BeginDeepSleepWithPinWakeUp(unsigned int wakeUpTime) {
 	addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL, "Index map: %i, edge: %i", g_gpio_index_map[0], g_gpio_edge_map[0]);
 #ifdef PLATFORM_BEKEN_NEW
 	PS_DEEP_CTRL_PARAM params;
+	// PS_DEEP_CTRL_PARAM has nine fields; we only fill a few of them, so without
+	// this the SDK gets stack garbage for gpio_stay_lo_map, gpio_stay_hi_map,
+	// gpio_last_index_map, gpio_last_edge_map and - worst of all - lpo_32k_src,
+	// which picks the RTC clock source. A random clock source is why timed
+	// wakeups fired at arbitrary times. Zero also happens to be the right
+	// default here: LPO_SELECT_ROSC, the internal oscillator, which every board
+	// has (a 32k crystal may not be fitted).
+	memset(&params, 0, sizeof(params));
 	params.gpio_index_map = g_gpio_index_map[0];
 	params.gpio_edge_map = g_gpio_edge_map[0];
 	params.sleep_mode = MANUAL_MODE_IDLE;
@@ -342,6 +352,22 @@ void PINS_BeginDeepSleepWithPinWakeUp(unsigned int wakeUpTime) {
 	HBN_Clear_IRQ(HBN_INT_GPIO7);
 	HBN_Clear_IRQ(HBN_INT_GPIO8);
 	HBN_Mode_Enter(&cfg);
+#elif PLATFORM_ARMINO
+	if(wakeUpTime)
+	{
+		alarm_info_t deep_sleep_alarm = {
+			"deep_ps",
+			(rtc_tick_t)((uint32_t)(wakeUpTime * 1000) * AON_RTC_MS_TICK_CNT),
+			1,
+			NULL,
+			NULL
+		};
+		bk_alarm_unregister(AON_RTC_ID_1, deep_sleep_alarm.name);
+		bk_alarm_register(AON_RTC_ID_1, &deep_sleep_alarm);
+		bk_pm_wakeup_source_set(PM_WAKEUP_SOURCE_INT_RTC, NULL);
+	}
+	bk_pm_wakeup_source_set(PM_WAKEUP_SOURCE_INT_GPIO, NULL);
+	bk_pm_sleep_mode_set(PM_MODE_DEEP_SLEEP);
 #endif
 }
 
@@ -472,16 +498,17 @@ int PIN_GetPinChannel2ForPinIndex(int index) {
 // taken from code in http_fnc.c
 int PIN_IOR_NofChan(int test){
 	// For button, is relay index to toggle on double click
-	if (test == IOR_Button || test == IOR_Button_n || IS_PIN_DHT_ROLE(test) || IS_PIN_TEMP_HUM_SENSOR_ROLE(test) || IS_PIN_AIR_SENSOR_ROLE(test)){
+	if (test == IOR_Button || test == IOR_Button_n || test == IOR_Button_pd || test == IOR_Button_pd_n || IS_PIN_DHT_ROLE(test) || IS_PIN_TEMP_HUM_SENSOR_ROLE(test) || IS_PIN_AIR_SENSOR_ROLE(test)){
 			return 2;
 	}
 	// Some roles don't need any channels
 	if (test == IOR_SGP_CLK || test == IOR_SHT3X_CLK || test == IOR_CHT83XX_CLK || test == IOR_Button_ToggleAll || test == IOR_Button_ToggleAll_n
 			|| test == IOR_BL0937_CF || test == IOR_BL0937_CF1 || test == IOR_BL0937_SEL
 			|| test == IOR_LED_WIFI || test == IOR_LED_WIFI_n || test == IOR_BL0937_SEL_n
-			|| test == IOR_RCRecv || test == IOR_RCRecv_nPup
+			|| test == IOR_RCRecv || test == IOR_RCRecv_nPup || test == IOR_IRRecv_nPup
 			|| (test >= IOR_IRRecv && test <= IOR_DHT11)
 			|| (test >= IOR_SM2135_DAT && test <= IOR_BP1658CJ_CLK)
+			|| test == IOR_BL0939_SCLK || test == IOR_BL0939_MOSI || test == IOR_BL0939_MISO
 			|| (test == IOR_HLW8112_SCSN)) {
 			return 0;
 	}
@@ -635,7 +662,8 @@ void Button_OnDoubleClick(int index)
 	// fire event - button on pin <index> was dbclicked
 	EventHandlers_FireEvent(CMD_EVENT_PIN_ONDBLCLICK, index);
 
-	if (g_cfg.pins.roles[index] == IOR_Button || g_cfg.pins.roles[index] == IOR_Button_n)
+	if (g_cfg.pins.roles[index] == IOR_Button || g_cfg.pins.roles[index] == IOR_Button_n
+		|| g_cfg.pins.roles[index] == IOR_Button_pd || g_cfg.pins.roles[index] == IOR_Button_pd_n)
 	{
 		// double click toggles SECOND CHANNEL linked to this button
 		CHANNEL_Toggle(g_cfg.pins.channels2[index]);
@@ -2194,7 +2222,7 @@ void PIN_ticks(void* param)
 
 	PIN_ApplyCounterDeltas();
 
-#if defined(PLATFORM_BEKEN) || defined(WINDOWS)
+#if defined(PLATFORM_BEKEN) || defined(WINDOWS) || defined(PLATFORM_ARMINO)
 	g_time = rtos_get_time();
 #else
 	g_time += PIN_TMR_DURATION;
@@ -2282,6 +2310,7 @@ void PIN_ticks(void* param)
 		else
 #endif
 			if (g_cfg.pins.roles[i] == IOR_Button || g_cfg.pins.roles[i] == IOR_Button_n
+				|| g_cfg.pins.roles[i] == IOR_Button_pd || g_cfg.pins.roles[i] == IOR_Button_pd_n
 				|| g_cfg.pins.roles[i] == IOR_Button_ToggleAll || g_cfg.pins.roles[i] == IOR_Button_ToggleAll_n
 				|| g_cfg.pins.roles[i] == IOR_Button_NextColor || g_cfg.pins.roles[i] == IOR_Button_NextColor_n
 				|| g_cfg.pins.roles[i] == IOR_Button_NextDimmer || g_cfg.pins.roles[i] == IOR_Button_NextDimmer_n
