@@ -1,0 +1,39 @@
+name: BL0937 host regressions
+on:
+  push:
+    paths:
+      - 'src/driver/drv_bl0937.c'
+      - 'src/driver/drv_pwrCal.*'
+      - 'src/driver/drv_bl_shared.*'
+      - 'tests/bl0937/**'
+      - '.github/workflows/bl0937-tests.yml'
+  pull_request:
+    paths:
+      - 'src/driver/drv_bl0937.c'
+      - 'src/driver/drv_pwrCal.*'
+      - 'src/driver/drv_bl_shared.*'
+      - 'tests/bl0937/**'
+      - '.github/workflows/bl0937-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install host compilers
+        run: sudo apt-get update && sudo apt-get install -y gcc clang
+      - name: Run production-source regression matrix
+        run: python3 tests/bl0937/run_tests.py --source . --out /tmp/obk-bl0937-tests
+      - name: Check interrupt code generation
+        run: python3 tests/bl0937/check_codegen.py --source . --out /tmp/obk-bl0937-codegen
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: bl0937-test-evidence
+          path: |
+            /tmp/obk-bl0937-tests/results.json
+            /tmp/obk-bl0937-tests/*.build.txt
+            /tmp/obk-bl0937-codegen/

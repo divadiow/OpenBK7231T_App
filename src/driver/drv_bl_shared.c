@@ -617,15 +617,9 @@ float BL_ChangeEnergyUnitIfNeeded(float Wh) {
 	return Wh;
 }
 
-#if ENABLE_BL_TWIN
-void BL_ProcessUpdateEx(int asensdatasetix, float voltage, float current, float power,
-  float frequency, float energyWh) {
-  if ((asensdatasetix < 0) || (asensdatasetix >= BL_SENSDATASETS_COUNT)) return;  //to avoid bad index on data[BL_SENSDATASETS_COUNT]
-#else
-void BL_ProcessUpdate(float voltage, float current, float power,
-  float frequency, float energyWh) {
-  int asensdatasetix = BL_SENSORS_IX_0;
-#endif
+static void BL_ProcessUpdateInternal(int asensdatasetix, float voltage, float current, float power,
+  float frequency, float energyWh, float sampleSeconds) {
+  if ((asensdatasetix < 0) || (asensdatasetix >= BL_SENSDATASETS_COUNT)) return;
   energysensdataset_t* sensdataset = &datasetlist[asensdatasetix];
 
   int i;
@@ -659,8 +653,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
   }
 
 #ifdef ENABLE_BL_MOVINGAVG
-  power = XJ_MovingAverage_float((float)sensdataset->sensors[OBK_POWER].lastReading, power);
-  current = XJ_MovingAverage_float((float)sensdataset->sensors[OBK_CURRENT].lastReading, current);
+  // A missing first CF1 sample must not poison every later moving average.
+  if (!isnan(power) && !isnan(sensdataset->sensors[OBK_POWER].lastReading))
+    power = XJ_MovingAverage_float((float)sensdataset->sensors[OBK_POWER].lastReading, power);
+  if (!isnan(current) && !isnan(sensdataset->sensors[OBK_CURRENT].lastReading))
+    current = XJ_MovingAverage_float((float)sensdataset->sensors[OBK_CURRENT].lastReading, current);
 #endif
 
   sensdataset->sensors[OBK_VOLTAGE].lastReading = voltage;
@@ -679,7 +676,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
   sensors_reciveddata[asensdatasetix] = 1;
   {
     float energy = 0;
-    if (isnan(energyWh)) {
+    if (!isnan(sampleSeconds)) {
+      // Integrate the actual CF acquisition window, not time spent publishing.
+      // Apply the same relay, negative-value and moving-average policies above.
+      energy = sampleSeconds * power / 3600.0f;
+    } else if (isnan(energyWh)) {
       xPassedTicks = (int)(xTaskGetTickCount() - energyCounterStamp[asensdatasetix]);
       // FIXME: Wrong calculation if tick count overflows
       if (xPassedTicks <= 0)
@@ -973,11 +974,22 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 }
 
 #if ENABLE_BL_TWIN
-void BL_ProcessUpdate(float voltage, float current, float power,
+void BL_ProcessUpdateEx(int asensdatasetix, float voltage, float current, float power,
   float frequency, float energyWh) {
-  BL_ProcessUpdateEx(BL_SENSORS_IX_0, voltage, current, power, frequency, energyWh);
+  BL_ProcessUpdateInternal(asensdatasetix, voltage, current, power, frequency, energyWh, NAN);
 }
 #endif
+
+void BL_ProcessUpdate(float voltage, float current, float power,
+  float frequency, float energyWh) {
+  BL_ProcessUpdateInternal(BL_SENSORS_IX_0, voltage, current, power, frequency, energyWh, NAN);
+}
+
+void BL_ProcessUpdateWithInterval(float voltage, float current, float power,
+  float frequency, float sampleSeconds) {
+  if (!isfinite(sampleSeconds) || sampleSeconds <= 0.0f || !isfinite(power)) return;
+  BL_ProcessUpdateInternal(BL_SENSORS_IX_0, voltage, current, power, frequency, NAN, sampleSeconds);
+}
 
 void BL_Shared_Init(void) {
   energysensdataset_t* sensdataset = &datasetlist[BL_SENSORS_IX_0];

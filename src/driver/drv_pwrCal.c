@@ -12,9 +12,9 @@ static float voltage_cal = 1;
 static float current_cal = 1;
 static float power_cal = 1;
 
-static int latest_raw_voltage;
+static float latest_raw_voltage;
 static float latest_raw_current;
-static int latest_raw_power;
+static float latest_raw_power;
 
 //#define PWRCAL_DEBUG
 
@@ -102,15 +102,26 @@ void PwrCal_Init(pwr_cal_type_t type, float default_voltage_cal,
     CMD_RegisterCommand("PowerSet", CalibratePower, NULL);
 }
 
+float PwrCal_ScaleVoltage(float raw_voltage) {
+    latest_raw_voltage = raw_voltage;
+    return Scale(raw_voltage, voltage_cal);
+}
+
+float PwrCal_ScaleCurrent(float raw_current) {
+    latest_raw_current = raw_current;
+    return Scale(raw_current, current_cal);
+}
+
+float PwrCal_ScalePower(float raw_power) {
+    latest_raw_power = raw_power;
+    return Scale(raw_power, power_cal);
+}
+
 void PwrCal_Scale(int raw_voltage, float raw_current, int raw_power,
                   float *real_voltage, float *real_current, float *real_power) {
-    latest_raw_voltage = raw_voltage;
-    latest_raw_current = raw_current;
-    latest_raw_power = raw_power;
-
-    *real_voltage = Scale(raw_voltage, voltage_cal);
-    *real_current = Scale(raw_current, current_cal);
-    *real_power = Scale(raw_power, power_cal);
+    *real_voltage = PwrCal_ScaleVoltage(raw_voltage);
+    *real_current = PwrCal_ScaleCurrent(raw_current);
+    *real_power = PwrCal_ScalePower(raw_power);
 }
 
 float PwrCal_ScalePowerOnly(int raw_power) {

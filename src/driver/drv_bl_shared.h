@@ -8,6 +8,10 @@
 void BL_Shared_Init(void);
 void BL_ProcessUpdate(float voltage, float current, float power,
                       float frequency, float energyWh);
+// For pulse drivers with an explicitly measured power window. Voltage/current
+// may be NAN until acquired; power must be finite and sampleSeconds positive.
+void BL_ProcessUpdateWithInterval(float voltage, float current, float power,
+                                 float frequency, float sampleSeconds);
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request, int bPreState);
 void BL09XX_SaveEmeteringStatistics();
 
