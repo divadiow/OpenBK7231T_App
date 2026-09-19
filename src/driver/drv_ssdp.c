@@ -206,6 +206,7 @@ static const char message_template[] =
 ;
 
 void DRV_WEMO_Send_Advert_To(int mode, struct sockaddr_in *addr);
+int DRV_WEMO_GetSearchType(const char *packet);
 void DRV_HUE_Send_Advert_To(struct sockaddr_in *addr);
 
 void DRV_SSDP_SendReply(struct sockaddr_in *addr, const char *message) {
@@ -492,15 +493,9 @@ void DRV_SSDP_RunQuickTick() {
         addLogAdv(LOG_EXTRADEBUG, LOG_FEATURE_HTTP,"Is MSEARCH - responding");
 #if ENABLE_DRIVER_WEMO
 		if (DRV_IsRunning("WEMO")) {
-			if (strcasestr(udp_msgbuf, "urn:belkin:device:**")
-				|| strcasestr(udp_msgbuf, "urn:belkin:device:controllee:1")) {
-				DRV_WEMO_Send_Advert_To(1, &addr);
-				return;
-			}
-			else if (strcasestr(udp_msgbuf, "upnp:rootdevice")
-				|| strcasestr(udp_msgbuf, "ssdpsearch:all")
-				|| strcasestr(udp_msgbuf, "ssdp:all")) {
-				DRV_WEMO_Send_Advert_To(2, &addr);
+			int wemoType = DRV_WEMO_GetSearchType(udp_msgbuf);
+			if (wemoType) {
+				DRV_WEMO_Send_Advert_To(wemoType, &addr);
 				return;
 			}
 		}
@@ -511,7 +506,7 @@ void DRV_SSDP_RunQuickTick() {
 				|| strcasestr(udp_msgbuf, "upnp:rootdevice")
 				|| strcasestr(udp_msgbuf, "ssdpsearch:all")
 				|| strcasestr(udp_msgbuf, "ssdp:all")) {
-				addLogAdv(LOG_ALL, LOG_FEATURE_HTTP, "SSDP has received HUE PACKET");
+				addLogAdv(LOG_ALL, LOG_FEATURE_HTTP,"SSDP has received HUE PACKET");
 				addLogAdv(LOG_ALL, LOG_FEATURE_HTTP, udp_msgbuf);
 				DRV_HUE_Send_Advert_To(&addr);
 				return;

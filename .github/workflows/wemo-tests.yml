@@ -1,0 +1,39 @@
+name: Wemo compatibility tests
+on:
+  push:
+    branches: ['wemo']
+    paths:
+      - 'src/driver/drv_wemo.c'
+      - 'src/driver/drv_ssdp.c'
+      - 'src/selftest/selftest_wemo.c'
+      - 'tests/wemo/**'
+      - '.github/workflows/wemo-tests.yml'
+  pull_request:
+    paths:
+      - 'src/driver/drv_wemo.c'
+      - 'src/driver/drv_ssdp.c'
+      - 'src/selftest/selftest_wemo.c'
+      - 'tests/wemo/**'
+      - '.github/workflows/wemo-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    name: Host tests (${{ matrix.compiler }}, ASan and UBSan)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - name: Compile production driver and run compatibility tests
+        env:
+          CC: ${{ matrix.compiler }}
+        run: python3 tests/wemo/run_tests.py --sanitize
