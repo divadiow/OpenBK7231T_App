@@ -15,6 +15,7 @@
 #if ENABLE_PING_WATCHDOG
 
 #include "lwip/mem.h"
+#include "lwip/pbuf.h"
 #include "lwip/raw.h"
 #include "lwip/icmp.h"
 #include "lwip/netif.h"
@@ -142,40 +143,55 @@ static void ping_timeout(void *arg)
   sys_timeout(PING_getPingIntervalMS(), ping_timeout, pcb);
 }
 
-static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
+static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p,
+                      const ip_addr_t *addr)
 {
-	unsigned int ms;
-  struct icmp_echo_hdr *iecho;
-  LWIP_UNUSED_ARG(arg);
-  LWIP_UNUSED_ARG(pcb);
-  LWIP_UNUSED_ARG(addr);
-  LWIP_ASSERT("p != NULL", p != NULL);
+    unsigned int ms;
+    u8_t version_ihl;
+    u16_t ip_hlen;
+    struct icmp_echo_hdr iecho;
 
-  if ((p->tot_len >= (PBUF_IP_HLEN + sizeof(struct icmp_echo_hdr))) &&
-      pbuf_header(p, -PBUF_IP_HLEN) == 0) {
-    iecho = (struct icmp_echo_hdr *)p->payload;
+    LWIP_UNUSED_ARG(arg);
+    LWIP_UNUSED_ARG(pcb);
+    LWIP_UNUSED_ARG(addr);
 
-    if ((iecho->id == PING_ID) && (iecho->seqno == lwip_htons(ping_seq_num))) {
-    //  LWIP_DEBUGF( PING_DEBUG, ("ping: recv "));
-    // ip_addr_debug_print(PING_DEBUG, addr);
-	  ms = (sys_now()-ping_time);
-    //  LWIP_DEBUGF( PING_DEBUG, (" %"U32_F" ms\n", ms));
-	  ping_received++;
-	bReceivedLastOneSend = 1;
-
-	//addLogAdv(LOG_INFO,LOG_FEATURE_MAIN,"Ping recv: %ims (total lost %i, recv %i)", ms,ping_lost,ping_received);
-
-	//  addLogAdv(LOG_INFO,LOG_FEATURE_MAIN,"Ping recv: %ims", ms);
-	Main_OnPingCheckerReply(ms);
-      PING_RESULT(1);
-      pbuf_free(p);
-      return 1; /* eat the packet */
+    /* An unconsumed raw packet must be returned completely unchanged. */
+    if (p == NULL ||
+        pbuf_copy_partial(p, &version_ihl, 1, 0) != 1) {
+        return 0;
     }
-    /* not eaten, restore original packet */
-    pbuf_header(p, PBUF_IP_HLEN);
-  }
 
-  return 0; /* don't eat the packet */
+    /* This watchdog uses IPv4 ICMP. Read the packet's actual IHL;
+     * PBUF_IP_HLEN is allocation headroom, not the received header length.
+     */
+    if ((version_ihl >> 4) != 4) {
+        return 0;
+    }
+    ip_hlen = (u16_t)((version_ihl & 0x0FU) * 4U);
+    if (ip_hlen < 20U || p->tot_len < ip_hlen + sizeof(iecho)) {
+        return 0;
+    }
+
+    /* Copy only the echo header; this also handles chained pbufs and
+     * does not cast or write through a possibly unaligned RX payload.
+     */
+    if (pbuf_copy_partial(p, &iecho, sizeof(iecho), ip_hlen) != sizeof(iecho)) {
+        return 0;
+    }
+
+    if (ICMPH_TYPE(&iecho) != ICMP_ER || ICMPH_CODE(&iecho) != 0 ||
+        iecho.id != PING_ID || iecho.seqno != lwip_htons(ping_seq_num)) {
+        return 0;
+    }
+
+    /* Preserve the existing matching-reply accounting and ownership. */
+    ms = sys_now() - ping_time;
+    ping_received++;
+    bReceivedLastOneSend = 1;
+    Main_OnPingCheckerReply(ms);
+    PING_RESULT(1);
+    pbuf_free(p);
+    return 1;
 }
 
 int PingWatchDog_GetTotalLost() {
