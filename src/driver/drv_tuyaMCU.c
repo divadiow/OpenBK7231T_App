@@ -508,8 +508,6 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 
 		len = UART_GetTuyaPacketLengthAt(0);
 		if (ringBufferSize <= 0 || len > ringBufferSize - 1) {
-			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,
-				"Discarding impossible TuyaMCU packet length %i (UART capacity %i)", len, ringBufferSize - 1);
 			UART_ConsumeBytes(1);
 			continue;
 		}
