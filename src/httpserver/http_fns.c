@@ -842,7 +842,10 @@ int http_fn_index(http_request_t* request) {
 
 			//(KELVIN_TEMPERATURE_MAX - KELVIN_TEMPERATURE_MIN) / (HASS_TEMPERATURE_MAX - HASS_TEMPERATURE_MIN) = 13
 			hprintf255(request, "<input type=\"range\" step='13' min=\"%ld\" max=\"%ld\" ", pwmKelvinMin, pwmKelvinMax);
-			hprintf255(request, "value=\"%ld\" data-value-id=\"sliderValue%i\" oninput=\"updateSliderValue(this)\" onchange=\"submitTemperature(this);\"/>", pwmKelvin, SPECIAL_CHANNEL_TEMPERATURE);
+			// a single value CTRange leaves no travel, so onchange can never fire and only a
+			// click can set it. Normal ranges are left alone, they would submit twice
+			const char *clickHandler = (pwmKelvinMin == pwmKelvinMax) ? " onclick=\"submitTemperature(this);\"" : "";
+			hprintf255(request, "value=\"%ld\" data-value-id=\"sliderValue%i\" oninput=\"updateSliderValue(this)\" onchange=\"submitTemperature(this);\"%s/>", pwmKelvin, SPECIAL_CHANNEL_TEMPERATURE, clickHandler);
 
 			hprintf255(request, "<input type=\"hidden\" name=\"%sIndex\" value=\"%i\"/>", inputName, SPECIAL_CHANNEL_TEMPERATURE);
 			hprintf255(request, "<input id=\"kelvin%i\" type=\"hidden\" name=\"%s\" />", SPECIAL_CHANNEL_TEMPERATURE, inputName);
@@ -2126,10 +2129,11 @@ HassDeviceInfo *hass_createEnumChannelInfo(int i) {
 		CMD_GenEnumValueTemplate(en, value_tmp, sizeof(value_tmp));
 		CMD_GenEnumCommandTemplate(en, command_tmp, sizeof(command_tmp));
 
-		strcpy(title, CHANNEL_GetLabel(i));
+		snprintf(title, sizeof(title), "%s", CHANNEL_GetLabel(i));
 		sprintf(stateTopic, "~/%i/get", i);
 		sprintf(cmdTopic, "~/%i/set", i);
 		dev_info = hass_createSelectEntityIndexedCustom(
+			i,
 			stateTopic,
 			cmdTopic,
 			en->numOptions,
@@ -2251,12 +2255,33 @@ void doHomeAssistantDiscovery(const char* topic, http_request_t* request) {
 			if (toggle == -1 || dimmer == -1) {
 				break;
 			}
+#if ENABLE_DRIVER_TUYAMCU
+			// On a TuyaMCU LED these raw channels are not the light. Real state
+			// lives in led_dimmer / led_basecolor_rgb, which the ENABLE_LED_BASIC
+			// block below already publishes. Advertising this pair as well gives
+			// HA a second light entity that is permanently stuck at 0. See #2218.
+			//
+			// Mark them published rather than just breaking out: otherwise the
+			// relay loop further down picks the unclaimed toggle up and exposes
+			// it as a switch instead, which is the same dead channel wearing a
+			// different hat.
+			if (TuyaMCU_HasLED()) {
+				BIT_SET(flagsChannelPublished, toggle);
+				BIT_SET(flagsChannelPublished, dimmer);
+				break;
+			}
+#endif
 
 			BIT_SET(flagsChannelPublished, toggle);
 			BIT_SET(flagsChannelPublished, dimmer);
 			dev_info = hass_init_light_singleColor_onChannels(toggle, dimmer, brightness_scale);
 			MQTT_QueuePublish(topic, dev_info->channel, hass_build_discovery_json(dev_info), OBK_PUBLISH_FLAG_RETAIN);
 			hass_free_device_info(dev_info);
+			// hass_free_device_info() takes the pointer by value and cannot clear
+			// this variable. The LED block below guards on "dev_info == NULL", so
+			// leaving it dangling makes that guard fail and the block then reads
+			// and re-frees freed memory. See issue #2230.
+			dev_info = NULL;
 			discoveryQueued = true;
 		}
 	}
@@ -2632,15 +2657,20 @@ void doHomeAssistantDiscovery(const char* topic, http_request_t* request) {
 					// backlog setChannelType 3 OpenStopClose; scheduleHADiscovery 1
 					char stateTopic[16];
 					char cmdTopic[16];
-					// TODO: lengths
+					// CHANNEL_GetLabel returns a pointer to a shared static buffer
+					// for unlabelled channels, and hass_init_device_info calls it
+					// again internally - so copy the label before passing it on.
+					char title[64];
+					snprintf(title, sizeof(title), "%s", CHANNEL_GetLabel(i));
 					sprintf(stateTopic, "~/%i/get", i);
 					sprintf(cmdTopic, "~/%i/set", i);
 					dev_info = hass_createSelectEntityIndexed(
+						i,
 						stateTopic,
 						cmdTopic,
 						numOptions,
 						options,
-						CHANNEL_GetLabel(i)
+						title
 					);
 				}
 			}
@@ -3011,8 +3041,6 @@ int http_fn_cm(http_request_t* request) {
 				} else if (request->method == HTTP_POST || request->method == HTTP_PUT) {
 					http_getRawArg(request->bodystart, "cmnd", long_str_alloced, commandLen);
 				}
-				CMD_ExecuteCommand(long_str_alloced, COMMAND_FLAG_SOURCE_HTTP);
-
 				runHTTPCommandInternal(request, long_str_alloced);
 
 				free(long_str_alloced);
