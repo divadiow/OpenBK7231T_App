@@ -1085,6 +1085,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	char* writebuf = request->bodystart;
 	int writelen = request->bodylen;
 	int receive_len;
+	int initial_addr = startaddr;
 
 	ADDLOG_DEBUG(LOG_FEATURE_OTA, "flash post len %d", request->contentLength);
 	if (request->contentLength <= 0)
@@ -1165,7 +1166,7 @@ int http_rest_post_flash(http_request_t* request, int startaddr, int maxaddr)
 	http_setup(request, httpMimeTypeJson);
 	hprintf255(request, "{\"size\":%d}", total);
 	poststr(request, NULL);
-	CFG_IncrementOTACount();
+	if(initial_addr == START_ADR_OF_BK_PARTITION_OTA) CFG_IncrementOTACount();
 	return 0;
 }
 

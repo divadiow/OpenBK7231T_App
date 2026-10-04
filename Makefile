@@ -438,6 +438,30 @@ endif
 	else echo "prebuild for OpenRDA5981 not found ... "; \
 	fi
 
+prebuild_OpenBK7239N: berry
+ifdef GITHUB_ACTIONS
+	pip3 install setuptools pycryptodome future pycparser click-option-group click cffi six pandas
+	ln -s $(ARM_NONE_EABI_GCC_PATH)/../ /opt/gcc-arm-none-eabi-10.3-2021.10
+endif
+	git submodule update --init --recursive --depth=1 sdk/OpenBK7239N
+	@if [ -e platforms/BK7239N/pre_build.sh ]; then \
+		echo "prebuild found for OpenBK7239N"; \
+		sh platforms/BK7239N/pre_build.sh; \
+	else echo "prebuild for OpenBK7239N not found ... "; \
+	fi
+
+prebuild_OpenBK7236: berry
+ifdef GITHUB_ACTIONS
+	pip3 install setuptools pycryptodome future pycparser click-option-group click cffi six pandas
+	ln -s $(ARM_NONE_EABI_GCC_PATH)/../ /opt/gcc-arm-none-eabi-10.3-2021.10
+endif
+	git submodule update --init --recursive --depth=1 sdk/OpenBK7239N
+	@if [ -e platforms/BK7236/pre_build.sh ]; then \
+		echo "prebuild found for OpenBK7236"; \
+		sh platforms/BK7236/pre_build.sh; \
+	else echo "prebuild for OpenBK7236 not found ... "; \
+	fi
+
 # Build main binaries
 OpenBK7231T: prebuild_OpenBK7231T
 	mkdir -p output
@@ -641,7 +665,8 @@ OpenTR6260: prebuild_OpenTR6260
 	if [ ! -e sdk/OpenTR6260/toolchain/nds32le-elf-mculib-v3 ]; then cd sdk/OpenTR6260/toolchain && xz -d < nds32le-elf-mculib-v3.txz | tar xvf - > /dev/null; fi
 	cd sdk/OpenTR6260/scripts && APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) bash build_tr6260s1.sh
 	mkdir -p output/$(APP_VERSION)
-	cp sdk/OpenTR6260/out/tr6260s1/standalone/tr6260s1_0x007000.bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin
+	cp sdk/OpenTR6260/out/tr6260s1/standalone/tr6260s1_0x004000.bin output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION).bin
+	cp sdk/OpenTR6260/out/tr6260s1/standalone/tr6260s1_ota.bin.xz output/$(APP_VERSION)/OpenTR6260_$(APP_VERSION)_ota.img
 	
 .PHONY: OpenRTL87X0C
 OpenRTL87X0C: prebuild_OpenRTL87X0C
@@ -842,6 +867,20 @@ OpenGD32VW553: prebuild_OpenGD32VW553
 	cp sdk/OpenGD32VW553/scripts/images/image-all.bin output/$(APP_VERSION)/OpenGD32VW553_$(APP_VERSION).bin
 	cp sdk/OpenGD32VW553/scripts/images/image-ota.bin output/$(APP_VERSION)/OpenGD32VW553_$(APP_VERSION)_ota.img
 	md5sum sdk/OpenGD32VW553/scripts/images/image-ota.bin | awk '{print $1}' | xxd -r -p >> output/$(APP_VERSION)/OpenGD32VW553_$(APP_VERSION)_ota.img
+	
+.PHONY: OpenBK7239N
+OpenBK7239N: prebuild_OpenBK7239N
+	cd sdk/OpenBK7239N && make bk7239n PROJECT=app APP_DIR=../../platforms/BK7239N PROJECT_DIR=../../platforms/BK7239N APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_TOOLCHAIN_PATH=$(ARM_NONE_EABI_GCC_PATH)
+	mkdir -p output/$(APP_VERSION)
+	cp sdk/OpenBK7239N/build/bk7239n/BK7239N/package/all-app.bin output/$(APP_VERSION)/OpenBK7239N_QIO_$(APP_VERSION).bin
+	cp sdk/OpenBK7239N/build/bk7239n/BK7239N/package/app_pack.rbl output/$(APP_VERSION)/OpenBK7239N_${APP_VERSION}.rbl
+	
+.PHONY: OpenBK7236
+OpenBK7236: prebuild_OpenBK7236
+	cd sdk/OpenBK7239N && make bk7236 PROJECT=app APP_DIR=../../platforms/BK7236 PROJECT_DIR=../../platforms/BK7236 APP_VERSION=$(APP_VERSION) OBK_VARIANT=$(OBK_VARIANT) CONFIG_TOOLCHAIN_PATH=$(ARM_NONE_EABI_GCC_PATH)
+	mkdir -p output/$(APP_VERSION)
+	cp sdk/OpenBK7239N/build/bk7236/BK7236/package/all-app.bin output/$(APP_VERSION)/OpenBK7236_QIO_$(APP_VERSION).bin
+	cp sdk/OpenBK7239N/build/bk7236/BK7236/package/app_pack.rbl output/$(APP_VERSION)/OpenBK7236_${APP_VERSION}.rbl
 
 # Add custom Makefile if required
 -include custom.mk

@@ -1421,6 +1421,54 @@ static driver_t g_drivers[] = {
 	false,                                   // loaded
 	},
 #endif
+#if ENABLE_DRIVER_BKSDCARD
+	//drvdetail:{"name":"BKSDCard",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"Drives the BK7252N SD host, reports the card in the slot and reads raw blocks.",
+	//drvdetail:"requires":""}
+	{ "BKSDCard",                            // Driver Name
+	BKSDCard_Init,                           // Init
+	BKSDCard_OnEverySecond,                  // onEverySecond
+	BKSDCard_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	BKSDCard_StopDriver,                     // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_BKAUDIO
+	//drvdetail:{"name":"BKAudio",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"Captures from the BK7252N on-chip audio ADC and reports the level: RMS, peak, and a peak held until it is read. The ring buffer is drained from the quick tick, and the driver reports the sample rate it actually observes so that coverage can be checked.",
+	//drvdetail:"requires":""}
+	{ "BKAudio",                             // Driver Name
+	BKAudio_Init,                            // Init
+	BKAudio_OnEverySecond,                   // onEverySecond
+	BKAudio_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	BKAudio_RunQuickTick,                    // runQuickTick
+	BKAudio_StopDriver,                      // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_RTC
+	//drvdetail:{"name":"BKRTC",
+	//drvdetail:"title":"BK7252N RTC clock",
+	//drvdetail:"descr":"Keeps a wall clock on the always-on RTC counter of the BK7252N. The clock is anchored to NTP, re-anchored only when a fresh NTP response disagrees with it by five seconds or more, and the driver reports how far the software second counter has drifted from the hardware one.",
+	//drvdetail:"requires":""}
+	{ "BKRTC",                               // Driver Name
+	BKRTC_Init,                                // Init
+	BKRTC_OnEverySecond,                       // onEverySecond
+	BKRTC_AppendInformationToHTTPIndexPage,    // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	NULL,                                    // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
 	{ "Battery",                             // Driver Name
 	Batt_Init,                               // Init
 	Batt_OnEverySecond,                      // onEverySecond
@@ -1567,6 +1615,22 @@ static driver_t g_drivers[] = {
 	DRV_MQTTServer_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
 	DRV_MQTTServer_RunQuickTick,             // runQuickTick
 	DRV_MQTTServer_Stop,                     // stopFunction
+	NULL,                                    // onChannelChanged
+	NULL,                                    // onHassDiscovery
+	false,                                   // loaded
+	},
+#endif
+#if ENABLE_DRIVER_VKL060
+	//drvdetail:{"name":"VKL060",
+	//drvdetail:"title":"TODO",
+	//drvdetail:"descr":"VKL060 segment LCD driver (soft I2C).",
+	//drvdetail:"requires":""}
+	{ "VKL060",                               // Driver Name
+	VKL060_Init,                             // Init
+	VKL060_OnEverySecond,                    // onEverySecond
+	VKL060_AppendInformationToHTTPIndexPage, // appendInformationToHTTPIndexPage
+	NULL,                                    // runQuickTick
+	VKL060_StopDriver,                       // stopFunction
 	NULL,                                    // onChannelChanged
 	NULL,                                    // onHassDiscovery
 	false,                                   // loaded
