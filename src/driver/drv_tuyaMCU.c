@@ -445,6 +445,19 @@ static int TuyaMCU_ReadInt32BE(const byte *data) {
 // 55AA     00      00      0000   xx   00
 
 #define MIN_TUYAMCU_PACKET_SIZE (2+1+1+2+1)
+#define TUYAMCU_INCOMPLETE_PACKET_STALL_MS 100
+static int g_incompletePacketLength;
+static int g_incompletePacketBytes;
+static int g_incompletePacketUARTInitCounter;
+static unsigned int g_incompletePacketLastProgressMS;
+
+static void TuyaMCU_ResetIncompletePacketTracking(void) {
+	g_incompletePacketLength = 0;
+	g_incompletePacketBytes = 0;
+	g_incompletePacketUARTInitCounter = -1;
+	g_incompletePacketLastProgressMS = 0;
+}
+
 static int UART_GetTuyaPacketLengthAt(int offset) {
 	int payloadLen = ((int)UART_GetByte(offset + 4) << 8) | UART_GetByte(offset + 5);
 	return payloadLen + MIN_TUYAMCU_PACKET_SIZE;
@@ -473,6 +486,7 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 	while (1) {
 		cs = UART_GetDataSize();
 		if (cs < MIN_TUYAMCU_PACKET_SIZE) {
+			TuyaMCU_ResetIncompletePacketTracking();
 			return 0;
 		}
 
@@ -493,6 +507,7 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 			cs--;
 		}
 		if (c_garbage_consumed > 0) {
+			TuyaMCU_ResetIncompletePacketTracking();
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "Consumed %i unwanted non-header byte in Tuya MCU buffer", c_garbage_consumed);
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "Skipped data (part) %s", printfSkipDebug);
 		}
@@ -502,6 +517,7 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 
 		len = UART_GetTuyaPacketLengthAt(0);
 		if (ringBufferSize <= 0 || len > ringBufferSize - 1) {
+			TuyaMCU_ResetIncompletePacketTracking();
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,
 				"Discarding impossible TuyaMCU packet length %i (UART capacity %i)", len, ringBufferSize - 1);
 			UART_ConsumeBytes(1);
@@ -509,8 +525,23 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 		}
 
 		if (cs < len) {
-			// A corrupt header can otherwise hold the parser forever. Only resync when
-			// a later header already forms a complete packet with a valid checksum.
+			int uartInitCounter = get_g_uart_init_counter();
+
+			// Do not mistake a checksum-valid packet-shaped sequence in a fragmented
+			// payload for a new frame. Resync only after the outer frame stops growing.
+			if (g_incompletePacketLength != len || g_incompletePacketBytes != cs ||
+				g_incompletePacketUARTInitCounter != uartInitCounter) {
+				g_incompletePacketLength = len;
+				g_incompletePacketBytes = cs;
+				g_incompletePacketUARTInitCounter = uartInitCounter;
+				g_incompletePacketLastProgressMS = g_timeMs;
+				return 0;
+			}
+			if ((unsigned int)(g_timeMs - g_incompletePacketLastProgressMS) <
+				TUYAMCU_INCOMPLETE_PACKET_STALL_MS) {
+				return 0;
+			}
+
 			for (i = 1; i + MIN_TUYAMCU_PACKET_SIZE <= cs; i++) {
 				int candidateLen;
 				if (UART_GetByte(i) != 0x55 || UART_GetByte(i + 1) != 0xAA) {
@@ -519,6 +550,7 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 				candidateLen = UART_GetTuyaPacketLengthAt(i);
 				if (candidateLen <= ringBufferSize - 1 && i + candidateLen <= cs &&
 					UART_IsTuyaPacketChecksumValidAt(i, candidateLen)) {
+					TuyaMCU_ResetIncompletePacketTracking();
 					addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,
 						"Resynchronizing TuyaMCU UART after incomplete %i-byte frame", len);
 					UART_ConsumeBytes(i);
@@ -532,18 +564,21 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 		}
 
 		if (!UART_IsTuyaPacketChecksumValidAt(0, len)) {
+			TuyaMCU_ResetIncompletePacketTracking();
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU, "Discarding TuyaMCU packet with invalid checksum");
 			UART_ConsumeBytes(1);
 			continue;
 		}
 
 		if (len > maxSize) {
+			TuyaMCU_ResetIncompletePacketTracking();
 			return -len;
 		}
 		for (i = 0; i < len; i++) {
 			out[i] = UART_GetByte(i);
 		}
 		UART_ConsumeBytes(len);
+		TuyaMCU_ResetIncompletePacketTracking();
 		return len;
 	}
 }
@@ -3106,6 +3141,7 @@ bool TuyaMCU_IsLEDRunning() {
 void TuyaMCU_Shutdown() {
 	tuyaMCUMapping_t *tmp, *nxt;
 	tuyaMCUPacket_t *packet, *next_packet;
+	TuyaMCU_ResetIncompletePacketTracking();
 
 	// free the tuyaMCUMapping_t linked list
 	tmp = g_tuyaMappings;
@@ -3173,6 +3209,7 @@ void TuyaMCU_Shutdown() {
 }
 void TuyaMCU_Init()
 {
+	TuyaMCU_ResetIncompletePacketTracking();
 	g_resetWiFiEvents = 0;
 	g_tuyaNextRequestDelay = 1;
 	g_tuyaBatteryPoweredState = 0;

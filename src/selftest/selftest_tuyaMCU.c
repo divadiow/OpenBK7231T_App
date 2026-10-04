@@ -1448,8 +1448,71 @@ void Test_TuyaMCU_Robustness() {
 			UART_AppendByteToReceiveRingBuffer(validPacket[i]);
 		}
 	}
+	Sim_RunFrames(5, false);
+	SELFTEST_ASSERT_CHANNEL(23, 0);
 	Sim_RunFrames(100, false);
 	SELFTEST_ASSERT_CHANNEL(23, 1);
+
+	// A valid frame may contain bytes that are themselves a checksum-valid Tuya
+	// frame. A temporary UART split at that point must not make resynchronization
+	// discard the real outer packet.
+	CMD_ExecuteCommand("setChannel 23 99", 0);
+	{
+		byte packetWithEmbeddedFrame[] = {
+			0x55, 0xAA, 0x03, 0x07, 0x00, 0x20,
+			0x0E, 0x03, 0x00, 0x14, 0x58, 0x59,
+			0x55, 0xAA, 0x03, 0x00, 0x00, 0x01, 0x01, 0x04,
+			0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+			0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x2A, 0x45
+		};
+		int i;
+
+		for (i = 0; i < 20; i++) {
+			UART_AppendByteToReceiveRingBuffer(packetWithEmbeddedFrame[i]);
+		}
+		Sim_RunFrames(9, false);
+		UART_AppendByteToReceiveRingBuffer(packetWithEmbeddedFrame[i++]);
+		Sim_RunFrames(9, false);
+		for (; i < (int)sizeof(packetWithEmbeddedFrame); i++) {
+			UART_AppendByteToReceiveRingBuffer(packetWithEmbeddedFrame[i]);
+		}
+	}
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(23, 42);
+
+	// Reinitializing UART replaces its receive buffer. A new fragmented packet
+	// with the same declared and buffered lengths must get a fresh stall window.
+	CMD_ExecuteCommand("setChannel 23 98", 0);
+	{
+		byte stalePrefix[] = {
+			0x55, 0xAA, 0x03, 0x07, 0x00, 0x20,
+			0x0E, 0x03, 0x00, 0x14, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,
+			0x47, 0x48, 0x49, 0x4A
+		};
+		byte packetAfterUARTReset[] = {
+			0x55, 0xAA, 0x03, 0x07, 0x00, 0x20,
+			0x0E, 0x03, 0x00, 0x14, 0x58, 0x59,
+			0x55, 0xAA, 0x03, 0x00, 0x00, 0x01, 0x01, 0x04,
+			0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
+			0x01, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x2B, 0x46
+		};
+		int i;
+
+		for (i = 0; i < (int)sizeof(stalePrefix); i++) {
+			UART_AppendByteToReceiveRingBuffer(stalePrefix[i]);
+		}
+		Sim_RunFrames(20, false);
+		CMD_ExecuteCommand("uartInit 9600", 0);
+		for (i = 0; i < 20; i++) {
+			UART_AppendByteToReceiveRingBuffer(packetAfterUARTReset[i]);
+		}
+		Sim_RunFrames(1, false);
+		for (; i < (int)sizeof(packetAfterUARTReset); i++) {
+			UART_AppendByteToReceiveRingBuffer(packetAfterUARTReset[i]);
+		}
+	}
+	Sim_RunFrames(100, false);
+	SELFTEST_ASSERT_CHANNEL(23, 43);
 
 	// A complete bad-checksum frame is skipped without consuming the valid successor.
 	{
