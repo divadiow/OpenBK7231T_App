@@ -524,7 +524,7 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 				g_incompletePacketLastProgressMS = g_timeMs;
 				return 0;
 			}
-			if ((unsigned int)(g_timeMs - g_incompletePacketLastProgressMS) <
+			if (g_timeMs - g_incompletePacketLastProgressMS <
 				TUYAMCU_INCOMPLETE_PACKET_STALL_MS) {
 				return 0;
 			}
@@ -537,8 +537,6 @@ int UART_TryToGetNextTuyaPacket(byte* out, int maxSize) {
 				candidateLen = UART_GetTuyaPacketLengthAt(i);
 				if (candidateLen <= ringBufferSize - 1 && i + candidateLen <= cs &&
 					UART_IsTuyaPacketChecksumValidAt(i, candidateLen)) {
-					addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,
-						"Resynchronizing TuyaMCU UART after incomplete %i-byte frame", len);
 					UART_ConsumeBytes(i);
 					break;
 				}
