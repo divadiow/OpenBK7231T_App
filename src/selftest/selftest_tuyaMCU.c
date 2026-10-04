@@ -489,6 +489,44 @@ static void Test_TuyaMCU_TH03Pro_V3PowerOffSession() {
 	SELFTEST_ASSERT_CHANNEL(23, 2);
 }
 
+static void Test_TuyaMCU_S09_MalformedHeartbeatRecovery() {
+	byte malformedHeartbeat[] = { 0xB5, 0x00, 0x01, 0x01, 0x04 };
+	byte validHeartbeat[] = { 0x55, 0xAA, 0x03, 0x00, 0x00, 0x01, 0x01, 0x04 };
+	int i;
+
+	SIM_ClearOBK(0);
+	SIM_UART_InitReceiveRingBuffer(2048);
+	CMD_ExecuteCommand("startDriver TuyaMCU", 0);
+
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 00 00 00 FF");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	// Exact first heartbeat and retry emitted by the S09 NY8 ROM. The malformed
+	// prefix must be discarded without hiding or corrupting the valid frame.
+	for (i = 0; i < (int)sizeof(malformedHeartbeat); i++) {
+		UART_AppendByteToReceiveRingBuffer(malformedHeartbeat[i]);
+	}
+	for (i = 0; i < (int)sizeof(validHeartbeat); i++) {
+		UART_AppendByteToReceiveRingBuffer(validHeartbeat[i]);
+	}
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 01 00 00 00");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA030100367B2270223A22776873336374793933667A72716B7074222C2276223A22312E302E30222C226D223A302C226972223A2232362E38227DE5", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 02 00 00 01");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+
+	CMD_ExecuteCommand("fakeTuyaPacket 55AA03020002090615", 0);
+	Test_TuyaMCU_RunUntilUARTData(250);
+	Test_TuyaMCU_ExpectAndConsumeWiFiStatePacket();
+	// Retain the original second empty 0x03 for existing configured devices.
+	SELFTEST_ASSERT_HAS_SENT_UART_STRING("55 AA 00 03 00 00 02");
+	SELFTEST_ASSERT_HAS_UART_EMPTY();
+}
+
 static void Test_TuyaMCU_V3_EmptyCloudCacheCompatibility() {
 	SIM_ClearOBK(0);
 	SIM_UART_InitReceiveRingBuffer(2048);
@@ -778,6 +816,7 @@ void Test_TuyaMCU_DP22() {
 	Test_TuyaMCU_V3_McuInitiatedWakeCompatibility();
 	Test_TuyaMCU_V3_LowPowerMissingMCUConfCompatibility();
 	Test_TuyaMCU_TH03Pro_V3PowerOffSession();
+	Test_TuyaMCU_S09_MalformedHeartbeatRecovery();
 	Test_TuyaMCU_V3_EmptyCloudCacheCompatibility();
 	Test_TuyaMCU_V3_FeatureSettingsCompatibility();
 }
