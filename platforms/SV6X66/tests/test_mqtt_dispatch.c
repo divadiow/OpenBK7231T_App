@@ -240,7 +240,7 @@ err_t dns_gethostbyname(const char *name, ip_addr_t *address,
     assert(name != NULL && address != NULL && callback != NULL);
     if (dns_mode == 0) {
         address->addr = 0x01020304u;
-        callback(name, address, arg);
+        /* Cached/numeric results are returned without calling the callback. */
         return ERR_OK;
     }
     pending_dns_callback = callback;
@@ -386,14 +386,12 @@ int main(void)
     dns_mode = 0;
     dns_callback_count = 0;
     assert(SV6X66_DNSLookup("immediate.test", &dns_address, dns_callback, &info) == ERR_OK);
-    assert(dns_callback_count == 1);
-    assert(strcmp(dns_name_seen, "immediate.test") == 0);
-    assert(dns_arg_seen == &info && dns_result_seen == &dns_address);
+    assert(dns_callback_count == 0 && dns_address.addr == 0x01020304u);
     dns_mode = 1;
     assert(SV6X66_DNSLookup("pending.test", &dns_address, dns_callback, &info) == ERR_INPROGRESS);
-    assert(dns_callback_count == 1);
+    assert(dns_callback_count == 0);
     assert(queue_push(complete_pending_dns, NULL));
-    wait_for_dns_callback(2);
+    wait_for_dns_callback(1);
     assert(strcmp(dns_name_seen, "pending.test") == 0);
     assert(dns_arg_seen == &info && dns_result_seen == &dns_address);
 

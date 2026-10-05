@@ -16,6 +16,7 @@ typedef void (*beken_thread_function_t)(void *);
 typedef int OSStatus;
 #define kNoErr 0
 #define ASSERT configASSERT
+// Application workers run below SDK TCP/IP (3) and the timer daemon (4).
 #define BEKEN_DEFAULT_WORKER_PRIORITY 1
 #define BEKEN_APPLICATION_PRIORITY 1
 #define bk_printf printf

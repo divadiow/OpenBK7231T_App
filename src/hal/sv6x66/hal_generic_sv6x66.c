@@ -6,6 +6,7 @@ void HAL_Delay_us(int delay) { if (delay > 0) OS_UsDelay(delay); }
 int HAL_FlashRead(char *buffer, int len, int addr)
 {
     if (!buffer || len < 0 || addr < 0 || (unsigned)addr > 0x200000U || (unsigned)len > 0x200000U - (unsigned)addr) return -1;
+    // N10 startup keeps D-cache disabled; XIP reads depend on that policy.
     memcpy(buffer, (const void *)(0x30000000U + (unsigned)addr), len);
     return 0;
 }

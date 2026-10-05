@@ -539,7 +539,7 @@
 #define ENABLE_EXPAND_CONSTANT 1
 #define NO_CHIP_TEMPERATURE 1
 #define NEW_TCP_SERVER 1
-// Filesystem is owned by the vendor bootloader and FSAL.
+// The stock CKW04 layout has no separate LittleFS partition; reuse its SPIFFS.
 #define ENABLE_LITTLEFS 0
 // Ping support is added after the network backend is validated.
 #undef ENABLE_PING_WATCHDOG

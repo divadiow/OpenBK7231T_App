@@ -21,6 +21,7 @@ static int in_range(u32_t addr, u32_t len)
 static s32_t read_flash(u32_t addr, u32_t len, u8_t *dst)
 {
     if ((!dst && len) || !in_range(addr, len)) return SPIFFS_ERR_INTERNAL;
+    // N10 startup keeps D-cache disabled; XIP reads depend on that policy.
     if (len) memcpy(dst, (const void *)(uintptr_t)(0x30000000u + addr), len);
     return SPIFFS_OK;
 }

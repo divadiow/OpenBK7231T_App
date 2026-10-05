@@ -7,10 +7,15 @@ import tempfile
 
 PLATFORM = Path(__file__).resolve().parents[1]
 APP = PLATFORM.parents[1]
-HEADERS = ("wifi_api.h", "wificonf.h", "softap_func.h", "netstack.h")
+HEADERS = ("wifi_api.h", "wificonf.h", "softap_func.h", "netstack.h", "lwip/inet.h", "lwip/ip_addr.h")
 ENV = r'''#include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <arpa/inet.h>
+typedef struct { uint32_t addr; } ip_addr_t;
+#define ipaddr_addr(text) inet_addr(text)
+#define IP4_ADDR(ip,a,b,c,d) ((ip)->addr = htonl(((uint32_t)(a)<<24) | ((uint32_t)(b)<<16) | ((uint32_t)(c)<<8) | (uint32_t)(d)))
+#define ip4_addr_get_u32(ip) ((ip)->addr)
 typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32;
 typedef int8_t s8; typedef int16_t s16;
 typedef int WIFI_OPMODE;

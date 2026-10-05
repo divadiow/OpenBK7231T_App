@@ -50,7 +50,7 @@ def main():
         runs = (['0'], ['1'], ['2']) if name == 'vars' else (['0'], ['2'], ['4'], ['6']) if name == 'stock_runtime' else ([],)
         for arguments in runs:
             subprocess.run([str(executable)] + arguments, cwd=app, check=True, timeout=30)
-    for test in ['test_package.py', 'test_build.py', 'test_stock_layout.py', 'test_stock_xmodem.py', 'test_stock_phy.py', 'test_startup.py', 'test_wifi_ap.py']:
+    for test in ['test_package.py', 'test_build.py', 'test_stock_layout.py', 'test_stock_xmodem.py', 'test_stock_phy.py', 'test_startup.py', 'test_wifi_ap.py', 'test_wifi_station.py']:
         subprocess.run([sys.executable, str(platform / 'tests' / test)], cwd=app, check=True)
     subprocess.run([sys.executable, str(platform / 'tests/test_startup.py'), '--stock'], cwd=app, check=True)
     print('SV6166F host checks passed')

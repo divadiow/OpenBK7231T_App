@@ -9,6 +9,8 @@
 #include "wificonf.h"
 #include "softap_func.h"
 #include "netstack.h"
+#include "lwip/inet.h"
+#include "lwip/ip_addr.h"
 
 /* The SDK implementation exports this, but its public header omits it. */
 extern int softap_set_custom_conf(SOFTAP_CUSTOM_CONFIG *config);
@@ -20,9 +22,9 @@ static char g_ipString[16], g_gatewayString[16], g_maskString[16], g_dnsString[1
 
 static u32 ip_to_sdk(const unsigned char bytes[4])
 {
-	u32 value;
-	memcpy(&value, bytes, sizeof(value));
-	return value;
+	ip_addr_t address;
+	IP4_ADDR(&address, bytes[0], bytes[1], bytes[2], bytes[3]);
+	return ip4_addr_get_u32(&address);
 }
 
 static void format_ip(char *dst, const u8 bytes[4])
@@ -107,12 +109,13 @@ int HAL_SetupWiFiOpenAccessPoint(const char *ssid)
 	}
 
 	memset(&config, 0, sizeof(config));
-	config.start_ip = 0xC0A80402; /* 192.168.4.2 in the SDK's CLI format */
+	/* Unlike lwIP netif addresses, the SDK SoftAP configuration uses host byte order. */
+	config.start_ip = ntohl(ipaddr_addr("192.168.4.2"));
 	config.max_sta_num = 4;
 	/* The SDK rejects a DHCP range larger than its lease allocation. */
 	config.end_ip = config.start_ip + config.max_sta_num - 1;
-	config.gw = 0xC0A80401;
-	config.subnet = 0xFFFFFF00;
+	config.gw = ntohl(ipaddr_addr("192.168.4.1"));
+	config.subnet = ntohl(ipaddr_addr("255.255.255.0"));
 	config.encryt_mode = 0;
 	config.channel = 1;
 	config.beacon_interval = 100;
@@ -163,7 +166,7 @@ void HAL_ConnectToWiFi(const char *ssid, const char *key, obkStaticIP_t *ip)
 	}
 	ssid_len = (u8)ssid_length;
 	key_len = (u8)key_length;
-	if (ip != NULL)
+	if (ip != NULL && ip->localIPAddr[0] != 0)
 	{
 		dhcp = 0;
 		ipaddr = ip_to_sdk(ip->localIPAddr);

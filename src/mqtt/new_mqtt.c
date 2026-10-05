@@ -1870,7 +1870,7 @@ commandResult_t MQTT_StartMQTTTestThread(const void* context, const char* cmd, c
 #elif PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
 	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_LN8825 || PLATFORM_BL616 || PLATFORM_GD32VW553
 #if PLATFORM_SV6X66
-	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, 1, NULL);
+	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, BEKEN_DEFAULT_WORKER_PRIORITY, NULL);
 #else
 	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, 15, NULL);
 #endif

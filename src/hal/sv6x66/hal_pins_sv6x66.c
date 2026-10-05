@@ -19,6 +19,7 @@ static const char *const names[] = {
     "P16", "P17", "P18", "P19", "P20", "P21", "P22"
 };
 static uint32_t pwm_frequency[3];
+static uint32_t pwm_duty[3];
 const char *HAL_PIN_GetPinNameAlias(int pin)
 {
     return pin >= 0 && pin < 23 ? names[pin] : "error";
@@ -74,6 +75,12 @@ void HAL_PIN_PWM_Start(int pin, int frequency)
 {
     pinmux_fun_t function;
     if (!HAL_PIN_CanThisPinBePWM(pin) || frequency < 5 || frequency > 4000000) return;
+    if (pwm_frequency[pin]) {
+        if (pwm_frequency[pin] != (uint32_t)frequency &&
+            drv_pwm_config(pin, frequency, pwm_duty[pin], 0) == 0)
+            pwm_frequency[pin] = frequency;
+        return;
+    }
     function = (pinmux_fun_t)(SEL_PWM_0 + pin);
     if (drv_pwm_init(pin) != 0) return;
     if (drv_pwm_config(pin, frequency, 0, 0) != 0 ||
@@ -86,13 +93,16 @@ void HAL_PIN_PWM_Start(int pin, int frequency)
         return;
     }
     pwm_frequency[pin] = frequency;
+    pwm_duty[pin] = 0;
 }
 void HAL_PIN_PWM_Update(int pin, float percent)
 {
     if (!HAL_PIN_CanThisPinBePWM(pin) || !pwm_frequency[pin]) return;
     if (!(percent >= 0)) percent = 0; // Includes NaN.
     if (percent > 100) percent = 100;
-    drv_pwm_config(pin, pwm_frequency[pin], (uint32_t)(percent * 4096.0f / 100.0f + 0.5f), 0);
+    uint32_t duty = (uint32_t)(percent * 4096.0f / 100.0f + 0.5f);
+    if (drv_pwm_config(pin, pwm_frequency[pin], duty, 0) == 0)
+        pwm_duty[pin] = duty;
 }
 void HAL_PIN_PWM_Stop(int pin)
 {
@@ -100,6 +110,7 @@ void HAL_PIN_PWM_Stop(int pin)
     drv_pwm_disable(pin);
     drv_pinmux_manual_function_select_disable((pinmux_fun_t)(SEL_PWM_0 + pin));
     pwm_frequency[pin] = 0;
+    pwm_duty[pin] = 0;
 }
 // GPIO ISR argument semantics are undocumented in the binary driver.
 void HAL_AttachInterrupt(int pin, OBKInterruptType mode, OBKInterruptHandler handler)

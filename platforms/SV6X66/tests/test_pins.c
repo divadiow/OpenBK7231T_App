@@ -6,7 +6,7 @@
 #include "hal/hal_pins.h"
 
 int PIN_GetPWMIndexForPinIndex(int);
-static int gpio_calls, pwm_calls, fail_config, disable_calls;
+static int gpio_calls, pwm_calls, fail_config, disable_calls, init_calls[3];
 static uint32_t last_duty, frequency[5];
 static gpio_dir_t direction[23];
 int8_t drv_gpio_set_mode(gpio_pin_t pin, pin_mode_t mode) { assert(mode == PIN_MODE_GPIO); (void)pin; gpio_calls++; return 0; }
@@ -16,12 +16,14 @@ int8_t drv_gpio_set_logic(gpio_pin_t pin, gpio_logic_t logic) { assert(logic == 
 gpio_logic_t drv_gpio_get_logic(gpio_pin_t pin) { (void)pin; gpio_calls++; return GPIO_LOGIC_HIGH; }
 int8_t drv_pinmux_manual_function_select_enable(pinmux_fun_t function) { assert(function >= SEL_PWM_0 && function <= SEL_PWM_2); return 0; }
 int8_t drv_pinmux_manual_function_select_disable(pinmux_fun_t function) { assert(function >= SEL_PWM_0 && function <= SEL_PWM_2); return 0; }
-int8_t drv_pwm_init(uint8_t id) { assert(id < 3); pwm_calls++; return 0; }
+int8_t drv_pwm_init(uint8_t id) { assert(id < 3); init_calls[id]++; pwm_calls++; return 0; }
 int8_t drv_pwm_config(uint8_t id, uint32_t hz, uint32_t duty, uint8_t invert)
 {
     assert(id < 3 && duty <= 4096 && invert == 0);
-    pwm_calls++; last_duty = duty; frequency[id] = hz;
-    return fail_config ? -1 : 0;
+    pwm_calls++;
+    if (fail_config) return -1;
+    last_duty = duty; frequency[id] = hz;
+    return 0;
 }
 int8_t drv_pwm_enable(uint8_t id) { assert(id < 3 && direction[id] == GPIO_DIR_OUT); pwm_calls++; return 0; }
 int8_t drv_pwm_disable(uint8_t id) { assert(id < 3); disable_calls++; return 0; }
@@ -50,6 +52,21 @@ int main(void)
     HAL_PIN_PWM_Start(1, 2000);
     HAL_PIN_PWM_Update(0, 50);
     assert(last_duty == 2048 && frequency[0] == 1000 && frequency[1] == 2000);
+    calls = pwm_calls;
+    HAL_PIN_PWM_Start(0, 1000);
+    assert(calls == pwm_calls && init_calls[0] == 1);
+    HAL_PIN_PWM_Start(0, 1500);
+    assert(init_calls[0] == 1 && frequency[0] == 1500 && last_duty == 2048);
+    assert(frequency[1] == 2000);
+    fail_config = 1;
+    HAL_PIN_PWM_Start(0, 1800);
+    HAL_PIN_PWM_Update(0, 75);
+    fail_config = 0;
+    HAL_PIN_PWM_Start(0, 1600);
+    assert(init_calls[0] == 1 && frequency[0] == 1600 && last_duty == 2048);
+    HAL_PIN_PWM_Stop(0);
+    HAL_PIN_PWM_Start(0, 1000);
+    assert(init_calls[0] == 2 && frequency[0] == 1000 && last_duty == 0);
     HAL_PIN_PWM_Update(1, 120);
     assert(last_duty == 4096);
     HAL_PIN_PWM_Update(1, -1);
