@@ -20,7 +20,7 @@
 #ifndef WINDOWS
 #include <lwip/dns.h>
 #endif
-#if PLATFORM_ESPIDF
+#if PLATFORM_ESPIDF || PLATFORM_SV6X66
 #include <lwip/tcpip.h>
 #endif
 
@@ -154,7 +154,7 @@ int getLenData(int *len, unsigned char *data, int maxlen){
 }
 
 static SemaphoreHandle_t g_mutex = 0;
-#if PLATFORM_ESPIDF
+#if PLATFORM_ESPIDF || PLATFORM_SV6X66
 static SemaphoreHandle_t g_rx_mutex = 0;
 #endif
 
@@ -179,7 +179,7 @@ static void MQTT_Mutex_Free()
 
 static bool MQTT_RX_Mutex_Take(int del)
 {
-#if PLATFORM_ESPIDF
+#if PLATFORM_ESPIDF || PLATFORM_SV6X66
 	if (g_rx_mutex == 0) {
 		return false;
 	}
@@ -191,7 +191,7 @@ static bool MQTT_RX_Mutex_Take(int del)
 
 static void MQTT_RX_Mutex_Free()
 {
-#if PLATFORM_ESPIDF
+#if PLATFORM_ESPIDF || PLATFORM_SV6X66
 	xSemaphoreGive(g_rx_mutex);
 #else
 	MQTT_Mutex_Free();
@@ -1332,7 +1332,12 @@ static int MQTT_do_connect(mqtt_client_t* client)
 #else
 	if (dns_in_progress_time <= 0 && !dns_resolved)
 	{
-#ifdef PLATFORM_XR809
+#if PLATFORM_SV6X66
+		// Mark pending before the TCP/IP task can complete the request.
+		dns_in_progress_time = 10;
+		dns_resolved = false;
+		res = SV6X66_DNSLookup(mqtt_host, &mqtt_ip_resolved, dnsFound, NULL);
+#elif PLATFORM_XR809
 		res = dns_gethostbyname(mqtt_host, &mqtt_ip_resolved, dnsFound, NULL);
 #else
 	    res = dns_gethostbyname_addrtype(mqtt_host, &mqtt_ip_resolved, dnsFound, NULL, LWIP_DNS_ADDRTYPE_IPV4);
@@ -1344,8 +1349,10 @@ static int MQTT_do_connect(mqtt_client_t* client)
 		}
 		else if (ERR_INPROGRESS == res)
 		{
+#if !PLATFORM_SV6X66
 			dns_in_progress_time = 10;
 			dns_resolved = false;
+#endif
 		}
 		else
 		{
@@ -1818,7 +1825,7 @@ static BENCHMARK_TEST_INFO* info = NULL;
 
 #if WINDOWS
 
-#elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
+#elif PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
 	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_TXW81X || PLATFORM_RDA5981 || PLATFORM_LN8825 \
 	|| PLATFORM_BL616 || PLATFORM_GD32VW553
 static void mqtt_timer_thread(void* param)
@@ -1860,9 +1867,13 @@ commandResult_t MQTT_StartMQTTTestThread(const void* context, const char* cmd, c
 
 #if WINDOWS
 
-#elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
+#elif PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
 	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_LN8825 || PLATFORM_BL616 || PLATFORM_GD32VW553
+#if PLATFORM_SV6X66
+	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, 1, NULL);
+#else
 	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, 15, NULL);
+#endif
 #elif PLATFORM_TXW81X
 	os_task_create("mqtt", mqtt_timer_thread, (void*)info, 15, 0, NULL, 1024);
 #elif PLATFORM_RDA5981
@@ -1968,7 +1979,7 @@ void MQTT_init()
 #ifdef WINDOWS
 	mqtt_client = 0;
 #endif
-#if PLATFORM_ESPIDF
+#if PLATFORM_ESPIDF || PLATFORM_SV6X66
 	// Create this before connecting; receive callbacks run in the TCP/IP task.
 	if (g_rx_mutex == 0) {
 		g_rx_mutex = xSemaphoreCreateMutex();
@@ -2300,7 +2311,7 @@ int MQTT_RunEverySecondUpdate()
 #endif
 					UNLOCK_TCPIP_CORE();
 				}
-				if (MQTT_do_connect(mqtt_client) == ERR_RTE) {
+				if (!mqtt_client || MQTT_do_connect(mqtt_client) == ERR_RTE) {
 					// silently allow retry next frame
 				}
 				else {

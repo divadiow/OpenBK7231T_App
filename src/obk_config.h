@@ -530,6 +530,20 @@
 #endif
 //#define ENABLE_DRIVER_DCF77					1
 
+#elif PLATFORM_SV6X66
+
+#define ENABLE_HA_DISCOVERY 1
+#define ENABLE_MQTT 1
+#define ENABLE_DRIVER_LED 1
+#define ENABLE_OBK_SCRIPTING 1
+#define ENABLE_EXPAND_CONSTANT 1
+#define NO_CHIP_TEMPERATURE 1
+#define NEW_TCP_SERVER 1
+// Filesystem is owned by the vendor bootloader and FSAL.
+#define ENABLE_LITTLEFS 0
+// Ping support is added after the network backend is validated.
+#undef ENABLE_PING_WATCHDOG
+
 #elif PLATFORM_TR6260
 
 // #define ENABLE_SEND_POSTANDGET				1

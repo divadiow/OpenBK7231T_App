@@ -97,3 +97,7 @@
 	path = sdk/OpenBK7239N
 	url = https://github.com/NonPIayerCharacter/OpenBK7239N
 	branch = master
+
+[submodule "sdk/OpenSV6X66"]
+	path = sdk/OpenSV6X66
+	url = https://github.com/divadiow/OpenSV6X66.git

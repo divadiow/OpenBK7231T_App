@@ -51,6 +51,14 @@ $(info VARIANT is $(VARIANT), OBK_VARIANT is $(OBK_VARIANT))
 #APPS_BUILD_PATH ?= ../bk7231t_os
 APPS_BUILD_CMD ?= build.sh
 
+# SV6166F uses the upstream SDK with an app-owned build overlay.
+SV6X66_TOOLCHAIN ?= $(dir $(shell command -v nds32le-elf-gcc))
+SV6X66_LAYOUT ?= obk
+.DEFAULT_GOAL := all
+.PHONY: OpenSV6166F
+OpenSV6166F:
+	python3 platforms/SV6X66/build.py --toolchain "$(SV6X66_TOOLCHAIN)" --version "$(APP_VERSION)" --layout "$(SV6X66_LAYOUT)"
+
 # Default target is to run OpenBK7231T build
 all: OpenBK7231T
 

@@ -1,0 +1,70 @@
+name: Build SV6166F
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sv6166f.yml'
+      - '.gitmodules'
+      - 'Makefile'
+      - 'sdk/OpenSV6X66'
+      - 'platforms/**'
+      - 'src/**'
+      - 'include/**'
+      - 'libraries/**'
+  pull_request:
+    paths:
+      - '.github/workflows/sv6166f.yml'
+      - '.gitmodules'
+      - 'Makefile'
+      - 'sdk/OpenSV6X66'
+      - 'platforms/**'
+      - 'src/**'
+      - 'include/**'
+      - 'libraries/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: SV6166F / CKW04
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      TOOLCHAIN_SHA256: 92f0767dbabb32958c678b542fe47f826f9d28f4584c22abe8d806b73a0692e2
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v5
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk/OpenSV6X66
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 xz-utils libc6-i386 lib32z1
+      - name: Install Andes toolchain
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/andestech/Andes-Development-Kit/releases/download/ast-v3_2_4-release-linux/nds32le-elf-mculib-v3.txz \
+            --output "$RUNNER_TEMP/toolchain.txz"
+          echo "$TOOLCHAIN_SHA256  $RUNNER_TEMP/toolchain.txz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/toolchain"
+          tar -xJf "$RUNNER_TEMP/toolchain.txz" -C "$RUNNER_TEMP/toolchain"
+          "$RUNNER_TEMP/toolchain/nds32le-elf-mculib-v3/bin/nds32le-elf-gcc" --version
+      - name: Run host checks
+        run: python3 platforms/SV6X66/tests/run.py
+      - name: Build stock CKW04 application
+        run: |
+          python3 platforms/SV6X66/build.py \
+            --layout stock-ckw04 \
+            --toolchain "$RUNNER_TEMP/toolchain/nds32le-elf-mculib-v3/bin" \
+            --build-dir "$RUNNER_TEMP/sv6166f-build" \
+            --version "SV6166F_${GITHUB_SHA:0:12}" --jobs 4
+      - name: Verify SDK is unchanged
+        run: git -C sdk/OpenSV6X66 diff --exit-code
+      - name: Upload firmware and link information
+        uses: actions/upload-artifact@v6
+        with:
+          name: OpenSV6166F-stock-ckw04
+          path: output/SV6166F_*/stock-ckw04/*
+          if-no-files-found: error

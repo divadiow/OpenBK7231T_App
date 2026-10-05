@@ -14,7 +14,7 @@
 #include "lwip/netdb.h"
 #endif
 
-#if PLATFORM_XR809
+#if PLATFORM_XR809 || PLATFORM_SV6X66
 #include "my_lwip2_mqtt_replacement.h"
 #else
 #include "lwip/apps/mqtt.h"

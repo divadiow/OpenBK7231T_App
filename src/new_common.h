@@ -166,6 +166,12 @@ typedef long BaseType_t;
 #endif
 #define DEVICENAME_PREFIX_FULL "Open" PLATFORM_MCU_NAME
 #define DEF_MQTT_GROUP "esp"
+#elif PLATFORM_SV6X66
+#define DEVICENAME_PREFIX_FULL "OpenSV6166F"
+#define DEVICENAME_PREFIX_SHORT "sv6166f"
+#define PLATFORM_MCU_NAME "SV6166F"
+#define MANUFACTURER "iComm Semiconductor"
+#define DEF_MQTT_GROUP "sv6166fs"
 #elif PLATFORM_TR6260
 #define DEVICENAME_PREFIX_FULL "OpenTR6260"
 #define DEVICENAME_PREFIX_SHORT "tr6260"
@@ -712,6 +718,10 @@ OSStatus rtos_suspend_thread(beken_thread_t* thread);
 #define xPortGetFreeHeapSize() esp_get_free_heap_size()
 #endif
 
+#elif PLATFORM_SV6X66
+
+#include "../platforms/SV6X66/obk_platform.h"
+
 #elif PLATFORM_TR6260
 
 #include "FreeRTOS.h"
@@ -1254,7 +1264,7 @@ void urldecode2_safe(char *dst, const char *srcin, int maxDstLen);
 int strIsInteger(const char *s);
 
 #if !defined(PLATFORM_ESPIDF) && !defined(PLATFORM_TR6260) && !defined(PLATFORM_ECR6600) && !defined(PLATFORM_BL602) && \
-	!defined(PLATFORM_ESP8266) && !defined(PLATFORM_W800) && !defined(PLATFORM_ARMINO)
+	!defined(PLATFORM_ESP8266) && !defined(PLATFORM_W800) && !defined(PLATFORM_ARMINO) && !defined(PLATFORM_SV6X66)
 
 const char* strcasestr(const char* str1, const char* str2);
 #endif
