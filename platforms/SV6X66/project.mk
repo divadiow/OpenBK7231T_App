@@ -15,6 +15,7 @@ CFLAGS += -I$(TOPDIR)/obk_app/platforms/SV6X66 -I$(TOPDIR)/obk_app/src
 STATIC_LIB += components/tools/ota_api/libota_api.a
 
 LDFLAGS += -lm
+LDFLAGS += -Wl,--wrap=wifi_cfg_get_addr1,--wrap=wifi_cfg_get_addr2
 ifeq ($(OBK_LAYOUT),stock-ckw04)
 LDSCRIPT_S := obk_app/platforms/SV6X66/stock_flash.lds.S
 SETTING_PARTITION_MAIN_SIZE := 0xAF000

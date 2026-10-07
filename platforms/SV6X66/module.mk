@@ -4,6 +4,7 @@ include obk_app/platforms/obk_main.mk
 # A normal static archive link can otherwise select the weak member first.
 LIB_SRC := $(filter-out src/hal/generic/hal_pins_generic.c src/hal/generic/hal_wifi_generic.c,$(OBKM_SRC))
 LIB_SRC += platforms/SV6X66/main.c
+LIB_SRC += platforms/SV6X66/identity.c
 LIB_SRC += platforms/SV6X66/stock_mount.c
 LIB_SRC += platforms/SV6X66/stock_entry.c
 LIB_SRC += platforms/SV6X66/stock_runtime.c

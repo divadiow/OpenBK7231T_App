@@ -1,5 +1,6 @@
 #include "new_common.h"
 #include "ota_stage.h"
+#include "identity.h"
 #include "cJSON/cJSON.h"
 #include "sys/backtrace.h"
 #include "sys/xip.h"
@@ -21,6 +22,11 @@ void load_rf_table_from_flash(void);
 static void obk_task(void *arg)
 {
     if (fs_handle && SV6X66_OTAStartup()) printf("OTA marker could not be disarmed\n");
+    if (!SV6X66_IdentityInit()) {
+        printf("OpenSV6166F: no valid efuse MAC pair; radio startup stopped\n");
+        OS_TaskDelete(NULL);
+        return;
+    }
     WIFI_INIT();
     netstack_init(NULL);
     configASSERT(SV6X66_NetInit());
