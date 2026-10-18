@@ -264,7 +264,7 @@ int LWIP_GetActiveSockets() {
 }
 #endif
 
-#if PLATFORM_BL602 || PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H || PLATFORM_LN8825 \
+#if PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W800 || PLATFORM_W600 || PLATFORM_LN882H || PLATFORM_LN8825 \
 	|| PLATFORM_ESPIDF || PLATFORM_TR6260 || PLATFORM_REALTEK || PLATFORM_ECR6600 \
 	|| PLATFORM_XRADIO || PLATFORM_ESP8266 || PLATFORM_BL_NEW || PLATFORM_GD32VW553
 
@@ -275,7 +275,18 @@ OSStatus rtos_create_thread(beken_thread_t* thread,
 	OSStatus err = kNoErr;
 
 
+#if PLATFORM_SV6X66
+	uint32_t words = stack_size / sizeof(StackType_t) + (stack_size % sizeof(StackType_t) != 0);
+	/* Common OBK callers can request priorities beyond the SDK limit.
+	 * Retain this port's existing application cap at priority 3. */
+	if (priority > 3)
+		priority = 3;
+	if (!function || words > UINT16_MAX || words < configMINIMAL_STACK_SIZE)
+		return -1;
+	err = xTaskCreate(function, name, (uint16_t)words, arg, priority, thread);
+#else
 	err = xTaskCreate(function, name, stack_size / sizeof(StackType_t), arg, priority, thread);
+#endif
 	/*
 	 BaseType_t xTaskCreate(
 								  TaskFunction_t pvTaskCode,
@@ -1210,6 +1221,12 @@ void QuickTick(void* param)
 }
 
 #define QT_STACK_SIZE 2048
+#ifndef QUICK_THREAD_PRIORITY
+#define QUICK_THREAD_PRIORITY 15
+#endif
+#ifndef QUICK_THREAD_STACK_BYTES
+#define QUICK_THREAD_STACK_BYTES (QT_STACK_SIZE * sizeof(StackType_t))
+#endif
 
 ////////////////////////////////////////////////////////
 // this is the bit which runs the quick tick timer
@@ -1232,11 +1249,9 @@ void QuickTick_StartThread(void)
 {
 #if WINDOWS
 
-#elif PLATFORM_SV6X66
-	rtos_create_thread(NULL, 3, "quick", quick_timer_thread, QT_STACK_SIZE, NULL);
-#elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_TR6260 || defined(PLATFORM_REALTEK) || PLATFORM_ECR6600 \
+#elif PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_TR6260 || defined(PLATFORM_REALTEK) || PLATFORM_ECR6600 \
 	|| PLATFORM_ESP8266 || PLATFORM_ESPIDF || PLATFORM_XRADIO || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_BL_NEW || PLATFORM_GD32VW553
-	xTaskCreate(quick_timer_thread, "quick", QT_STACK_SIZE, NULL, 15, NULL);
+	rtos_create_thread(NULL, QUICK_THREAD_PRIORITY, "quick", quick_timer_thread, QUICK_THREAD_STACK_BYTES, NULL);
 #elif PLATFORM_TXW81X
 	os_task_create("quick", quick_timer_thread, NULL, 15, 0, NULL, QT_STACK_SIZE);
 #elif PLATFORM_RDA5981

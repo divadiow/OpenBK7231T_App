@@ -11,4 +11,7 @@ int SV6X66_FlashErase(uint32_t);
 int SV6X66_FlashWrite(uint32_t, const void *, size_t);
 int SV6X66_CommitBank(uint32_t);
 int SV6X66_ValidateBank(uint32_t, uint32_t);
+int HAL_FlashRead(char *buffer, int bytes, int address);
+int HAL_FlashWrite(char *buffer, unsigned int bytes, unsigned int address);
+int HAL_FlashEraseSector(int address);
 #endif

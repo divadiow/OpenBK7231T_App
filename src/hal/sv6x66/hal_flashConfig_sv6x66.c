@@ -1,9 +1,8 @@
 #if PLATFORM_SV6X66
 
-#include "sv6x66_platform.h"
+#include "new_common.h"
 #include "../../../platforms/SV6X66/obk/flash.h"
 #include "spiffs_interface.h"
-#include "new_common.h"
 #include "hal/hal_flashConfig.h"
 #include "hal/hal_flashVars.h"
 #include <string.h>

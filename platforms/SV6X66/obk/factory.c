@@ -1,4 +1,5 @@
-#include "sv6x66_platform.h"
+#include "new_common.h"
+#include "hal/hal_generic.h"
 #include "ota.h"
 #include "hsuart/drv_hsuart.h"
 #include <stdio.h>
@@ -159,7 +160,7 @@ int SV6X66_FactoryWindow(void) {
 			if (SV6X66_UpdateCommit())
 				goto fail;
 			text("OK\r\n");
-			SV6X66_Reboot();
+			HAL_RebootModule();
 		} else
 			text("FAILED\r\n");
 	}

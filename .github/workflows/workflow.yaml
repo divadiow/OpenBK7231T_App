@@ -300,13 +300,6 @@ jobs:
           packages: cmake srecord
           version: 1.0
 
-      - name: Install SV6X66 dependencies
-        if: ${{ matrix.platform == 'OpenSV6X66' }}
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libc6-i386
-          version: 1.0
-
       - name: Install arm-none-eabi-gcc
         if: ${{ matrix.gcc && matrix.gcc != 'apt' }}
         uses: carlosperate/arm-none-eabi-gcc-action@v1

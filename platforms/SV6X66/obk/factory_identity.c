@@ -1,4 +1,4 @@
-#include "sv6x66_platform.h"
+#include "new_common.h"
 #include "cJSON.h"
 #include <string.h>
 

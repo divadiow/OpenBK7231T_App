@@ -5,8 +5,8 @@ include obk_app/platforms/obk_main.mk
 LIB_SRC := $(filter-out $(OBK_SRCS)littlefs/%,$(OBKM_SRC))
 LIB_SRC += platforms/SV6X66/obk/stock_entry.c
 LIB_SRC += platforms/SV6X66/obk/stock_runtime.c
-LIB_SRC += platforms/SV6X66/obk/main.c platforms/SV6X66/obk/runtime.c
-LIB_SRC += platforms/SV6X66/obk/identity.c platforms/SV6X66/obk/flash.c
+LIB_SRC += src/hal/sv6x66/hal_main_sv6x66.c platforms/SV6X66/obk/runtime.c
+LIB_SRC += platforms/SV6X66/obk/identity.c
 LIB_SRC += src/hal/sv6x66/hal_ota_sv6x66.c platforms/SV6X66/obk/factory.c
 LIB_SRC += src/hal/sv6x66/hal_wifi_sv6x66.c src/hal/sv6x66/hal_pins_sv6x66.c
 LIB_SRC += src/hal/sv6x66/hal_flashConfig_sv6x66.c src/hal/sv6x66/hal_generic_sv6x66.c

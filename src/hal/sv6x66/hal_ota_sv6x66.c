@@ -1,10 +1,9 @@
 #if PLATFORM_SV6X66
 
-#include "sv6x66_platform.h"
+#include "new_common.h"
 #include "../../../platforms/SV6X66/obk/ota.h"
 #include "../../../platforms/SV6X66/obk/flash.h"
 #include "crypto/cryptoApi.h"
-#include "new_common.h"
 #include "httpserver/new_http.h"
 #include "httpserver/rest_interface.h"
 #include "hal/hal_ota.h"

@@ -20,6 +20,8 @@ LDFLAGS += -Wl,--wrap=wifi_cfg_init,--wrap=wifi_cfg_get_addr1,--wrap=wifi_cfg_ge
 LDFLAGS += -Wl,--wrap=memcpy
 # Preserve the real AP-start return that DUT_wifi_start otherwise discards.
 LDFLAGS += -Wl,--wrap=softap_start
+# The SDK starts client DHCP on TCPIP; bind its hostname before any request.
+LDFLAGS += -Wl,--wrap=dhcp_start
 # Use SDK calibration macros with the board's explicit 26 MHz clock profile.
 LDFLAGS += -Wl,--wrap=drv_phy_cali
 # Select metadata directly before the SDK archive group. The application

@@ -1,6 +1,5 @@
-#include "sv6x66_platform.h"
-#include "lwip/apps/mqtt.h"
 #include "new_common.h"
+#include "lwip/apps/mqtt.h"
 #include "new_cfg.h"
 #include "new_pins.h"
 #include <string.h>

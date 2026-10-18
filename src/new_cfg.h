@@ -10,6 +10,7 @@ extern int g_cfg_pendingChanges;
 
 const char *CFG_GetDeviceName();
 const char *CFG_GetShortDeviceName();
+const char *CFG_GetOpenBekenHostName();
 void CFG_SetShortDeviceName(const char *s);
 void CFG_SetDeviceName(const char *s);
 int CFG_GetMQTTPort();

@@ -1815,6 +1815,15 @@ commandResult_t MQTT_SetBroadcastInterval(const void* context, const char* cmd, 
 	return CMD_RES_OK;
 }
 static BENCHMARK_TEST_INFO* info = NULL;
+#ifndef MQTT_BENCHMARK_THREAD_PRIORITY
+#define MQTT_BENCHMARK_THREAD_PRIORITY 15
+#endif
+#ifndef MQTT_BENCHMARK_THREAD_NAME
+#define MQTT_BENCHMARK_THREAD_NAME "mqtt"
+#endif
+#ifndef MQTT_BENCHMARK_STACK_BYTES
+#define MQTT_BENCHMARK_STACK_BYTES (1024 * sizeof(StackType_t))
+#endif
 
 #if WINDOWS
 
@@ -1860,15 +1869,14 @@ commandResult_t MQTT_StartMQTTTestThread(const void* context, const char* cmd, c
 
 #if WINDOWS
 
-#elif PLATFORM_SV6X66
-	if (rtos_create_thread(NULL, 2, "mqtt_benchmark", mqtt_timer_thread, 4096, (void*)info) != kNoErr) {
+#elif PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
+	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_LN8825 || PLATFORM_BL616 || PLATFORM_GD32VW553
+	if (rtos_create_thread(NULL, MQTT_BENCHMARK_THREAD_PRIORITY, MQTT_BENCHMARK_THREAD_NAME, mqtt_timer_thread,
+		MQTT_BENCHMARK_STACK_BYTES, (void*)info) != kNoErr) {
 		os_free(info);
 		info = NULL;
 		return CMD_RES_ERROR;
 	}
-#elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
-	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_LN8825 || PLATFORM_BL616 || PLATFORM_GD32VW553
-	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, 15, NULL);
 #elif PLATFORM_TXW81X
 	os_task_create("mqtt", mqtt_timer_thread, (void*)info, 15, 0, NULL, 1024);
 #elif PLATFORM_RDA5981

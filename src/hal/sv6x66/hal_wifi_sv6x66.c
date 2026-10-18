@@ -1,7 +1,9 @@
 #if PLATFORM_SV6X66
 
-#include "sv6x66_platform.h"
 #include "new_common.h"
+#include "new_cfg.h"
+#include "new_pins.h"
+#include "lwip/dhcp.h"
 #include "hal/hal_wifi.h"
 #include "wifi_api.h"
 #include "netstack.h"
@@ -15,6 +17,20 @@
 /* Exported by SDK libssvradio; its public SOFTAP_CUSTOM_CONFIG is also used
 	* by SDK mac_atcmd CLI. No vendor function body is copied here. */
 extern int softap_set_custom_conf(SOFTAP_CUSTOM_CONFIG *);
+/* The SDK schedules dhcp_start through netifapi_netif_common on TCPIP.
+ * Bind the configured name there before the first client DHCP request, including
+ * after interface recreation. The snapshot outlives every asynchronous packet. */
+static char dhcp_hostname[CGF_DEVICE_NAME_SIZE];
+extern err_t __real_dhcp_start(struct netif *netif);
+err_t __wrap_dhcp_start(struct netif *netif) {
+	const char *name;
+	if (!netif)
+		return ERR_ARG;
+	name = CFG_GetOpenBekenHostName();
+	snprintf(dhcp_hostname, sizeof(dhcp_hostname), "%s", name ? name : "");
+	netif_set_hostname(netif, dhcp_hostname);
+	return __real_dhcp_start(netif);
+}
 static void (*status_callback)(int);
 static int access_point, connected = -1, network_ready;
 enum { SV_STA_IDLE,

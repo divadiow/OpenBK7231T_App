@@ -1,8 +1,7 @@
 #define SV6X66_ALLOC_IMPLEMENTATION
-#include "sv6x66_platform.h"
+#include "new_common.h"
 #include "flash.h"
 #include "uart/drv_uart.h"
-#include "wdt/drv_wdt.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,7 +28,7 @@ void *__attribute__((section(".fast_boot_code"))) __wrap_memcpy(void *destinatio
 	return destination;
 }
 
-void *SV6X66_Malloc(size_t length) {
+void *os_malloc(size_t length) {
 	allocation_header *p;
 	if (!length || length > SIZE_MAX - sizeof(*p))
 		return NULL;
@@ -39,33 +38,33 @@ void *SV6X66_Malloc(size_t length) {
 	p->size = length;
 	return p + 1;
 }
-void SV6X66_Free(void *ptr) {
+void os_free(void *ptr) {
 	if (ptr)
 		vPortFree((allocation_header *)ptr - 1);
 }
-void *SV6X66_Calloc(size_t count, size_t size) {
+void *os_calloc(size_t count, size_t size) {
 	void *p;
 	if (size && count > SIZE_MAX / size)
 		return NULL;
-	p = SV6X66_Malloc(count * size);
+	p = os_malloc(count * size);
 	if (p)
 		memset(p, 0, count * size);
 	return p;
 }
-void *SV6X66_Realloc(void *old, size_t length) {
+void *os_realloc(void *old, size_t length) {
 	void *p;
 	size_t previous;
 	if (!old)
-		return SV6X66_Malloc(length);
+		return os_malloc(length);
 	if (!length) {
-		SV6X66_Free(old);
+		os_free(old);
 		return NULL;
 	}
 	previous = ((allocation_header *)old - 1)->size;
-	p = SV6X66_Malloc(length);
+	p = os_malloc(length);
 	if (p) {
 		memcpy(p, old, previous < length ? previous : length);
-		SV6X66_Free(old);
+		os_free(old);
 	}
 	return p;
 }
@@ -111,32 +110,6 @@ int __wrap_printf(const char *format, ...) {
 	return SV6X66_Printf("%s", buffer);
 }
 
-OSStatus rtos_create_thread(beken_thread_t *handle, uint8_t priority, const char *name,
-							beken_thread_function_t function, uint32_t bytes, beken_thread_arg_t arg) {
-	uint32_t words = (bytes + sizeof(StackType_t) - 1) / sizeof(StackType_t);
-	/* Common OBK callers use platform-independent priority numbers above the
-		* five-priority SDK limit. Application workers must leave radio priority4. */
-	if (priority > 3)
-		priority = 3;
-	if (!function || words > UINT16_MAX || words < configMINIMAL_STACK_SIZE)
-		return -1;
-	return xTaskCreate(function, name, (uint16_t)words, arg, priority, handle) == pdPASS ? 0 : -1;
-}
-OSStatus rtos_delete_thread(beken_thread_t *thread) {
-	vTaskDelete(thread ? *thread : NULL);
-	return 0;
-}
-OSStatus rtos_suspend_thread(beken_thread_t *thread) {
-	vTaskSuspend(thread ? *thread : NULL);
-	return 0;
-}
-
-void SV6X66_Reboot(void) {
-	drv_wdt_init();
-	drv_wdt_enable(SYS_WDT, 1);
-	for (;;) {
-	}
-}
 static uintptr_t __attribute__((noinline)) executing_pc(void) {
 	return (uintptr_t)__builtin_return_address(0);
 }
@@ -186,11 +159,4 @@ int LWIP_GetActiveSockets(void) {
 #else
 	return -1; /* Statistics unavailable, not an invented zero active sockets. */
 #endif
-}
-void usleep(int microseconds) {
-	uint32_t start = OS_GetUsSysTick();
-	if (microseconds <= 0)
-		return;
-	while ((uint32_t)(OS_GetUsSysTick() - start) < (uint32_t)microseconds) {
-	}
 }

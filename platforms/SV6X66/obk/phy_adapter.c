@@ -1,4 +1,4 @@
-#include "sv6x66_platform.h"
+#include "new_common.h"
 #include "soc_types.h"
 #include "soc_defs.h"
 #include "phy/drv_phy.h"

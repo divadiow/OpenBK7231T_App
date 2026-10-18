@@ -1,4 +1,6 @@
-#include "sv6x66_platform.h"
+#if PLATFORM_SV6X66
+
+#include "new_common.h"
 #include "flash.h"
 #include "hsuart/drv_hsuart.h"
 #include "uart/drv_uart.h"
@@ -89,3 +91,5 @@ void vAssertCalled(const char *function, int line) {
 	for (;;) {
 	}
 }
+
+#endif

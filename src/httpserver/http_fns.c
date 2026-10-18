@@ -3179,12 +3179,6 @@ int http_fn_cfg_pins(http_request_t* request) {
 			iChangedRequested++;
 
 			role = atoi(tmpB);
-#if PLATFORM_SV6X66
-			if (!SV6X66_PinRoleSupported(i, role)) {
-				hprintf255(request, "GPIO%i role rejected: unavailable capability<br>", i);
-				continue;
-			}
-#endif
 
 			pr = PIN_GetPinRoleForPinIndex(i);
 			if (pr != role) {
@@ -3263,20 +3257,6 @@ int http_fn_cfg_pins(http_request_t* request) {
 	poststr(request, "];");
 
 	poststr(request, "var  sr = r.map((e,i)=>{return e[0]+'#'+i}).sort(Intl.Collator().compare).map(e=>e.split('#'));");
-#if PLATFORM_SV6X66
-	int firstRole = 1;
-	poststr(request, "var availableRoles=[");
-	for (int role = 0; role < IOR_Total_Options; role++) {
-		for (int pin = 0; pin < PLATFORM_GPIO_MAX; pin++) {
-			if (SV6X66_PinAvailable(pin) && SV6X66_PinRoleSupported(pin, role)) {
-				hprintf255(request, "%s%i", firstRole ? "" : ",", role);
-				firstRole = 0;
-				break;
-			}
-		}
-	}
-	poststr(request, "];sr=sr.filter(e=>availableRoles.includes(+e[1]));");
-#endif
 	
 	poststr(request, "function hide_show() {"
 		"n=this.name;"

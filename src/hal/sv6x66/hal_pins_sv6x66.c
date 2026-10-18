@@ -1,6 +1,5 @@
 #if PLATFORM_SV6X66
 
-#include "sv6x66_platform.h"
 #include "new_common.h"
 #include "new_pins.h"
 #include "hal/hal_pins.h"
@@ -29,47 +28,6 @@ static int usable(int pin) {
 }
 int SV6X66_PinAvailable(int pin) {
 	return usable(pin);
-}
-/* Admit only implemented digital roles; None can clear any valid pin index.
-	* This is platform capability, not evidence that a pin is exposed on the board. */
-int SV6X66_PinRoleSupported(int pin, int role) {
-	if (pin < 0 || pin >= 23)
-		return 0;
-	if (role == IOR_None)
-		return 1;
-	if (!usable(pin))
-		return 0;
-	if (role == IOR_PWM || role == IOR_PWM_n)
-		return pin <= 4;
-	switch (role) {
-	case IOR_Relay:
-	case IOR_Relay_n:
-	case IOR_LED:
-	case IOR_LED_n:
-	case IOR_LED_WIFI:
-	case IOR_LED_WIFI_n:
-	case IOR_Button:
-	case IOR_Button_n:
-	case IOR_Button_pd:
-	case IOR_Button_pd_n:
-	case IOR_Button_ToggleAll:
-	case IOR_Button_ToggleAll_n:
-#if ENABLE_OBK_SCRIPTING
-	case IOR_Button_ScriptOnly:
-	case IOR_Button_ScriptOnly_n:
-#endif
-	case IOR_DigitalInput:
-	case IOR_DigitalInput_n:
-	case IOR_DigitalInput_NoPup:
-	case IOR_DigitalInput_NoPup_n:
-	case IOR_ToggleChannelOnToggle:
-	case IOR_ToggleChannelOnToggle_pd:
-	case IOR_AlwaysHigh:
-	case IOR_AlwaysLow:
-		return 1;
-	default:
-		return 0;
-	}
 }
 static void report_failure(int pin, int status) {
 	if (status)
