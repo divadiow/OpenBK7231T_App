@@ -58,8 +58,15 @@ all: OpenBK7231T
 .PHONY: full
 full: clean all
 
+.PHONY: prebuild_OpenSV6X66
+prebuild_OpenSV6X66:
+	git submodule update --init --recursive --depth=1 sdk/OpenSV6X66
+	if [ ! -x sdk/OpenSV6X66/toolchain/extracted/nds32le-elf-mculib-v3/bin/nds32le-elf-gcc ]; then \
+		cd sdk/OpenSV6X66/toolchain && sha256sum -c SHA256SUMS && mkdir -p extracted && tar -xJf nds32le-elf-mculib-v3.txz -C extracted; \
+	fi
+
 .PHONY: OpenSV6X66
-OpenSV6X66:
+OpenSV6X66: prebuild_OpenSV6X66
 	python3 platforms/SV6X66/obk/build.py --version "$(APP_VERSION)" --variant "$(OBK_VARIANT)"
 
 # Update/init git submodules

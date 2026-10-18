@@ -917,9 +917,9 @@ int http_fn_index(http_request_t* request) {
 	hprintf255(request, "<h5>Cfg size: %i, change counter: %i, ota counter: %i, incomplete boots: %i</h5>",
 		sizeof(g_cfg), g_cfg.changeCounter, g_cfg.otaCounter, g_bootFailures);
 #if PLATFORM_SV6X66
-	uint32_t runningBank=SV6X66_RunningBank();
-	hprintf255(request,"<h5>Running firmware bank: %s</h5>",
-		runningBank==SV6X66_BANK_A?"A":runningBank==SV6X66_BANK_B?"B":"unknown");
+	uint32_t runningBank = SV6X66_RunningBank();
+	hprintf255(request, "<h5>Running firmware bank: %s</h5>",
+		runningBank == SV6X66_BANK_A ? "A" : runningBank == SV6X66_BANK_B ? "B" : "unknown");
 #endif
 
   // display temperature - thanks to giedriuslt
@@ -3181,7 +3181,7 @@ int http_fn_cfg_pins(http_request_t* request) {
 			role = atoi(tmpB);
 #if PLATFORM_SV6X66
 			if (!SV6X66_PinRoleSupported(i, role)) {
-				hprintf255(request,"GPIO%i role rejected: unavailable capability<br>",i);
+				hprintf255(request, "GPIO%i role rejected: unavailable capability<br>", i);
 				continue;
 			}
 #endif
@@ -3325,7 +3325,8 @@ int http_fn_cfg_pins(http_request_t* request) {
 
 	for (i = 0; i < PLATFORM_GPIO_MAX; i++) {
 #if PLATFORM_SV6X66
-		if (!SV6X66_PinAvailable(i)) continue;
+		if (!SV6X66_PinAvailable(i))
+			continue;
 #endif
 		// On BL602, any GPIO can be mapped to one of 5 PWM channels
 		// But on Beken chips, only certain pins can be PWM

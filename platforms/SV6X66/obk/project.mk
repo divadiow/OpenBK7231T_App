@@ -27,7 +27,8 @@ LDFLAGS += -Wl,--wrap=drv_phy_cali
 PROJECT_OBJ += out/obk_app/platforms/SV6X66/obk/identity.o
 # Select real GPIO definitions before lazy generic weak archive fallbacks.
 # module.mk already builds this object as an application-library dependency.
-PROJECT_OBJ += out/obk_app/platforms/SV6X66/obk/pins.o
+PROJECT_OBJ += out/obk_app/src/hal/sv6x66/hal_pins_sv6x66.o
+PROJECT_OBJ += out/obk_app/src/hal/sv6x66/hal_generic_sv6x66.o
 # SDK links LDFLAGS after the application archive group; resolve its math calls.
 LDFLAGS += -lm
 

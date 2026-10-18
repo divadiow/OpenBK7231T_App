@@ -14,7 +14,6 @@ import tempfile
 
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parents[2]
-sys.path.insert(0, str(SOURCE.parent / 'ckw04_stage1'))
 from stock_layout import linker_overlay, uart_image
 
 BANKS = {'A': 0xB000, 'B': 0xA6000}
@@ -67,7 +66,7 @@ def toolchain(argument):
     compiler = shutil.which('nds32le-elf-gcc')
     if compiler:
         candidates.append(str(Path(compiler).parent))
-    candidates.append(str(ROOT / 'output/SV6X66_CKW04_STAGE1/toolchain/extracted/nds32le-elf-mculib-v3/bin'))
+    candidates.append(str(ROOT / 'sdk/OpenSV6X66/toolchain/extracted/nds32le-elf-mculib-v3/bin'))
     for candidate in candidates:
         if candidate and (Path(candidate) / 'nds32le-elf-gcc').is_file():
             return Path(candidate).resolve()

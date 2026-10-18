@@ -307,14 +307,6 @@ jobs:
           packages: libc6-i386
           version: 1.0
 
-      - name: Install SV6X66 toolchain
-        if: ${{ matrix.platform == 'OpenSV6X66' }}
-        run: |
-          curl -fL --output "$RUNNER_TEMP/nds32le-elf-mculib-v3.txz" https://media.githubusercontent.com/media/DeDaMrAzR/ghpages/cac120687f2948a23192c8a95655514f14f09c4a/toolchains/nds32le-elf-mculib-v3.txz
-          echo "92f0767dbabb32958c678b542fe47f826f9d28f4584c22abe8d806b73a0692e2  $RUNNER_TEMP/nds32le-elf-mculib-v3.txz" | sha256sum -c -
-          tar -xJf "$RUNNER_TEMP/nds32le-elf-mculib-v3.txz" -C "$RUNNER_TEMP"
-          echo "SV6X66_TOOLCHAIN=$RUNNER_TEMP/nds32le-elf-mculib-v3/bin" >> "$GITHUB_ENV"
-
       - name: Install arm-none-eabi-gcc
         if: ${{ matrix.gcc && matrix.gcc != 'apt' }}
         uses: carlosperate/arm-none-eabi-gcc-action@v1
