@@ -405,6 +405,14 @@ void PIN_TriggerPoll() {
 void PIN_SetupPins() {
 	int i;
 	for (i = 0; i < PLATFORM_GPIO_MAX; i++) {
+#if PLATFORM_SV6X66
+		/* Imported/retained unsupported roles must not reach driver setup. */
+		if(!SV6X66_PinRoleSupported(i,g_cfg.pins.roles[i])) {
+			addLogAdv(LOG_ERROR,LOG_FEATURE_CFG,"GPIO%i unsupported stored role %i cleared",i,g_cfg.pins.roles[i]);
+			g_cfg.pins.roles[i]=IOR_None;
+			g_cfg_pendingChanges++;
+		}
+#endif
 		PIN_SetPinRoleForPinIndex(i, g_cfg.pins.roles[i]);
 	}
 
@@ -987,6 +995,20 @@ void PIN_SetPinRoleForPinIndex(int index, int role) {
 		addLogAdv(LOG_ERROR, LOG_FEATURE_CFG, "PIN_SetPinRoleForPinIndex: Pin index %i out of range <0,%i).", index, PLATFORM_GPIO_MAX);
 		return;
 	}
+#if PLATFORM_SV6X66
+	if(!SV6X66_PinRoleSupported(index,role)) {
+		addLogAdv(LOG_ERROR,LOG_FEATURE_CFG,"GPIO%i unsupported role %i rejected",index,role);
+		return;
+	}
+	if(!SV6X66_PinAvailable(index)) {
+		/* None clears a reserved pin without touching its recovery/flash mux. */
+		if(g_cfg.pins.roles[index]!=IOR_None) {
+			g_cfg.pins.roles[index]=IOR_None;g_cfg_pendingChanges++;
+		}
+		setGPIActive(index,0,0);
+		return;
+	}
+#endif
 #if 0
 	if (index == PIN_UART1_RXD) {
 		// default role to None in order to fix broken config

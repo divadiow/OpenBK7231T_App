@@ -530,6 +530,24 @@
 #endif
 //#define ENABLE_DRIVER_DCF77					1
 
+#elif PLATFORM_SV6X66
+// Initial CKW04 profile: core HTTP/MQTT, GPIO and original recovery/OTA.
+// Optional peripherals remain opt-in after their HAL exists and is validated.
+#define ENABLE_NTP								1
+#define ENABLE_DRIVER_MDNS						1
+#define ENABLE_HA_DISCOVERY						1
+#define ENABLE_MQTT								1
+#define NO_CHIP_TEMPERATURE						1
+#define NEW_TCP_SERVER							1
+#define ENABLE_EXPAND_CONSTANT					1
+#define ENABLE_OBK_SCRIPTING					1
+#define ENABLE_ADVANCED_CHANNELTYPES_DISCOVERY	1
+#define ENABLE_DRIVER_LED						1
+// Unsupported on this profile; keep undefined so GUI numeric feature enabling
+// cannot turn on a filesystem with no SV6X66 backend.
+#undef ENABLE_LITTLEFS
+#undef ENABLE_PING_WATCHDOG
+#define ENABLE_PING_WATCHDOG					0
 #elif PLATFORM_TR6260
 
 // #define ENABLE_SEND_POSTANDGET				1

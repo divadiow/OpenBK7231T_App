@@ -1818,7 +1818,7 @@ static BENCHMARK_TEST_INFO* info = NULL;
 
 #if WINDOWS
 
-#elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
+#elif PLATFORM_SV6X66 || PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
 	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_TXW81X || PLATFORM_RDA5981 || PLATFORM_LN8825 \
 	|| PLATFORM_BL616 || PLATFORM_GD32VW553
 static void mqtt_timer_thread(void* param)
@@ -1860,6 +1860,12 @@ commandResult_t MQTT_StartMQTTTestThread(const void* context, const char* cmd, c
 
 #if WINDOWS
 
+#elif PLATFORM_SV6X66
+	if (rtos_create_thread(NULL, 2, "mqtt_benchmark", mqtt_timer_thread, 4096, (void*)info) != kNoErr) {
+		os_free(info);
+		info = NULL;
+		return CMD_RES_ERROR;
+	}
 #elif PLATFORM_BL602 || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_ESPIDF || PLATFORM_TR6260 \
 	|| PLATFORM_REALTEK || PLATFORM_ECR6600 || PLATFORM_ESP8266 || PLATFORM_LN8825 || PLATFORM_BL616 || PLATFORM_GD32VW553
 	xTaskCreate(mqtt_timer_thread, "mqtt", 1024, (void*)info, 15, NULL);

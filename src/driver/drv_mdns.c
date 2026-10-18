@@ -4,7 +4,7 @@
 #include "../obk_config.h"
 #include "drv_mdns.h"
 
-#if (PLATFORM_BK7231N || PLATFORM_BK7231T || PLATFORM_BK7231U || PLATFORM_BK7238 || PLATFORM_BK7252 || PLATFORM_BK7252N || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_BL602 || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_RTL87X0C || PLATFORM_TR6260 || PLATFORM_ECR6600 || PLATFORM_GD32VW553 || (PLATFORM_XRADIO && !PLATFORM_XR872 && !__CONFIG_LWIP_V1) || PLATFORM_ESP8266 || (PLATFORM_ESPIDF && (CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C5 || CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32C61 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3))) && ENABLE_DRIVER_MDNS
+#if (PLATFORM_SV6X66 || PLATFORM_BK7231N || PLATFORM_BK7231T || PLATFORM_BK7231U || PLATFORM_BK7238 || PLATFORM_BK7252 || PLATFORM_BK7252N || PLATFORM_W600 || PLATFORM_W800 || PLATFORM_BL602 || PLATFORM_LN882H || PLATFORM_LN8825 || PLATFORM_RTL87X0C || PLATFORM_TR6260 || PLATFORM_ECR6600 || PLATFORM_GD32VW553 || (PLATFORM_XRADIO && !PLATFORM_XR872 && !__CONFIG_LWIP_V1) || PLATFORM_ESP8266 || (PLATFORM_ESPIDF && (CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C5 || CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32C61 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3))) && ENABLE_DRIVER_MDNS
 
 #include "lwip/apps/mdns_opts.h"
 
@@ -29,6 +29,13 @@
 #endif
 #include "lwip/tcpip.h"
 
+/* Platform bindings: the shared lifecycle below owns policy and state. */
+#if PLATFORM_SV6X66 || (LWIP_VERSION_MAJOR > 2) || (LWIP_VERSION_MAJOR == 2 && LWIP_VERSION_MINOR >= 1)
+#define DRV_MDNS_HAS_RESTART_API 1
+#else
+#define DRV_MDNS_HAS_RESTART_API 0
+#endif
+
 #ifndef LOCK_TCPIP_CORE
 #define LOCK_TCPIP_CORE()
 #endif
@@ -43,15 +50,12 @@ extern int DRV_MDNS_Active;
 static int g_mdnsInitDone = 0;
 static int g_mdnsNetifAdded = 0;
 static s8_t g_mdnsServiceSlot = -1;
-
-#if (LWIP_VERSION_MAJOR > 2) || (LWIP_VERSION_MAJOR == 2 && LWIP_VERSION_MINOR >= 1)
-#define DRV_MDNS_HAS_RESTART_API 1
-#else
-#define DRV_MDNS_HAS_RESTART_API 0
-#endif
+static void DRV_MDNS_Detach(void);
 
 static struct netif *DRV_MDNS_GetStaNetif(void) {
-#if PLATFORM_LN882H || PLATFORM_LN8825
+#if PLATFORM_SV6X66
+	return SV6X66_MDNS_GetStaNetif();
+#elif PLATFORM_LN882H || PLATFORM_LN8825
 	extern struct netif *get_connected_nif(void);
 	return get_connected_nif();
 #elif PLATFORM_ESPIDF
@@ -108,14 +112,14 @@ static void DRV_MDNS_StartOrRestart(void) {
 	}
 
 	if (!g_mdnsNetifAdded) {
-#if PLATFORM_ESPIDF || PLATFORM_GD32VW553
+#if PLATFORM_SV6X66 || PLATFORM_ESPIDF || PLATFORM_GD32VW553
 		err = mdns_resp_add_netif(netif, hostName);
 #else
 		err = mdns_resp_add_netif(netif, hostName, 120);
 #endif
 		if (err == ERR_OK) {
 			g_mdnsNetifAdded = 1;
-#if PLATFORM_ESPIDF || PLATFORM_GD32VW553
+#if PLATFORM_SV6X66 || PLATFORM_ESPIDF || PLATFORM_GD32VW553
 			g_mdnsServiceSlot = mdns_resp_add_service(netif, hostName, "_http", DNSSD_PROTO_TCP, 80, 0, 0);
 #else
 			g_mdnsServiceSlot = mdns_resp_add_service(netif, hostName, "_http", DNSSD_PROTO_TCP, 80, 120, 0, 0);
@@ -153,7 +157,11 @@ void DRV_MDNS_Init(void) {
 		return;
 	}
 
+#if PLATFORM_SV6X66
+	SV6X66_MDNS_Dispatch(DRV_MDNS_StartOrRestart, DRV_MDNS_Detach, 1);
+#else
 	DRV_MDNS_StartOrRestart();
+#endif
 }
 
 void DRV_MDNS_RunEverySecond(void) {
@@ -162,10 +170,8 @@ void DRV_MDNS_RunEverySecond(void) {
 void DRV_MDNS_RunQuickTick(void) {
 }
 
-void DRV_MDNS_Shutdown(void) {
+static void DRV_MDNS_Detach(void) {
 	struct netif *netif;
-
-	addLogAdv(LOG_INFO, LOG_FEATURE_HTTP, "DRV_MDNS_Shutdown");
 
 	if (g_mdnsNetifAdded) {
 		netif = DRV_MDNS_GetStaNetif();
@@ -177,7 +183,16 @@ void DRV_MDNS_Shutdown(void) {
 		g_mdnsNetifAdded = 0;
 		g_mdnsServiceSlot = -1;
 	}
+}
 
+void DRV_MDNS_Shutdown(void) {
+	addLogAdv(LOG_INFO, LOG_FEATURE_HTTP, "DRV_MDNS_Shutdown");
+#if PLATFORM_SV6X66
+	ScheduleDriverStart("MDNS", -1);
+	SV6X66_MDNS_Dispatch(DRV_MDNS_Detach, DRV_MDNS_Detach, 0);
+#else
+	DRV_MDNS_Detach();
+#endif
 	DRV_MDNS_Active = 0;
 }
 

@@ -58,6 +58,10 @@ all: OpenBK7231T
 .PHONY: full
 full: clean all
 
+.PHONY: OpenSV6X66
+OpenSV6X66:
+	python3 platforms/SV6X66/obk/build.py --version "$(APP_VERSION)" --variant "$(OBK_VARIANT)"
+
 # Update/init git submodules
 .PHONY: submodules
 submodules:

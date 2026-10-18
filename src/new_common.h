@@ -166,6 +166,12 @@ typedef long BaseType_t;
 #endif
 #define DEVICENAME_PREFIX_FULL "Open" PLATFORM_MCU_NAME
 #define DEF_MQTT_GROUP "esp"
+#elif PLATFORM_SV6X66
+#define DEVICENAME_PREFIX_FULL "OpenSV6X66"
+#define DEVICENAME_PREFIX_SHORT "sv6"
+#define PLATFORM_MCU_NAME "SV6X66"
+#define MANUFACTURER "iComm Semi"
+#define DEF_MQTT_GROUP "sv6x66s"
 #elif PLATFORM_TR6260
 #define DEVICENAME_PREFIX_FULL "OpenTR6260"
 #define DEVICENAME_PREFIX_SHORT "tr6260"
@@ -303,6 +309,8 @@ This platform is not supported, error!
 #define USER_SW_VER "LN8825_Test"
 #elif defined(PLATFORM_ESPIDF)
 #define USER_SW_VER PLATFORM_MCU_NAME "_Test"
+#elif defined(PLATFORM_SV6X66)
+#define USER_SW_VER "SV6X66_Test"
 #elif defined(PLATFORM_TR6260)
 #define USER_SW_VER "TR6260_Test"
 #elif defined(PLATFORM_RTL87X0C)
@@ -712,6 +720,8 @@ OSStatus rtos_suspend_thread(beken_thread_t* thread);
 #define xPortGetFreeHeapSize() esp_get_free_heap_size()
 #endif
 
+#elif PLATFORM_SV6X66
+#include "sv6x66_platform.h"
 #elif PLATFORM_TR6260
 
 #include "FreeRTOS.h"
@@ -1253,7 +1263,7 @@ int strcpy_safe_checkForChanges(char *tg, const char *src, int tgMaxLen);
 void urldecode2_safe(char *dst, const char *srcin, int maxDstLen);
 int strIsInteger(const char *s);
 
-#if !defined(PLATFORM_ESPIDF) && !defined(PLATFORM_TR6260) && !defined(PLATFORM_ECR6600) && !defined(PLATFORM_BL602) && \
+#if !defined(PLATFORM_ESPIDF) && !defined(PLATFORM_TR6260) && !defined(PLATFORM_SV6X66) && !defined(PLATFORM_ECR6600) && !defined(PLATFORM_BL602) && \
 	!defined(PLATFORM_ESP8266) && !defined(PLATFORM_W800) && !defined(PLATFORM_ARMINO)
 
 const char* strcasestr(const char* str1, const char* str2);

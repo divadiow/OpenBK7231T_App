@@ -916,6 +916,11 @@ int http_fn_index(http_request_t* request) {
 	}
 	hprintf255(request, "<h5>Cfg size: %i, change counter: %i, ota counter: %i, incomplete boots: %i</h5>",
 		sizeof(g_cfg), g_cfg.changeCounter, g_cfg.otaCounter, g_bootFailures);
+#if PLATFORM_SV6X66
+	uint32_t runningBank=SV6X66_RunningBank();
+	hprintf255(request,"<h5>Running firmware bank: %s</h5>",
+		runningBank==SV6X66_BANK_A?"A":runningBank==SV6X66_BANK_B?"B":"unknown");
+#endif
 
   // display temperature - thanks to giedriuslt
   // only in Normal mode, and if boot is not failing
@@ -1574,6 +1579,30 @@ int http_fn_cfg_wifi(http_request_t* request) {
 #ifdef WINDOWS
 
 		poststr(request, "Not available on Windows<br>");
+#elif PLATFORM_SV6X66
+		SV6X66_WifiScanResult networks[SV6X66_WIFI_SCAN_MAX];
+		unsigned int count = 0;
+		SV6X66_WifiScanStatus status = SV6X66_WifiScan(networks, SV6X66_WIFI_SCAN_MAX, &count);
+		if (status == SV6X66_SCAN_UNSUPPORTED) {
+			poststr(request, "Scanning is available in station mode; WiFi mode was not changed.<br>");
+		} else if (status == SV6X66_SCAN_BUSY) {
+			poststr(request, "A network scan is still in progress. Try again later.<br>");
+		} else if (status == SV6X66_SCAN_TIMEOUT) {
+			poststr(request, "Network scan timed out. Waiting for it to finish.<br>");
+		} else if (status != SV6X66_SCAN_OK) {
+			poststr(request, "Network scan failed.<br>");
+		} else if (!count) {
+			poststr(request, "No networks found.<br>");
+		} else {
+			poststr(request, "<table><tr><th>SSID</th><th>Channel</th><th>Signal</th><th>Security</th></tr>");
+			for (unsigned int n = 0; n < count; n++) {
+				poststr(request, "<tr><td>");
+				poststr_escaped(request, *networks[n].ssid ? networks[n].ssid : "<hidden>");
+				hprintf255(request, "</td><td>%u</td><td>%i dBm</td><td>%s</td></tr>",
+					networks[n].channel, networks[n].rssi, networks[n].security);
+			}
+			poststr(request, "</table><br>");
+		}
 #elif PLATFORM_BL602 && !PLATFORM_BL_NEW
                wifi_mgmr_ap_item_t *ap_info;
                uint32_t i, ap_num;
@@ -3150,6 +3179,12 @@ int http_fn_cfg_pins(http_request_t* request) {
 			iChangedRequested++;
 
 			role = atoi(tmpB);
+#if PLATFORM_SV6X66
+			if (!SV6X66_PinRoleSupported(i, role)) {
+				hprintf255(request,"GPIO%i role rejected: unavailable capability<br>",i);
+				continue;
+			}
+#endif
 
 			pr = PIN_GetPinRoleForPinIndex(i);
 			if (pr != role) {
@@ -3205,6 +3240,16 @@ int http_fn_cfg_pins(http_request_t* request) {
 	}
 	//	strcat(outbuf,"<button type=\"button\">Click Me!</button>");
 	poststr(request, "<form action=\"cfg_pins\" id=\"x\">");
+#if PLATFORM_SV6X66
+	poststr(request, "<style>#x{overflow-x:auto}#x .hdiv{display:grid;"
+		"grid-template-columns:18ch 210px 7ch 7ch;gap:2px;align-items:center;"
+		"width:max-content;white-space:normal;text-align:left}"
+		"#x .hdiv>span{min-width:0!important;overflow-wrap:anywhere}"
+		"#x .hdiv>.hele{width:100%;min-width:0;margin-left:0;box-sizing:border-box}"
+		"#x .hdiv>select{grid-column:2}"
+		"#x .hdiv>input[name^=r]{grid-column:3}"
+		"#x .hdiv>input[name^=e]{grid-column:4}</style>");
+#endif
 
 
 	poststr(request, "<script> var r = [");
@@ -3218,6 +3263,20 @@ int http_fn_cfg_pins(http_request_t* request) {
 	poststr(request, "];");
 
 	poststr(request, "var  sr = r.map((e,i)=>{return e[0]+'#'+i}).sort(Intl.Collator().compare).map(e=>e.split('#'));");
+#if PLATFORM_SV6X66
+	int firstRole = 1;
+	poststr(request, "var availableRoles=[");
+	for (int role = 0; role < IOR_Total_Options; role++) {
+		for (int pin = 0; pin < PLATFORM_GPIO_MAX; pin++) {
+			if (SV6X66_PinAvailable(pin) && SV6X66_PinRoleSupported(pin, role)) {
+				hprintf255(request, "%s%i", firstRole ? "" : ",", role);
+				firstRole = 0;
+				break;
+			}
+		}
+	}
+	poststr(request, "];sr=sr.filter(e=>availableRoles.includes(+e[1]));");
+#endif
 	
 	poststr(request, "function hide_show() {"
 		"n=this.name;"
@@ -3265,6 +3324,9 @@ int http_fn_cfg_pins(http_request_t* request) {
 		" }");
 
 	for (i = 0; i < PLATFORM_GPIO_MAX; i++) {
+#if PLATFORM_SV6X66
+		if (!SV6X66_PinAvailable(i)) continue;
+#endif
 		// On BL602, any GPIO can be mapped to one of 5 PWM channels
 		// But on Beken chips, only certain pins can be PWM
 		int bCanThisPINbePWM;
