@@ -12,7 +12,7 @@
 
 static int g_clk_period = SM2135_DELAY;
 
-#if !PLATFORM_ESPIDF && !PLATFORM_XR806 && !PLATFORM_XR872 && !PLATFORM_ESP8266 && !PLATFORM_REALTEK_NEW && !PLATFORM_TXW81X
+#if !PLATFORM_ESPIDF && !PLATFORM_XR806 && !PLATFORM_XR872 && !PLATFORM_ESP8266 && !PLATFORM_REALTEK_NEW && !PLATFORM_TXW81X && !PLATFORM_SV6X66
 void usleep(int r) //delay function do 10*r nops, because rtos_delay_milliseconds is too much
 {
 #ifdef WIN32
