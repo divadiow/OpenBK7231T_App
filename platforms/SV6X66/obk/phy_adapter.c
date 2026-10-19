@@ -11,7 +11,7 @@
 
 /* Experimental CKW04 bring-up: the factory boot sector contains executable
 	* code at the SDK's fixed XTAL/bus-header addresses. Keep that boot sector
-	* intact and supply the physically confirmed 26 MHz crystal explicitly.
+	* intact and match the working stock firmware's 25 MHz reference explicitly.
 	* The unmodified SDK macros retain RF patching and fast calibration logic. */
 extern IEEE80211STATUS gwifistatus;
 extern struct st_rf_table *p_rf_table;
@@ -52,13 +52,13 @@ void __wrap_drv_phy_cali(void) {
 
 	drv_phy_set_bbscale(&gdpd);
 	patch.dcdc = gwifistatus.dcdc_disable != 1;
-	patch.xtal = XTAL26M;
+	patch.xtal = XTAL25M;
 	patch.cpu_clk = CLK_80M;
 	if (p_rf_table) {
 		TIR_FILL_PATCH(p_rf_table, patch);
 	}
 	band = is_5g_band_support() ? AG_BAND_BOTH : G_BAND_ONLY;
-	SV6X66_Printf("CKW04 PHY: crystal=26 MHz bus=80 MHz nominal band=%d\r\n", band);
+	SV6X66_Printf("CKW04 PHY: crystal=25 MHz bus=80 MHz nominal band=%d\r\n", band);
 	/* The SDK macro uses cal-> without parentheses: pass a pointer variable.
 		* This is its fast-calibration/restore path, not the broken IQK macro. */
 	_INIT_TURISMOC_SYS(patch, band, cal);

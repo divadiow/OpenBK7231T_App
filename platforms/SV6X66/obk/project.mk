@@ -11,7 +11,7 @@ CFLAGS += -DUSER_SW_VER='"$(APP_VERSION)"'
 LDSCRIPT_S := obk_app/platforms/SV6X66/obk/application.lds.S
 SETTING_PARTITION_MAIN_SIZE := 0x9B000
 CFLAGS := $(filter-out -DSETTING_PARTITION_MAIN_SIZE=% -DXTAL=%,$(CFLAGS))
-CFLAGS += -DXTAL=26 -DSETTING_PARTITION_MAIN_SIZE=0x9B000
+CFLAGS += -DXTAL=25 -DSETTING_PARTITION_MAIN_SIZE=0x9B000
 # SPIFFS must read existing flags before programming a cleared-bit update;
 # the shared flash writer intentionally retains exact readback verification.
 CFLAGS += -DSPIFFS_NO_BLIND_WRITES=1
@@ -22,7 +22,7 @@ LDFLAGS += -Wl,--wrap=memcpy
 LDFLAGS += -Wl,--wrap=softap_start
 # The SDK starts client DHCP on TCPIP; bind its hostname before any request.
 LDFLAGS += -Wl,--wrap=dhcp_start
-# Use SDK calibration macros with the board's explicit 26 MHz clock profile.
+# Use SDK calibration macros with the board's explicit 25 MHz clock profile.
 LDFLAGS += -Wl,--wrap=drv_phy_cali
 # Select metadata directly before the SDK archive group. The application
 # library dependency builds this object; an archive root alone was insufficient.
