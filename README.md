@@ -55,15 +55,16 @@ OpenTXW81x camera sensor support is defined at build time (see `project/project_
 
 Supported sensors (enabled in the current config):
 
--   GalaxyCore: GC0308, GC0309, GC0311, GC0312, GC0328, GC0329
--   OmniVision: OV2640, OV7660, OV7670, OV7725
--   BYD: BF3A03, BF30A2, BF2013, BF3703, BF3720, BF20A6
--   Hynix: HI704
+-   GalaxyCore: GC0308, GC0309, GC0310, GC0311, GC0312, GC0328, GC0329, GC2035, GC2145
+-   OmniVision: OV2640, OV2655, OV7660, OV7670, OV7690, OV7725
+-   BYD: BF3A03, BF30A2, BF2013, BF3703, BF3720, BF3736, BF20A6
+-   Hynix: HI253, HI704
 -   PixArt: PAS6175
--   SuperPix: SP0A19, SP0828, SP0A20, SP0718
+-   SmartSens: SC030 family (exact suffix unidentified)
+-   SuperPix: SP0A19, SP0828, SP0A20, SP0A28, SP0A38, SP0A39, SP0718, SP2519
 -   Other: XC7011_GC1054, XC7011_H63, XC7016_H63, XCG532
 
-PAS6175 and BF20A6 drivers are enabled; hardware validation is pending.
+PAS6175, BF20A6 and the additional dump-derived drivers are enabled; hardware validation is pending. The more specific GC0310 and OV7690 probes run before the existing drivers with shared ID bytes.
 
 # In Progress
 
