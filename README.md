@@ -51,16 +51,19 @@ For general information about the BK7231 family, available datasheets, pinout, p
 
 # TXW81X Camera Sensor Support
 
-OpenTXW81x camera sensor support is defined at build time (see [`project_config.h`](https://github.com/NonPIayerCharacter/OpenTXW81X/blob/main/project/project_config.h)).
+OpenTXW81x camera sensor support is defined at build time (see `project/project_config.h` in the linked [OpenTXW81X SDK](sdk/OpenTXW81X)).
 
 Supported sensors (enabled in the current config):
 
 -   GalaxyCore: GC0308, GC0309, GC0311, GC0312, GC0328, GC0329
 -   OmniVision: OV2640, OV7660, OV7670, OV7725
--   BYD: BF3A03, BF30A2, BF2013, BF3703, BF3720
+-   BYD: BF3A03, BF30A2, BF2013, BF3703, BF3720, BF20A6
 -   Hynix: HI704
+-   PixArt: PAS6175
 -   SuperPix: SP0A19, SP0828, SP0A20, SP0718
 -   Other: XC7011_GC1054, XC7011_H63, XC7016_H63, XCG532
+
+PAS6175 and BF20A6 drivers are enabled; hardware validation is pending.
 
 # In Progress
 
