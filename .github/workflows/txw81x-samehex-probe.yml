@@ -1,4 +1,4 @@
-name: TXW81x same-HEX vendor versus Python parity
+name: TXW81x vendor/Python code-length edge test
 
 on:
   push:
@@ -9,168 +9,134 @@ permissions:
   contents: read
 
 jobs:
-  same-hex-parity:
-    name: Build one HEX, pack with Taixin and Python
+  boundary:
+    name: Compare Taixin/Python at 512-byte code boundaries
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     defaults:
       run:
         shell: wsl-bash {0}
     steps:
-      - name: Checkout corrected native Python branch
+      - name: Checkout corrected packer
         uses: actions/checkout@v5
 
-      - name: Set up WSL1 Ubuntu for original Taixin executables
+      - name: Set up original Windows SDK tooling via WSL1
         uses: Vampire/setup-wsl@v7
         with:
           wsl-version: 1
           distribution: Ubuntu-22.04
-          additional-packages: make python3
+          additional-packages: python3 make
 
-      - name: Compile one project.hex and capture exact compiler inputs
+      - name: Initialise SDK and Windows-checkout compatibility
         run: |
           set -euo pipefail
-          # Windows Git checkout may convert .sh files to CRLF. Restore LF
-          # in this ephemeral WSL runner before invoking the Linux wrapper.
+          git submodule update --init --recursive --depth=1 sdk/OpenTXW81X
           python3 - <<'PY'
           from pathlib import Path
-          script = Path('platforms/TXW81X/package_native.sh')
-          contents = script.read_bytes()
-          if b'\r\n' in contents:
-              print('Converting Windows-checkout CRLF to LF for package_native.sh')
-              script.write_bytes(contents.replace(b'\r\n', b'\n'))
+          p = Path('platforms/TXW81X/package_native.sh')
+          p.write_bytes(p.read_bytes().replace(b'\r\n', b'\n'))
           PY
-          make APP_VERSION=samehex_parity APP_NAME=OpenTXW81X VARIANT=default OpenTXW81X
           mkdir -p evidence
-          project=sdk/OpenTXW81X/project
-          cp "$project/project.hex" evidence/project.hex
-          cp "$project/project.bin" evidence/project.bin
-          cp "$project/parameter.bincfg" evidence/parameter.bincfg
-          cp "$project/makecode.ini" evidence/makecode.ini
-          cp "$project/APP.bin" evidence/native-first-APP.bin
-          cp "$project/APP_compress.bin" evidence/native-first-OTA.img
-          cp sdk/OpenTXW81X/sdk/chip/txw81x/loader_compress.bin evidence/loader_compress.bin
-          (cd "$project" && sha256sum project.hex project.bin parameter.bincfg makecode.ini) > evidence/compiler-inputs.sha256
-          sha256sum evidence/* > evidence/initial.sha256
-          echo "Captured raw compiler HEX and first Python output"
-          ls -lh evidence/project.hex evidence/project.bin evidence/native-first-APP.bin evidence/native-first-OTA.img
-          
-      - name: Run Taixin original Windows packaging tools on that exact HEX
-        run: |
-          set -euo pipefail
-          project=sdk/OpenTXW81X/project
-          cp "$project/project.hex" evidence/project-before-taixin.hex
-          rm -f "$project/APP.bin" "$project/APP_compress.bin"
-          cd "$project"
-          echo "Executing vendor BinScript.exe (WSL1 Windows interop)"
-          ./BinScript.exe BinScript.BinScript
-          echo "Executing vendor makecode.exe and configured merge.bat"
-          ./makecode.exe
-          test -s APP.bin
-          test -s APP_compress.bin
-          cd ../../..
-          cmp evidence/project.hex "$project/project.hex"
-          cp "$project/APP.bin" evidence/vendor-APP.bin
-          cp "$project/APP_compress.bin" evidence/vendor-OTA.img
-          cp "$project/txw81x_fpv.bin" evidence/vendor-raw-remapped.bin
-          cp "$project/param.bin" evidence/vendor-param.bin
-          sha256sum evidence/vendor-* > evidence/vendor.sha256
-          echo "Original Taixin packaging completed; project.hex remained unchanged"
-          ls -lh evidence/vendor-*
 
-      - name: Run Python packer against the same HEX and vendor's build date
+      - name: Package synthetic raw HEX at alignment boundaries
         run: |
           set -euo pipefail
-          python3 - <<'PY' > evidence/vendor-date.txt
-          import importlib.util
-          import pathlib
-          import sys
-          module_path = pathlib.Path('tools/txw81x_pack/txw81x_pack.py')
-          spec = importlib.util.spec_from_file_location('txw81x_pack', module_path)
-          mod = importlib.util.module_from_spec(spec)
-          sys.modules[spec.name] = mod
-          spec.loader.exec_module(mod)
-          info = mod.parse_app_image(pathlib.Path('evidence/vendor-APP.bin').read_bytes())
-          d = info['firmware']['date']
-          print(f"{d >> 16:04d}-{(d >> 8) & 255:02d}-{d & 255:02d}")
+          project=sdk/OpenTXW81X/project
+          cp "$project/parameter.bincfg" "$project/parameter.cfg"
+          for size in 12286 12287 12288 12289 12799 12800; do
+            echo "------- Raw compiler code length: $size ($(printf '0x%X' "$size")) -------"
+            d="evidence/$size"
+            mkdir -p "$d"
+            python3 - "$size" "$project/project.hex" <<'PY'
+          import sys,struct
+          from pathlib import Path
+          n=int(sys.argv[1])
+          out=Path(sys.argv[2])
+          raw=bytearray((i*13+7)&255 for i in range(n))
+          struct.pack_into('<H',raw,0x180,0x800)
+          raw[0x182:0x980]=bytes(0x7fe)
+          def record(addr,typ,chunk):
+              payload=bytes((len(chunk),addr>>8,addr&255,typ))+chunk
+              return ':'+(payload+bytes(((-sum(payload))&255,))).hex().upper()
+          lines=[record(0,4,struct.pack('>H',0x1800))]
+          lines.extend(record(i,0,raw[i:i+32]) for i in range(0,n,32))
+          lines.append(record(0,1,b''))
+          out.write_text('\n'.join(lines)+'\n',encoding='ascii')
           PY
-          echo "Matching original vendor date: $(cat evidence/vendor-date.txt)"
-          TXW81X_BUILD_DATE="$(cat evidence/vendor-date.txt)" sh platforms/TXW81X/package_native.sh
-          project=sdk/OpenTXW81X/project
-          cmp evidence/project.hex "$project/project.hex"
-          cp "$project/APP.bin" evidence/native-samehex-APP.bin
-          cp "$project/APP_compress.bin" evidence/native-samehex-OTA.img
-          sha256sum evidence/native-samehex-* > evidence/native-samehex.sha256
+            cp "$project/project.hex" "$d/project.hex"
+            rm -f "$project/APP.bin" "$project/APP_compress.bin"
+            (
+              cd "$project"
+              ./BinScript.exe BinScript.BinScript
+              ./makecode.exe
+              test -s APP.bin
+              test -s APP_compress.bin
+            )
+            cp "$project/txw81x_fpv.bin" "$d/vendor-remapped.bin"
+            cp "$project/APP.bin" "$d/vendor-APP.bin"
+            cp "$project/APP_compress.bin" "$d/vendor-OTA.img"
+            python3 - "$d/vendor-APP.bin" > "$d/date.txt" <<'PY'
+          import sys,importlib.util
+          from pathlib import Path
+          f=Path('tools/txw81x_pack/txw81x_pack.py')
+          spec=importlib.util.spec_from_file_location('txw81x_pack',f)
+          obj=importlib.util.module_from_spec(spec)
+          sys.modules[spec.name]=obj
+          spec.loader.exec_module(obj)
+          info=obj.parse_app_image(Path(sys.argv[1]).read_bytes())
+          d=info['firmware']['date']
+          print(f'{d>>16:04d}-{(d>>8)&255:02d}-{d&255:02d}')
+          PY
+            TXW81X_BUILD_DATE="$(cat "$d/date.txt")" sh platforms/TXW81X/package_native.sh > "$d/python-log.txt"
+            cp "$project/APP.bin" "$d/python-APP.bin"
+            cp "$project/APP_compress.bin" "$d/python-OTA.img"
+            sha256sum "$d"/*.bin "$d"/*.img > "$d/hashes.sha256"
+            echo "Input length $size, vendor remapped $(wc -c < "$d/vendor-remapped.bin"), APP vendor $(wc -c < "$d/vendor-APP.bin"), Python $(wc -c < "$d/python-APP.bin")"
+          done
 
-      - name: Produce byte-level comparison and metadata report
+      - name: Summarise all binary differences
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import sys
-          import json
-          import hashlib
+          import json,hashlib
           from pathlib import Path
-          sys.path.insert(0, 'tools/txw81x_pack')
-          import txw81x_pack as p
-          root = Path('evidence')
-          report = {
-              'input_hex_sha256': hashlib.sha256((root/'project.hex').read_bytes()).hexdigest(),
-              'vendor_date': (root/'vendor-date.txt').read_text().strip(),
-              'comparison': {}
-          }
-          for label, ext in (('app', 'APP.bin'), ('ota', 'OTA.img')):
-              left = (root/('vendor-'+ext)).read_bytes()
-              right = (root/('native-samehex-'+ext)).read_bytes()
-              n = min(len(left), len(right))
-              differences = [i for i in range(n) if left[i] != right[i]]
-              ranges = []
-              for i in differences:
-                  if ranges and ranges[-1][1] == i-1:
-                      ranges[-1][1] = i
-                  else:
-                      ranges.append([i,i])
-              info = {
-                  'vendor_length': len(left),
-                  'python_length': len(right),
-                  'vendor_sha256': hashlib.sha256(left).hexdigest(),
-                  'python_sha256': hashlib.sha256(right).hexdigest(),
-                  'byte_identical': left == right,
-                  'common_bytes_differing': len(differences),
-                  'length_difference': len(right)-len(left),
-                  'first_60_difference_offsets': [hex(i) for i in differences[:60]],
-                  'first_30_difference_ranges': [
-                    {'start_hex': hex(a), 'end_hex': hex(b), 'length': b-a+1}
-                    for a,b in ranges[:30]
-                  ],
-              }
-              if label == 'app':
-                  v = p.parse_app_image(left)
-                  nfo = p.parse_app_image(right)
-                  for field in ('boot','firmware','parameter_length','application_version'):
-                      info[f'vendor_{field}'] = v[field]
-                      info[f'python_{field}'] = nfo[field]
-                  off = v['boot']['code_offset']
-                  info['vendor_code_sha256'] = hashlib.sha256(left[off:]).hexdigest()
-                  info['python_code_sha256'] = hashlib.sha256(right[off:]).hexdigest()
-                  info['code_identical'] = left[off:] == right[off:]
-              report['comparison'][label] = info
-              print(label.upper(), 'IDENTICAL' if info['byte_identical'] else 'DIFFERS',
-                    'vendor',len(left),'python',len(right),'first offsets',info['first_60_difference_offsets'][:12])
-          (root/'samehex-report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          root=Path('evidence')
+          report=[]
+          for folder in sorted([x for x in root.iterdir() if x.is_dir()],key=lambda x:int(x.name)):
+              entry={'compiler_code_length':int(folder.name),'tests':{}}
+              for label,extension in [('APP','bin'),('OTA','img')]:
+                  vend=(folder/f'vendor-{label}.{extension}').read_bytes()
+                  native=(folder/f'python-{label}.{extension}').read_bytes()
+                  mismatches=[i for i,(a,b) in enumerate(zip(vend,native)) if a!=b]
+                  entry['tests'][label]={
+                    'vendor_length':len(vend),
+                    'python_length':len(native),
+                    'identical':vend==native,
+                    'different_bytes_over_common_length':len(mismatches),
+                    'first_mismatched_offsets':[hex(i) for i in mismatches[:30]],
+                    'vendor_sha256':hashlib.sha256(vend).hexdigest(),
+                    'python_sha256':hashlib.sha256(native).hexdigest()
+                  }
+              report.append(entry)
+              print(folder.name, {k:(v['vendor_length'],v['python_length'],v['identical']) for k,v in entry['tests'].items()})
+          (root/'boundary-report.json').write_text(json.dumps(report,indent=2)+'\n')
           PY
-          (cd evidence && sha256sum *.bin *.img *.hex makecode.ini parameter.bincfg > final.sha256)
-          cat evidence/samehex-report.json
 
-      - name: Upload compiler HEX, both outputs and byte comparison
+      - name: Upload raw HEX and vendor/Python comparisons
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: txw81x-samehex-comparison
+          name: txw81x-boundary-comparisons
           path: evidence/
           if-no-files-found: warn
 
-      - name: Require byte-identical normal and OTA images
+      - name: Fail if code-length boundary diverges
         run: |
-          cmp evidence/vendor-APP.bin evidence/native-samehex-APP.bin
-          cmp evidence/vendor-OTA.img evidence/native-samehex-OTA.img
-          echo "Vendor and Python outputs are byte-identical from one captured project.hex"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('evidence/boundary-report.json').read_text())
+          mismatches=[(case['compiler_code_length'],kind) for case in report for kind,v in case['tests'].items() if not v['identical']]
+          if mismatches: raise SystemExit(f'Taixin versus Python parity differs: {mismatches}')
+          print('All six boundary APP and OTA cases match Taixin exactly')
+          PY
