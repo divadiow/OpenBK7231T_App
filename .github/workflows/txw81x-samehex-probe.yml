@@ -30,6 +30,16 @@ jobs:
       - name: Compile one project.hex and capture exact compiler inputs
         run: |
           set -euo pipefail
+          # Windows Git checkout may convert .sh files to CRLF. Restore LF
+          # in this ephemeral WSL runner before invoking the Linux wrapper.
+          python3 - <<'PY'
+          from pathlib import Path
+          script = Path('platforms/TXW81X/package_native.sh')
+          contents = script.read_bytes()
+          if b'\r\n' in contents:
+              print('Converting Windows-checkout CRLF to LF for package_native.sh')
+              script.write_bytes(contents.replace(b'\r\n', b'\n'))
+          PY
           make APP_VERSION=samehex_parity APP_NAME=OpenTXW81X VARIANT=default OpenTXW81X
           mkdir -p evidence
           project=sdk/OpenTXW81X/project
