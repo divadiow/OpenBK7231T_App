@@ -17,9 +17,7 @@ sdk_add_compile_options(
 	-Wno-return-type
 	-g0
 	-fstrict-aliasing -fno-strict-overflow
-	-falign-functions=32 -falign-jumps=32 -falign-loops=32
 )
-sdk_set_linker_script(bl602_flash.ld)
 
 if(DEFINED ENV{APP_VERSION})
 	sdk_add_compile_definitions(-DUSER_SW_VER="$ENV{APP_VERSION}")

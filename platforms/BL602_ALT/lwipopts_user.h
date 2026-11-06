@@ -132,8 +132,6 @@
 #define LWIP_NETCONN_SEM_PER_THREAD   1
 #define LWIP_NETCONN_THREAD_SEM_GET() sys_thread_sem_get()
 
-extern int *__errno(void);
-#define errno                         (*__errno())
 #define LWIP_NETIF_STATUS_CALLBACK    1
 #define LWIP_NETIF_API                1
 

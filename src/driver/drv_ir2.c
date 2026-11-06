@@ -161,7 +161,7 @@ static uint32_t reg_duty;
 
 int txpin = 26;
 
-int times[512];
+int irtimes[512];
 int maxTimes = 512;
 int *cur;
 int *stop;
@@ -222,7 +222,7 @@ backlog startDriver IR2; SetupIR2 50 0.5 0 9
 static commandResult_t CMD_IR2_SendIR2(const void* context, const char* cmd, const char* args, int cmdFlags) {
 	float frequency = 38000;
 	float duty_cycle = 0.330000f;
-	stop = times;
+	stop = irtimes;
 
 	ADDLOG_INFO(LOG_FEATURE_IR, "SendIR2 args len: %i", strlen(args));
 
@@ -233,7 +233,7 @@ static commandResult_t CMD_IR2_SendIR2(const void* context, const char* cmd, con
 		while (*args && isWhiteSpace(*args)) {
 			args++;
 		}
-		if (stop - times < maxTimes) {
+		if (stop - irtimes < maxTimes) {
 			int x = atoi(args);
 			*stop = x;
 			ADDLOG_INFO(LOG_FEATURE_IR, "Value: %i", x);
@@ -247,7 +247,7 @@ static commandResult_t CMD_IR2_SendIR2(const void* context, const char* cmd, con
 		}
 	}
 	state = 0;
-	ADDLOG_INFO(LOG_FEATURE_IR, "Queue size %i", (stop - times));
+	ADDLOG_INFO(LOG_FEATURE_IR, "Queue size %i", (stop - irtimes));
 
 
 #if PLATFORM_BK7231N && !PLATFORM_BEKEN_NEW
@@ -256,7 +256,7 @@ static commandResult_t CMD_IR2_SendIR2(const void* context, const char* cmd, con
 	bk_pwm_update_param((bk_pwm_t)pwmIndex, period, duty_off);
 #endif
 
-	cur = times;
+	cur = irtimes;
 #if WINDOWS
 	while (cur) {
 		SendIR2_ISR(0);
