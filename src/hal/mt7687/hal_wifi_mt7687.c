@@ -95,11 +95,21 @@ int32_t sta_evt(wifi_event_t event, uint8_t* payload, uint32_t length)
 			break;
 		case WIFI_EVENT_IOT_CONNECTION_FAILED:
 		{
-			uint16_t reason_code = payload[1] + (payload[0] << 8);
-			if(g_wifiStatusCallback != 0 && reason_code == WIFI_REASON_CODE_FIND_AP_FAIL ||
-				reason_code == WIFI_REASON_CODE_PREV_AUTH_INVALID || reason_code == WIFI_REASON_CODE_PASSWORD_ERROR)
+			if(payload == NULL || length < 3 || payload[0] != WIFI_PORT_STA)
 			{
-				g_wifiStatusCallback(WIFI_STA_AUTH_FAILED);
+				break;
+			}
+			uint16_t reason_code = payload[1] | (payload[2] << 8);
+			if(g_wifiStatusCallback != NULL)
+			{
+				if(reason_code == WIFI_REASON_CODE_PREV_AUTH_INVALID || reason_code == WIFI_REASON_CODE_PASSWORD_ERROR)
+				{
+					g_wifiStatusCallback(WIFI_STA_AUTH_FAILED);
+				}
+				else
+				{
+					g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
+				}
 			}
 			break;
 		}
