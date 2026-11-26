@@ -14,7 +14,7 @@
 #include "ethernetif.h"
 #include "dhcp.h"
 #include "dhcpd.h"
-#include "wifi_api.h"
+#include "wifi_inband.h"
 #include "wifi_scan.h"
 #include "event_groups.h"
 #include "../hal_wifi.h"
@@ -231,8 +231,17 @@ void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_CONNECTION_FAILED, sta_evt);
 	uint8_t pwd_len = (uint8_t)strlen(pwd);
 	netifapi_netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
-	if(netifapi_netif_common(&sta_if, install_sta_status_callback, NULL) != ERR_OK ||
-		wifi_config_set_opmode(WIFI_MODE_STA_ONLY) < 0 ||
+	int32_t result = netifapi_netif_common(&sta_if, install_sta_status_callback, NULL);
+	if(result == ERR_OK) result = wifi_config_set_opmode(WIFI_MODE_STA_ONLY);
+	if(result >= 0 && wifi_5g_support() >= 0)
+	{
+		int32_t phy_result = wifi_config_set_wireless_mode(WIFI_PORT_STA, WIFI_PHY_11ABGN_MIXED);
+		if(phy_result < 0)
+		{
+			ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: dual-band STA mode failed (%d)", (int)phy_result);
+		}
+	}
+	if(result < 0 ||
 		wifi_config_set_ssid(WIFI_PORT_STA, (uint8_t*)ssid, strlen(ssid)) < 0 ||
 		(pwd_len > 0 && wifi_config_set_wpa_psk_key(WIFI_PORT_STA, (uint8_t*)pwd, pwd_len) < 0) ||
 		wifi_config_reload_setting() < 0)
