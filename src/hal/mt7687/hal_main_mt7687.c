@@ -20,6 +20,7 @@ const char* __ctype_ptr__ = _ctype_;
 uint8_t g_mac[6];
 extern void Main_Init();
 extern void HAL_MT7687_RegisterWiFiReady(void);
+extern void HAL_MT7687_WiFiTick(void);
 extern void Main_OnEverySecond();
 static void obk_task(void* pvParameters)
 {
@@ -29,6 +30,7 @@ static void obk_task(void* pvParameters)
 	{
 		vTaskDelay(1000 / portTICK_PERIOD_MS);
 		Main_OnEverySecond();
+		HAL_MT7687_WiFiTick();
 	}
 	vTaskDelete(NULL);
 }

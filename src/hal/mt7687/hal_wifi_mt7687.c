@@ -18,6 +18,10 @@
 #include "wifi_scan.h"
 #include "event_groups.h"
 #include "semphr.h"
+#include <easyflash.h>
+#include "../../new_common.h"
+#include "../../new_cfg.h"
+#include "../../new_pins.h"
 #include "../hal_wifi.h"
 #include "../../logging/logging.h"
 
@@ -29,6 +33,7 @@ static EventGroupHandle_t g_wifiEvents;
 static SemaphoreHandle_t g_scanLock;
 static SemaphoreHandle_t g_scanDone;
 #define MT_WIFI_READY_BIT (1U << 0)
+#define MT_WIFI_PORT_SECURE_BIT (1U << 1)
 
 static int32_t wifi_init_done(wifi_event_t event, uint8_t* payload, uint32_t length)
 {
@@ -77,6 +82,85 @@ static char g_gwStr[16] = "unknown";
 static char g_maskStr[16] = "unknown";
 static char g_dnsStr[16] = "unknown";
 static obkStaticIP_t g_staticIP;
+
+#define MT_FAST_CONNECT_KEY "mt_wifi_ap"
+#define MT_FAST_CONNECT_TIMEOUT 8
+
+typedef struct {
+	char ssid[WIFI_MAX_LENGTH_OF_SSID + 1];
+	uint8_t bssid[6];
+} mtFastConnect_t;
+
+static mtFastConnect_t g_cachedAP;
+static char g_currentSSID[WIFI_MAX_LENGTH_OF_SSID + 1];
+static bool g_cacheLoaded;
+static bool g_fastConnectTried;
+static int g_fastConnectTimeout;
+
+extern void InitEasyFlashIfNeeded(void);
+extern void Main_ConnectToWiFiNow(void);
+
+static void load_cached_ap(void)
+{
+	if(!g_cacheLoaded)
+	{
+		InitEasyFlashIfNeeded();
+		if(ef_get_env_blob(MT_FAST_CONNECT_KEY, &g_cachedAP, sizeof(g_cachedAP), NULL) != sizeof(g_cachedAP))
+		{
+			memset(&g_cachedAP, 0, sizeof(g_cachedAP));
+		}
+		g_cachedAP.ssid[WIFI_MAX_LENGTH_OF_SSID] = '\0';
+		g_cacheLoaded = true;
+	}
+}
+
+static bool valid_bssid(const uint8_t* bssid)
+{
+	static const uint8_t zero[6];
+	return !(bssid[0] & 1) && memcmp(bssid, zero, sizeof(zero)) != 0;
+}
+
+void HAL_DisableEnhancedFastConnect(void)
+{
+	g_fastConnectTried = true;
+	g_fastConnectTimeout = 0;
+}
+
+void HAL_MT7687_WiFiTick(void)
+{
+	static bool saved;
+	if(g_bAccessPointMode || !Main_IsConnectedToWiFi())
+	{
+		saved = false;
+		if(!g_bAccessPointMode && g_fastConnectTimeout > 0 &&
+			!(xEventGroupGetBits(g_wifiEvents) & MT_WIFI_PORT_SECURE_BIT) && --g_fastConnectTimeout == 0)
+		{
+			// Retry without the cached BSSID if the AP has moved or disappeared.
+			Main_ConnectToWiFiNow();
+		}
+		return;
+	}
+
+	g_fastConnectTimeout = 0;
+	if(saved || !CFG_HasFlag(OBK_FLAG_WIFI_ENHANCED_FAST_CONNECT) || !g_currentSSID[0]) return;
+
+	uint8_t bssid[6] = { 0 };
+	if(wifi_config_get_bssid(bssid) >= 0 && valid_bssid(bssid))
+	{
+		load_cached_ap();
+		if(strcmp(g_currentSSID, g_cachedAP.ssid) != 0 || memcmp(bssid, g_cachedAP.bssid, sizeof(bssid)) != 0)
+		{
+			mtFastConnect_t updated = { 0 };
+			strcpy(updated.ssid, g_currentSSID);
+			memcpy(updated.bssid, bssid, sizeof(bssid));
+			if(ef_set_env_blob(MT_FAST_CONNECT_KEY, &updated, sizeof(updated)) == EF_NO_ERR)
+			{
+				g_cachedAP = updated;
+			}
+		}
+		saved = true;
+	}
+}
 
 static void apply_sta_ip(void* arg)
 {
@@ -201,6 +285,7 @@ int32_t sta_evt(wifi_event_t event, uint8_t* payload, uint32_t length)
 			break;
 		case WIFI_EVENT_IOT_PORT_SECURE:
 			ADDLOG_DEBUG(LOG_FEATURE_GENERAL, "WiFi handshake finished");
+			if(g_wifiEvents != NULL) xEventGroupSetBits(g_wifiEvents, MT_WIFI_PORT_SECURE_BIT);
 			if(!g_bAccessPointMode && tcpip_callback(apply_sta_ip, NULL) != ERR_OK)
 			{
 				ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not schedule IP setup");
@@ -208,6 +293,7 @@ int32_t sta_evt(wifi_event_t event, uint8_t* payload, uint32_t length)
 			}
 			break;
 		case WIFI_EVENT_IOT_DISCONNECTED:
+			if(g_wifiEvents != NULL) xEventGroupClearBits(g_wifiEvents, MT_WIFI_PORT_SECURE_BIT);
 			netifapi_dhcp_stop(&sta_if);
 			netifapi_netif_set_link_down(&sta_if);
 			netifapi_netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
@@ -254,8 +340,11 @@ static void install_sta_status_callback(struct netif* netif)
 	netif_set_status_callback(netif, ip_ready_callback);
 }
 
-void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
+static void connect_to_wifi(const char* ssid, const char* pwd, obkStaticIP_t* ip, uint8_t* bssid)
 {
+	g_fastConnectTimeout = 0;
+	if(g_wifiEvents != NULL) xEventGroupClearBits(g_wifiEvents, MT_WIFI_PORT_SECURE_BIT);
+	snprintf(g_currentSSID, sizeof(g_currentSSID), "%s", ssid);
 	if(g_wifiStatusCallback != 0)
 	{
 		g_wifiStatusCallback(WIFI_STA_CONNECTING);
@@ -294,16 +383,47 @@ void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
 	}
 	if(result < 0 ||
 		wifi_config_set_ssid(WIFI_PORT_STA, (uint8_t*)ssid, strlen(ssid)) < 0 ||
-		(pwd_len > 0 && wifi_config_set_wpa_psk_key(WIFI_PORT_STA, (uint8_t*)pwd, pwd_len) < 0) ||
-		wifi_config_reload_setting() < 0)
+		(pwd_len > 0 && wifi_config_set_wpa_psk_key(WIFI_PORT_STA, (uint8_t*)pwd, pwd_len) < 0))
 	{
 		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: STA configuration failed");
+		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
+		return;
+	}
+	if(bssid != NULL && wifi_config_set_bssid(bssid) >= 0)
+	{
+		g_fastConnectTimeout = MT_FAST_CONNECT_TIMEOUT;
+	}
+	if(wifi_config_reload_setting() < 0)
+	{
+		g_fastConnectTimeout = 0;
+		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: STA reload failed");
 		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
 	}
 }
 
+void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
+{
+	connect_to_wifi(ssid, pwd, ip, NULL);
+}
+
+void HAL_FastConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
+{
+	uint8_t* bssid = NULL;
+	if(!g_fastConnectTried)
+	{
+		load_cached_ap();
+		if(strcmp(ssid, g_cachedAP.ssid) == 0 && valid_bssid(g_cachedAP.bssid))
+		{
+			bssid = g_cachedAP.bssid;
+			g_fastConnectTried = true;
+		}
+	}
+	connect_to_wifi(ssid, pwd, ip, bssid);
+}
+
 void HAL_DisconnectFromWifi()
 {
+	g_fastConnectTimeout = 0;
 	wifi_connection_disconnect_ap();
 }
 
