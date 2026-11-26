@@ -7,6 +7,7 @@
 #include "wifi_api.h"
 #include "lwip/inet.h"
 #include "lwip/netif.h"
+#include "lwip/netifapi.h"
 #include "connsys_profile.h"
 #include "ethernetif.h"
 #include "dhcp.h"
@@ -113,16 +114,24 @@ int32_t sta_evt(wifi_event_t event, uint8_t* payload, uint32_t length)
 			break;
 		case WIFI_EVENT_IOT_PORT_SECURE:
 			ADDLOG_DEBUG(LOG_FEATURE_GENERAL, "WiFi handshake finished");
-			netif_set_link_up(&sta_if);
-			dhcp_start(&sta_if);
+			if(!g_bAccessPointMode)
+			{
+				netifapi_netif_set_link_up(&sta_if);
+				if(netifapi_dhcp_start(&sta_if) != ERR_OK)
+				{
+					ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not start DHCP");
+					if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
+				}
+			}
 			break;
 		case WIFI_EVENT_IOT_DISCONNECTED:
-			if(g_wifiStatusCallback != 0)
+			netifapi_dhcp_stop(&sta_if);
+			netifapi_netif_set_link_down(&sta_if);
+			netifapi_netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
+			if(!g_bAccessPointMode && g_wifiStatusCallback != NULL)
 			{
 				g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
 			}
-			netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
-			netif_set_link_down(&sta_if);
 			break;
 		case WIFI_EVENT_IOT_CONNECTION_FAILED:
 		{
@@ -150,17 +159,16 @@ int32_t sta_evt(wifi_event_t event, uint8_t* payload, uint32_t length)
 
 static void ip_ready_callback(struct netif* netif)
 {
-	if(!ip4_addr_isany_val(netif->ip_addr))
+	if(!g_bAccessPointMode && netif_is_link_up(netif) &&
+		!ip4_addr_isany_val(netif->ip_addr) && g_wifiStatusCallback != NULL)
 	{
-		char ip_addr[17] = { 0 };
-		if(NULL != inet_ntoa(netif->ip_addr))
-		{
-			if(g_wifiStatusCallback != 0)
-			{
-				g_wifiStatusCallback(WIFI_STA_CONNECTED);
-			}
-		}
+		g_wifiStatusCallback(WIFI_STA_CONNECTED);
 	}
+}
+
+static void install_sta_status_callback(struct netif* netif)
+{
+	netif_set_status_callback(netif, ip_ready_callback);
 }
 
 void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
@@ -174,17 +182,23 @@ void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
 		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
 		return;
 	}
+	if(g_bAccessPointMode)
+	{
+		dhcpd_stop();
+		netifapi_netif_set_link_down(&ap_if);
+	}
 	g_bAccessPointMode = false;
-	netif_set_default(&sta_if);
-	netif_set_link_down(&ap_if);
+	netifapi_netif_set_default(&sta_if);
+	netifapi_dhcp_stop(&sta_if);
+	netifapi_netif_set_link_down(&sta_if);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_CONNECTED, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_PORT_SECURE, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_DISCONNECTED, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_CONNECTION_FAILED, sta_evt);
 	uint8_t pwd_len = (uint8_t)strlen(pwd);
-	netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
-	netif_set_status_callback(&sta_if, ip_ready_callback);
-	if(wifi_config_set_opmode(WIFI_MODE_STA_ONLY) < 0 ||
+	netifapi_netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
+	if(netifapi_netif_common(&sta_if, install_sta_status_callback, NULL) != ERR_OK ||
+		wifi_config_set_opmode(WIFI_MODE_STA_ONLY) < 0 ||
 		wifi_config_set_ssid(WIFI_PORT_STA, (uint8_t*)ssid, strlen(ssid)) < 0 ||
 		(pwd_len > 0 && wifi_config_set_wpa_psk_key(WIFI_PORT_STA, (uint8_t*)pwd, pwd_len) < 0) ||
 		wifi_config_reload_setting() < 0)
@@ -201,17 +215,22 @@ void HAL_DisconnectFromWifi()
 
 int HAL_SetupWiFiOpenAccessPoint(const char* ssid)
 {
-	if(!wait_for_wifi_ready() ||
-		wifi_config_set_opmode(WIFI_MODE_AP_ONLY) < 0 ||
+	if(!wait_for_wifi_ready()) return -1;
+	g_bAccessPointMode = true;
+	netifapi_dhcp_stop(&sta_if);
+	netifapi_netif_set_link_down(&sta_if);
+	netifapi_netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
+
+	if(wifi_config_set_opmode(WIFI_MODE_AP_ONLY) < 0 ||
 		wifi_config_set_security_mode(WIFI_PORT_AP, WIFI_AUTH_MODE_OPEN, WIFI_ENCRYPT_TYPE_WEP_DISABLED) < 0 ||
 		wifi_config_set_channel(WIFI_PORT_AP, 1) < 0 ||
 		wifi_config_set_ssid(WIFI_PORT_AP, (uint8_t*)ssid, strlen(ssid)) < 0 ||
 		wifi_config_reload_setting() < 0)
 	{
 		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: SoftAP configuration failed");
+		g_bAccessPointMode = false;
 		return -1;
 	}
-	g_bAccessPointMode = true;
 	dhcpd_settings_t dhcpd_settings = { 0 };
 	strcpy(dhcpd_settings.dhcpd_server_address, "192.168.4.1");
 	strcpy(dhcpd_settings.dhcpd_gateway, "192.168.4.1");
@@ -220,8 +239,7 @@ int HAL_SetupWiFiOpenAccessPoint(const char* ssid)
 	strcpy(dhcpd_settings.dhcpd_secondary_dns, "0.0.0.0");
 	strcpy(dhcpd_settings.dhcpd_ip_pool_start, "192.168.4.100");
 	strcpy(dhcpd_settings.dhcpd_ip_pool_end, "192.168.4.110");
-	netif_set_default(&ap_if);
-	netif_set_link_down(&sta_if);
+	netifapi_netif_set_default(&ap_if);
 	ip4_addr_t ipaddr;
 	ip4_addr_t netmask;
 	ip4_addr_t gateway;
@@ -230,10 +248,9 @@ int HAL_SetupWiFiOpenAccessPoint(const char* ssid)
 	IP4_ADDR(&netmask, 255, 255, 255, 0);
 	IP4_ADDR(&gateway, 192, 168, 4, 1);
 
-	netif_set_addr(&ap_if, &ipaddr, &netmask, &gateway);
-	netif_set_link_up(&ap_if);
-	dhcpd_start(&dhcpd_settings);
-	return 0;
+	netifapi_netif_set_addr(&ap_if, &ipaddr, &netmask, &gateway);
+	netifapi_netif_set_link_up(&ap_if);
+	return dhcpd_start(&dhcpd_settings);
 }
 
 void HAL_PrintNetworkInfo()

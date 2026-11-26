@@ -1016,8 +1016,16 @@ void Main_OnEverySecond()
 		g_openAP--;
 		if (0 == g_openAP)
 		{
+#if PLATFORM_MT7687
+			if (HAL_SetupWiFiOpenAccessPoint(CFG_GetDeviceName()) < 0) {
+				g_openAP = 5;
+			} else {
+				g_bOpenAccessPointMode = 1;
+			}
+#else
 			HAL_SetupWiFiOpenAccessPoint(CFG_GetDeviceName());
 			g_bOpenAccessPointMode = 1;
+#endif
 		}
 	}
 
