@@ -13,6 +13,7 @@
 #include "dhcpd.h"
 #include "wifi_api.h"
 #include "wifi_scan.h"
+#include "event_groups.h"
 #include "../hal_wifi.h"
 #include "../../logging/logging.h"
 
@@ -20,7 +21,37 @@ extern struct netif sta_if, ap_if;
 extern uint8_t g_mac[6];
 static void (*g_wifiStatusCallback)(int code);
 bool g_bAccessPointMode = false;
-static bool g_events_registered = false;
+static EventGroupHandle_t g_wifiEvents;
+#define MT_WIFI_READY_BIT (1U << 0)
+
+static int32_t wifi_init_done(wifi_event_t event, uint8_t* payload, uint32_t length)
+{
+	xEventGroupSetBits(g_wifiEvents, MT_WIFI_READY_BIT);
+	return 1;
+}
+
+void HAL_MT7687_RegisterWiFiReady(void)
+{
+	g_wifiEvents = xEventGroupCreate();
+	if(g_wifiEvents == NULL ||
+		wifi_connection_register_event_handler(WIFI_EVENT_IOT_INIT_COMPLETE, wifi_init_done) < 0)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not register ready event");
+	}
+}
+
+static bool wait_for_wifi_ready(void)
+{
+	// Let the supplicant task finish before issuing Wi-Fi commands.
+	if(g_wifiEvents != NULL &&
+		(xEventGroupWaitBits(g_wifiEvents, MT_WIFI_READY_BIT, pdFALSE, pdTRUE,
+			pdMS_TO_TICKS(5000)) & MT_WIFI_READY_BIT))
+	{
+		return true;
+	}
+	ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: SDK initialization timed out");
+	return false;
+}
 static char g_ipStr[16] = "unknown";
 static char g_gwStr[16] = "unknown";
 static char g_maskStr[16] = "unknown";
@@ -138,6 +169,11 @@ void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
 	{
 		g_wifiStatusCallback(WIFI_STA_CONNECTING);
 	}
+	if(!wait_for_wifi_ready())
+	{
+		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
+		return;
+	}
 	g_bAccessPointMode = false;
 	netif_set_default(&sta_if);
 	netif_set_link_down(&ap_if);
@@ -145,13 +181,17 @@ void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_PORT_SECURE, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_DISCONNECTED, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_CONNECTION_FAILED, sta_evt);
-	wifi_config_set_opmode(WIFI_MODE_STA_ONLY);
-	wifi_config_set_ssid(WIFI_PORT_STA, (uint8_t*)ssid, strlen(ssid));
 	uint8_t pwd_len = (uint8_t)strlen(pwd);
-	if(pwd_len > 0) wifi_config_set_wpa_psk_key(WIFI_PORT_STA, (uint8_t*)pwd, pwd_len);
 	netif_set_addr(&sta_if, IP4_ADDR_ANY, IP4_ADDR_ANY, IP4_ADDR_ANY);
-	wifi_config_reload_setting();
 	netif_set_status_callback(&sta_if, ip_ready_callback);
+	if(wifi_config_set_opmode(WIFI_MODE_STA_ONLY) < 0 ||
+		wifi_config_set_ssid(WIFI_PORT_STA, (uint8_t*)ssid, strlen(ssid)) < 0 ||
+		(pwd_len > 0 && wifi_config_set_wpa_psk_key(WIFI_PORT_STA, (uint8_t*)pwd, pwd_len) < 0) ||
+		wifi_config_reload_setting() < 0)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: STA configuration failed");
+		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
+	}
 }
 
 void HAL_DisconnectFromWifi()
@@ -161,13 +201,17 @@ void HAL_DisconnectFromWifi()
 
 int HAL_SetupWiFiOpenAccessPoint(const char* ssid)
 {
+	if(!wait_for_wifi_ready() ||
+		wifi_config_set_opmode(WIFI_MODE_AP_ONLY) < 0 ||
+		wifi_config_set_security_mode(WIFI_PORT_AP, WIFI_AUTH_MODE_OPEN, WIFI_ENCRYPT_TYPE_WEP_DISABLED) < 0 ||
+		wifi_config_set_channel(WIFI_PORT_AP, 1) < 0 ||
+		wifi_config_set_ssid(WIFI_PORT_AP, (uint8_t*)ssid, strlen(ssid)) < 0 ||
+		wifi_config_reload_setting() < 0)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: SoftAP configuration failed");
+		return -1;
+	}
 	g_bAccessPointMode = true;
-
-	wifi_config_set_security_mode(WIFI_PORT_AP, WIFI_AUTH_MODE_OPEN, WIFI_ENCRYPT_TYPE_WEP_DISABLED);
-	wifi_config_set_opmode(WIFI_MODE_AP_ONLY);
-	wifi_config_set_channel(WIFI_PORT_AP, 1);
-	wifi_config_set_ssid(WIFI_PORT_AP, (uint8_t*)ssid, strlen(ssid));
-	wifi_config_reload_setting();
 	dhcpd_settings_t dhcpd_settings = { 0 };
 	strcpy(dhcpd_settings.dhcpd_server_address, "192.168.4.1");
 	strcpy(dhcpd_settings.dhcpd_gateway, "192.168.4.1");

@@ -19,6 +19,7 @@ extern const char _ctype_[];
 const char* __ctype_ptr__ = _ctype_;
 uint8_t g_mac[6];
 extern void Main_Init();
+extern void HAL_MT7687_RegisterWiFiReady(void);
 extern void Main_OnEverySecond();
 static void obk_task(void* pvParameters)
 {
@@ -43,6 +44,7 @@ int main(void)
 	ext.sta_auto_connect = 0;
 	config.opmode = WIFI_MODE_STA_ONLY;
 	wifi_init(&config, &ext);
+	HAL_MT7687_RegisterWiFiReady();
 	lwip_tcpip_config_t tcpip_config =
 	{
 		.ip_mode = STA_IP_MODE_DHCP,
