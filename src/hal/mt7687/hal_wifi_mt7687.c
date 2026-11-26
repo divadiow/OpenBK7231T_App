@@ -17,19 +17,28 @@
 #include "wifi_inband.h"
 #include "wifi_scan.h"
 #include "event_groups.h"
+#include "semphr.h"
 #include "../hal_wifi.h"
 #include "../../logging/logging.h"
 
 extern struct netif sta_if, ap_if;
 extern uint8_t g_mac[6];
 static void (*g_wifiStatusCallback)(int code);
-bool g_bAccessPointMode = false;
+static bool g_bAccessPointMode = false;
 static EventGroupHandle_t g_wifiEvents;
+static SemaphoreHandle_t g_scanLock;
+static SemaphoreHandle_t g_scanDone;
 #define MT_WIFI_READY_BIT (1U << 0)
 
 static int32_t wifi_init_done(wifi_event_t event, uint8_t* payload, uint32_t length)
 {
 	xEventGroupSetBits(g_wifiEvents, MT_WIFI_READY_BIT);
+	return 1;
+}
+
+static int32_t wifi_scan_done(wifi_event_t event, uint8_t* payload, uint32_t length)
+{
+	xSemaphoreGive(g_scanDone);
 	return 1;
 }
 
@@ -40,6 +49,14 @@ void HAL_MT7687_RegisterWiFiReady(void)
 		wifi_connection_register_event_handler(WIFI_EVENT_IOT_INIT_COMPLETE, wifi_init_done) < 0)
 	{
 		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not register ready event");
+	}
+	g_scanLock = xSemaphoreCreateMutex();
+	g_scanDone = xSemaphoreCreateBinary();
+	if(g_scanLock != NULL && g_scanDone != NULL &&
+		wifi_connection_register_event_handler(WIFI_EVENT_IOT_SCAN_COMPLETE, wifi_scan_done) < 0)
+	{
+		vSemaphoreDelete(g_scanDone);
+		g_scanDone = NULL;
 	}
 }
 
@@ -90,6 +107,40 @@ static void apply_sta_ip(void* arg)
 		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not start DHCP");
 		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
 	}
+}
+
+int HAL_MT7687_Scan(wifi_scan_list_item_t* results, uint32_t count)
+{
+	if(g_scanLock == NULL || g_scanDone == NULL || !wait_for_wifi_ready() ||
+		xSemaphoreTake(g_scanLock, 0) != pdTRUE)
+	{
+		return -1;
+	}
+
+	uint8_t opmode;
+	int result = -1;
+	if(wifi_config_get_opmode(&opmode) >= 0 &&
+		(opmode == WIFI_MODE_STA_ONLY || opmode == WIFI_MODE_AP_ONLY))
+	{
+		wifi_connection_stop_scan();
+		xSemaphoreTake(g_scanDone, 0);
+		if(wifi_connection_scan_init(results, count) >= 0)
+		{
+			// Partial scans return to the SoftAP channel between channel groups.
+			if(wifi_connection_start_scan(NULL, 0, NULL, opmode == WIFI_MODE_AP_ONLY, 0) == 0)
+			{
+				result = 0;
+				if(xSemaphoreTake(g_scanDone, pdMS_TO_TICKS(15000)) != pdTRUE)
+				{
+					wifi_connection_stop_scan();
+					result = -2;
+				}
+			}
+			wifi_connection_scan_deinit();
+		}
+	}
+	xSemaphoreGive(g_scanLock);
+	return result;
 }
 
 void WiFI_GetMacAddress(char* mac)

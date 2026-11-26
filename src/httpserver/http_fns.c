@@ -66,19 +66,8 @@ extern uint32_t current_fw_idx;
 #include "wifi_export.h"
 #include "macif_types.h"
 #elif PLATFORM_MT7687
-SemaphoreHandle_t scan_hdl;
-extern bool g_bAccessPointMode;
 #include "wifi_scan.h"
-
-int scan_handler(wifi_event_t event_id, unsigned char* payload, unsigned int len)
-{
-	if(event_id == WIFI_EVENT_IOT_SCAN_COMPLETE)
-	{
-		xSemaphoreGive(scan_hdl);
-		return 1;
-	}
-	return 0;
-}
+extern int HAL_MT7687_Scan(wifi_scan_list_item_t* results, uint32_t count);
 #endif
 
 static const char SUBMIT_AND_END_FORM[] = "<br><input type=\"submit\" value=\"Submit\"></form>";
@@ -1827,50 +1816,37 @@ int http_fn_cfg_wifi(http_request_t* request) {
 				default: return "Unknown";
 			}
 		}
-		scan_hdl = xSemaphoreCreateBinary();
-		xSemaphoreTake(scan_hdl, 1);
 		wifi_scan_list_item_t* apList = os_malloc(sizeof(wifi_scan_list_item_t) * MAX_AP_SCAN);
-		memset(apList, 0, sizeof(wifi_scan_list_item_t) * MAX_AP_SCAN);
-		wifi_connection_register_event_handler(1, (wifi_event_handler_t)scan_handler);
-		wifi_connection_scan_init(apList, MAX_AP_SCAN);
-		int ret = wifi_connection_start_scan(NULL, 0, NULL, g_bAccessPointMode, 0);
-		if(ret < 0)
+		int ret = -1;
+		if(apList != NULL)
 		{
-			wifi_connection_scan_deinit();
-			xSemaphoreGive(scan_hdl);
-			vSemaphoreDelete(scan_hdl);
-			os_free(apList);
-			hprintf255(request, "ERROR: wifi scan failed!<br>");
+			memset(apList, 0, sizeof(wifi_scan_list_item_t) * MAX_AP_SCAN);
+			ret = HAL_MT7687_Scan(apList, MAX_AP_SCAN);
+		}
+		if(ret == 0)
+		{
+			hprintf255(request, "<table><tr><th>SSID</th><th>Channel</th><th>Signal</th><th>Security</th></tr>");
+			for(uint8_t i = 0; i < MAX_AP_SCAN; i++)
+			{
+				if(apList[i].is_valid == 0) continue;
+				char ssid[33];
+				memset(&ssid, 0, sizeof(ssid));
+				strncpy((char*)&ssid, apList[i].ssid, 32);
+				hprintf255(request, "<tr><td>");
+				poststr_escaped(request, *ssid ? ssid : "<hidden>");
+				hprintf255(request,
+					"</td><td>%i</td><td>%i</td><td>%s</td></tr>",
+					apList[i].channel,
+					apList[i].rssi,
+					HTTP_WiFiSecurityName(apList[i].auth_mode));
+			}
+			hprintf255(request, "</table><br>");
 		}
 		else
 		{
-			if(xSemaphoreTake(scan_hdl, pdMS_TO_TICKS(15 * 1000)) == pdTRUE)
-			{
-				hprintf255(request, "<table><tr><th>SSID</th><th>Channel</th><th>Signal</th><th>Security</th></tr>");
-				for(uint8_t i = 0; i < MAX_AP_SCAN; i++)
-				{
-					if(apList[i].is_valid == 0) continue;
-					char ssid[33];
-					memset(&ssid, 0, sizeof(ssid));
-					strncpy((char*)&ssid, apList[i].ssid, 32);
-					hprintf255(request, "<tr><td>");
-					poststr_escaped(request, *ssid ? ssid : "<hidden>");
-					hprintf255(request,
-						"</td><td>%i</td><td>%i</td><td>%s</td></tr>",
-						apList[i].channel,
-						apList[i].rssi,
-						HTTP_WiFiSecurityName(apList[i].auth_mode));
-				}
-				hprintf255(request, "</table><br>");
-			}
-			else
-			{
-				hprintf255(request, "ERROR: wifi scan stuck!<br>");
-			}
-			wifi_connection_scan_deinit();
-			vSemaphoreDelete(scan_hdl);
-			os_free(apList);
+			hprintf255(request, ret == -2 ? "ERROR: wifi scan timed out!<br>" : "ERROR: wifi scan failed!<br>");
 		}
+		if(apList != NULL) os_free(apList);
 
 #else
 		hprintf255(request, "TODO %s<br>", PLATFORM_MCU_NAME);
