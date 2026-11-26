@@ -8,6 +8,8 @@
 #include "lwip/inet.h"
 #include "lwip/netif.h"
 #include "lwip/netifapi.h"
+#include "lwip/dns.h"
+#include "lwip/tcpip.h"
 #include "connsys_profile.h"
 #include "ethernetif.h"
 #include "dhcp.h"
@@ -57,6 +59,38 @@ static char g_ipStr[16] = "unknown";
 static char g_gwStr[16] = "unknown";
 static char g_maskStr[16] = "unknown";
 static char g_dnsStr[16] = "unknown";
+static obkStaticIP_t g_staticIP;
+
+static void apply_sta_ip(void* arg)
+{
+	if(g_bAccessPointMode) return;
+
+	netif_set_link_up(&sta_if);
+	if(g_staticIP.localIPAddr[0] || g_staticIP.localIPAddr[1] ||
+		g_staticIP.localIPAddr[2] || g_staticIP.localIPAddr[3])
+	{
+		ip4_addr_t address, mask, gateway;
+		ip_addr_t dns;
+		IP4_ADDR(&address, g_staticIP.localIPAddr[0], g_staticIP.localIPAddr[1],
+			g_staticIP.localIPAddr[2], g_staticIP.localIPAddr[3]);
+		IP4_ADDR(&mask, g_staticIP.netMask[0], g_staticIP.netMask[1],
+			g_staticIP.netMask[2], g_staticIP.netMask[3]);
+		IP4_ADDR(&gateway, g_staticIP.gatewayIPAddr[0], g_staticIP.gatewayIPAddr[1],
+			g_staticIP.gatewayIPAddr[2], g_staticIP.gatewayIPAddr[3]);
+		IP_ADDR4(&dns, g_staticIP.dnsServerIpAddr[0], g_staticIP.dnsServerIpAddr[1],
+			g_staticIP.dnsServerIpAddr[2], g_staticIP.dnsServerIpAddr[3]);
+		for(uint8_t i = 0; i < DNS_MAX_SERVERS; i++)
+		{
+			dns_setserver(i, i == 0 ? &dns : NULL);
+		}
+		netif_set_addr(&sta_if, &address, &mask, &gateway);
+	}
+	else if(dhcp_start(&sta_if) != ERR_OK)
+	{
+		ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not start DHCP");
+		if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
+	}
+}
 
 void WiFI_GetMacAddress(char* mac)
 {
@@ -84,7 +118,9 @@ const char* HAL_GetMyMaskString()
 
 const char* HAL_GetMyDNSString()
 {
-	return g_dnsStr;
+	if(g_bAccessPointMode) return "unknown";
+	const ip_addr_t* dns = dns_getserver(0);
+	return ipaddr_ntoa_r(dns, g_dnsStr, sizeof(g_dnsStr));
 }
 
 const char* HAL_GetMACStr(char* macstr)
@@ -114,14 +150,10 @@ int32_t sta_evt(wifi_event_t event, uint8_t* payload, uint32_t length)
 			break;
 		case WIFI_EVENT_IOT_PORT_SECURE:
 			ADDLOG_DEBUG(LOG_FEATURE_GENERAL, "WiFi handshake finished");
-			if(!g_bAccessPointMode)
+			if(!g_bAccessPointMode && tcpip_callback(apply_sta_ip, NULL) != ERR_OK)
 			{
-				netifapi_netif_set_link_up(&sta_if);
-				if(netifapi_dhcp_start(&sta_if) != ERR_OK)
-				{
-					ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not start DHCP");
-					if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
-				}
+				ADDLOG_ERROR(LOG_FEATURE_GENERAL, "WiFi: could not schedule IP setup");
+				if(g_wifiStatusCallback != NULL) g_wifiStatusCallback(WIFI_STA_DISCONNECTED);
 			}
 			break;
 		case WIFI_EVENT_IOT_DISCONNECTED:
@@ -191,6 +223,8 @@ void HAL_ConnectToWiFi(const char* ssid, const char* pwd, obkStaticIP_t* ip)
 	netifapi_netif_set_default(&sta_if);
 	netifapi_dhcp_stop(&sta_if);
 	netifapi_netif_set_link_down(&sta_if);
+	if(ip != NULL) g_staticIP = *ip;
+	else memset(&g_staticIP, 0, sizeof(g_staticIP));
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_CONNECTED, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_PORT_SECURE, sta_evt);
 	wifi_connection_register_event_handler(WIFI_EVENT_IOT_DISCONNECTED, sta_evt);
